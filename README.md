@@ -64,6 +64,20 @@ Para ativar:
 Para publicar manualmente em vez disso, basta rodar `npm run build` e subir o
 conteúdo da pasta `dist/` onde preferir.
 
+### 4. Publicar no Cloudflare Pages (alternativa)
+
+Depois de vincular este repositório a um projeto no Cloudflare Pages:
+
+1. Em **Build settings**, configure:
+   - **Build command**: `npm run build`
+   - **Build output directory**: `dist`
+2. Cada push na branch escolhida (ex: `main`) dispara um novo deploy
+   automático.
+3. Pegue a URL gerada pelo Cloudflare Pages (ex:
+   `https://seu-projeto.pages.dev`) e adicione-a nas "Origens JavaScript
+   autorizadas" da credencial OAuth no Google Cloud Console — sem isso o
+   login com Google não funciona no domínio publicado.
+
 ## Convenção de dados
 
 Para guardar a prioridade de cada tarefa sem precisar de banco de dados
