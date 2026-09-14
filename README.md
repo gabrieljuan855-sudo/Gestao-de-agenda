@@ -49,15 +49,20 @@ clique em "Entrar com o Google".
 
 ### 3. Publicar (opcional)
 
-Para colocar no ar gratuitamente com GitHub Pages:
+O repositório já inclui um workflow (`.github/workflows/deploy.yml`) que builda
+e publica o site no GitHub Pages automaticamente a cada push na branch `main`.
+Para ativar:
 
-```bash
-npm run build
-```
+1. Em **Settings > Pages** do repositório, em "Source", selecione
+   **GitHub Actions**.
+2. Faça um push (ou merge) na branch `main` — o workflow builda o projeto e
+   publica o conteúdo de `dist/`.
+3. Pegue a URL final mostrada em **Settings > Pages** e adicione-a nas
+   "Origens JavaScript autorizadas" da credencial OAuth no Google Cloud
+   Console.
 
-Isso gera a pasta `dist/`. Publique o conteúdo dela em uma branch `gh-pages`
-(ou configure o GitHub Pages para servir a pasta `dist`), e adicione essa URL
-final nas "Origens JavaScript autorizadas" da credencial OAuth.
+Para publicar manualmente em vez disso, basta rodar `npm run build` e subir o
+conteúdo da pasta `dist/` onde preferir.
 
 ## Convenção de dados
 
