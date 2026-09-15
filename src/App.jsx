@@ -6,6 +6,8 @@ import {
   updateEvent,
   deleteEvent,
   listAllTasks,
+  listCalendars,
+  listTaskLists,
   createTask,
   completeTask,
   updateTask,
@@ -36,10 +38,24 @@ export default function App() {
   const [reference, setReference] = useState(() => new Date())
   const [editingEvent, setEditingEvent] = useState(null)
   const [editingTask, setEditingTask] = useState(null)
+  const [calendars, setCalendars] = useState([])
+  const [taskLists, setTaskLists] = useState([])
 
   useEffect(() => {
     initGoogleAuth((newToken) => setToken(newToken))
   }, [])
+
+  // As agendas e listas mudam raramente: basta buscar uma vez por sessão,
+  // para alimentar os seletores de onde gravar.
+  useEffect(() => {
+    if (!token) return
+    Promise.all([listCalendars(), listTaskLists()])
+      .then(([cals, lists]) => {
+        setCalendars(cals.filter((c) => c.accessRole === 'owner' || c.accessRole === 'writer'))
+        setTaskLists(lists)
+      })
+      .catch((err) => console.error('Não deu para carregar agendas e listas:', err))
+  }, [token])
 
   const reload = useCallback(async () => {
     if (!token) return
@@ -64,12 +80,22 @@ export default function App() {
   }, [reload])
 
   async function handleCreateEvent(preview) {
-    await createEvent({ title: preview.title, start: preview.start, end: preview.end })
+    await createEvent({
+      title: preview.title,
+      start: preview.start,
+      end: preview.end,
+      calendarId: preview.calendarId || 'primary',
+    })
     await reload()
   }
 
   async function handleCreateTask(preview) {
-    await createTask({ title: preview.title, priority: preview.priority, due: preview.due })
+    await createTask({
+      title: preview.title,
+      priority: preview.priority,
+      due: preview.due,
+      tasklistId: preview.tasklistId || '@default',
+    })
     await reload()
   }
 
@@ -143,7 +169,12 @@ export default function App() {
         <button onClick={signOut}>Sair</button>
       </div>
 
-      <QuickAdd onCreateEvent={handleCreateEvent} onCreateTask={handleCreateTask} />
+      <QuickAdd
+        calendars={calendars}
+        taskLists={taskLists}
+        onCreateEvent={handleCreateEvent}
+        onCreateTask={handleCreateTask}
+      />
 
       <FocusTimer activeTask={activeTask} onCycleComplete={reload} />
 

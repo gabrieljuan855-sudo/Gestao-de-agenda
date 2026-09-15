@@ -71,8 +71,8 @@ export async function listAllEvents({ timeMin, timeMax }) {
     .sort((a, b) => new Date(a.start?.dateTime || a.start?.date) - new Date(b.start?.dateTime || b.start?.date))
 }
 
-export async function createEvent({ title, start, end, description }) {
-  return request(`${CAL_BASE}/calendars/primary/events`, {
+export async function createEvent({ title, start, end, description, calendarId = 'primary' }) {
+  return request(`${CAL_BASE}/calendars/${encodeURIComponent(calendarId)}/events`, {
     method: 'POST',
     body: JSON.stringify({
       summary: title,
