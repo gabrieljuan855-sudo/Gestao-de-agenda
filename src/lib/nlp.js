@@ -15,11 +15,14 @@ function detectPriority(text) {
   return null
 }
 
-// "por 40min", "durante 2 horas", "umas 2 horas", "de 1h30"
+// "por 40min", "durante 2 horas", "umas 2 horas", "de 1h30", "por 2hs"
 const DURATION_PREFIX = '(?:por|durante|umas?|cerca de|aprox(?:imadamente)?|de)'
 
+// "h(?:oras?|s)?" cobre "h", "hora(s)" e o "hs" abreviado ("por 2hs"); sem o
+// "s" essa forma não batia com nada aqui e sobrava pro reconhecedor de
+// horário, que lia "2hs" como "às 02:00" em vez de duração.
 const DURATION_PATTERNS = [
-  { re: new RegExp(`\\b${DURATION_PREFIX}\\s+(\\d{1,2})\\s*h(?:oras?)?\\s*(\\d{1,2})?\\s*(?:min|minutos?)?\\b`, 'i'), kind: 'hm' },
+  { re: new RegExp(`\\b${DURATION_PREFIX}\\s+(\\d{1,2})\\s*h(?:oras?|s)?\\s*(\\d{1,2})?\\s*(?:min|minutos?)?\\b`, 'i'), kind: 'hm' },
   { re: new RegExp(`\\b${DURATION_PREFIX}\\s+(\\d{1,3})\\s*(?:min|minutos?)\\b`, 'i'), kind: 'm' },
   { re: /\b(\d{1,2})h(\d{2})?\s*(?:de\s+duração)\b/i, kind: 'hm' },
 ]
@@ -59,7 +62,10 @@ function cleanTitle(text, ...segmentsToRemove) {
 // Só a forma compacta ("14h", "14h30", "8h05"), sem espaço antes do "h": assim
 // "umas 2 horas" continua sendo duração em vez de virar 02:00. A forma por
 // extenso só vira horário quando vem com "às".
-const BR_TIME_COMPACT = /\b(\d{1,2})h(\d{2})?\b/gi
+// O "s" no fim é o "14hs"/"9hs" que praticamente todo mundo escreve no
+// dia a dia; sem aceitar essa forma, esses compromissos caíam sempre como
+// tarefa por não terem hora nenhuma reconhecida.
+const BR_TIME_COMPACT = /\b(\d{1,2})h(\d{2})?s?\b/gi
 // "às" começa com acento, e \b não abre palavra acentuada: a borda precisa ser
 // por lookaround, senão "às 14 horas" nunca casa.
 const BR_TIME_SPELLED = /(?<!\p{L})(?:às|as)\s+(\d{1,2})\s*horas?(?!\p{L})/giu
