@@ -24,11 +24,11 @@ function tasksDueOn(tasks, day) {
   })
 }
 
-export default function WeekView({ reference, events, tasks = [], onSelectDay, onSelectEvent }) {
+export default function WeekView({ reference, events, tasks = [], onSelectDay, onSelectEvent, occupies = () => true }) {
   const start = startOfWeek(reference)
   const days = Array.from({ length: 7 }, (_, i) => addDays(start, i))
 
-  const weekMinutes = days.reduce((sum, day) => sum + busyMinutesOn(events, day), 0)
+  const weekMinutes = days.reduce((sum, day) => sum + busyMinutesOn(events, day, occupies), 0)
   const weekCapacity = days.reduce((sum, day) => sum + workMinutes(day), 0)
   const weekTasks = days.reduce((sum, day) => sum + tasksDueOn(tasks, day).length, 0)
 
@@ -42,7 +42,7 @@ export default function WeekView({ reference, events, tasks = [], onSelectDay, o
       <div className="week-grid">
         {days.map((day) => {
           const dayEvents = eventsOfDay(events, day)
-          const level = loadLevel(busyMinutesOn(events, day), day)
+          const level = loadLevel(busyMinutesOn(events, day, occupies), day)
           const dueToday = tasksDueOn(tasks, day)
 
           return (

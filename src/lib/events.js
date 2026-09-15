@@ -55,20 +55,22 @@ export function currentEvent(events, now = new Date()) {
   return events.find((e) => !isAllDay(e) && eventStart(e) <= now && eventEnd(e) > now) || null
 }
 
-export function busyMinutesOn(events, day) {
+// `occupies` permite excluir do cálculo os eventos que não consomem o seu
+// tempo: agenda informativa, ou compromisso de presença não confirmada.
+export function busyMinutesOn(events, day, occupies = () => true) {
   return events
-    .filter((e) => !isAllDay(e) && occursOnDay(e, day))
+    .filter((e) => !isAllDay(e) && occursOnDay(e, day) && occupies(e))
     .reduce((sum, e) => sum + durationMinutes(e), 0)
 }
 
 // Vãos livres dentro dos blocos de expediente do dia, para enxergar onde cabe
 // um bloco de foco sem cruzar os compromissos na cabeça. Recebe os blocos de
 // fora para não misturar o horário de trabalho com a leitura do Calendar.
-export function findFreeGaps(events, day, blocks, { minMinutes = 30 } = {}) {
+export function findFreeGaps(events, day, blocks, { minMinutes = 30, occupies = () => true } = {}) {
   if (!blocks || blocks.length === 0) return []
 
   const busy = events
-    .filter((e) => !isAllDay(e) && occursOnDay(e, day))
+    .filter((e) => !isAllDay(e) && occursOnDay(e, day) && occupies(e))
     .map((e) => ({ start: eventStart(e), end: eventEnd(e) }))
     .sort((a, b) => a.start - b.start)
 

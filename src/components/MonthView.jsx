@@ -14,12 +14,12 @@ function buildGrid(reference) {
   return Array.from({ length: weeks * 7 }, (_, i) => addDays(start, i))
 }
 
-export default function MonthView({ reference, events, onSelectDay, onSelectEvent }) {
+export default function MonthView({ reference, events, onSelectDay, onSelectEvent, occupies = () => true }) {
   const cells = buildGrid(reference)
   const month = reference.getMonth()
   const monthMinutes = cells
     .filter((day) => day.getMonth() === month)
-    .reduce((sum, day) => sum + busyMinutesOn(events, day), 0)
+    .reduce((sum, day) => sum + busyMinutesOn(events, day, occupies), 0)
 
   return (
     <div className="card">

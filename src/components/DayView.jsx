@@ -33,11 +33,20 @@ function NextUp({ events }) {
   return <div className="now-banner muted">Nada mais marcado para hoje.</div>
 }
 
-export default function DayView({ date, events, onSelectEvent }) {
+export default function DayView({
+  date,
+  events,
+  onSelectEvent,
+  occupies = () => true,
+  isInfo = () => false,
+  asksPresence = () => false,
+  presenceOf = () => null,
+  onSetPresence,
+}) {
   const dayEvents = eventsOfDay(events, date)
   const allDay = dayEvents.filter(isAllDay)
   const timed = dayEvents.filter((e) => !isAllDay(e))
-  const gaps = findFreeGaps(events, date, workBlocksFor(date))
+  const gaps = findFreeGaps(events, date, workBlocksFor(date), { occupies })
   const showNow = isToday(date)
   const folga = !isWorkday(date)
 
@@ -91,23 +100,52 @@ export default function DayView({ date, events, onSelectEvent }) {
           const event = item.event
           const isFocus = event.summary?.startsWith('Foco:')
           const borderColor = event.calendarColor || (isFocus ? 'var(--accent)' : 'var(--border-strong)')
+          const info = isInfo(event)
+          const pedePresenca = asksPresence(event)
+          const presenca = presenceOf(event)
+
           return (
             <div
               key={event.id}
               onClick={() => onSelectEvent && onSelectEvent(event)}
+              className={info || presenca === 'nao' ? 'day-event day-event--aside' : 'day-event'}
               style={{
                 borderLeft: `3px solid ${borderColor}`,
                 background: isFocus ? 'var(--accent-bg)' : 'var(--surface-2)',
-                padding: '6px 10px',
-                borderRadius: 4,
                 cursor: onSelectEvent ? 'pointer' : 'default',
               }}
             >
               <div className="muted" style={{ fontSize: 11, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                 <span>{formatTime(eventStart(event))}–{formatTime(eventEnd(event))}</span>
                 {event.calendarSummary && <span>· {event.calendarSummary}</span>}
+                {info && <span>· informativo</span>}
               </div>
-              <div style={{ fontSize: 14, fontWeight: isFocus ? 500 : 400 }}>{event.summary}</div>
+
+              <div style={{
+                fontSize: 14,
+                fontWeight: isFocus ? 500 : 400,
+                textDecoration: presenca === 'nao' ? 'line-through' : 'none',
+              }}>
+                {event.summary}
+              </div>
+
+              {pedePresenca && (
+                <div className="presence-row" onClick={(e) => e.stopPropagation()}>
+                  <button
+                    className={presenca === 'vou' ? 'presence-on' : ''}
+                    onClick={() => onSetPresence(event.id, presenca === 'vou' ? null : 'vou')}
+                  >
+                    Vou
+                  </button>
+                  <button
+                    className={presenca === 'nao' ? 'presence-off' : ''}
+                    onClick={() => onSetPresence(event.id, presenca === 'nao' ? null : 'nao')}
+                  >
+                    Não vou
+                  </button>
+                  {!presenca && <span className="muted" style={{ fontSize: 11 }}>não conta no seu tempo até confirmar</span>}
+                </div>
+              )}
             </div>
           )
         })}
