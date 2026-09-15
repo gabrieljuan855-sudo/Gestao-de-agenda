@@ -1,9 +1,4 @@
-const PRIORITY_LABEL = {
-  urgente: 'Urgente',
-  importante: 'Importante',
-  pode_esperar: 'Pode esperar',
-}
-const ORDER = ['urgente', 'importante', 'pode_esperar']
+import { PRIORITY_LABEL, PRIORITY_ORDER, priorityFromListTitle } from '../lib/priority.js'
 
 function daysSince(dateString) {
   if (!dateString) return null
@@ -15,7 +10,9 @@ function daysSince(dateString) {
 export default function Backlog({ tasks, activeTaskId, onSelect, onComplete, onEdit, showCompleted, onToggleShowCompleted }) {
   const pending = tasks.filter((t) => t.status !== 'completed')
   const completed = tasks.filter((t) => t.status === 'completed')
-  const sorted = [...pending].sort((a, b) => ORDER.indexOf(a.priority) - ORDER.indexOf(b.priority))
+  const sorted = [...pending].sort(
+    (a, b) => PRIORITY_ORDER.indexOf(a.priority) - PRIORITY_ORDER.indexOf(b.priority)
+  )
 
   function renderTask(task, { done = false } = {}) {
     const age = daysSince(task.updated)
@@ -40,7 +37,10 @@ export default function Backlog({ tasks, activeTaskId, onSelect, onComplete, onE
             {task.title}
           </div>
           <span className={`pill ${task.priority}`}>{PRIORITY_LABEL[task.priority]}</span>
-          {task.tasklistTitle && (
+          {/* Listas como "Prioridade Máxima (menos de uma semana)" já estão
+              ditas pela pílula ao lado: repetir o nome inteiro só empurrava o
+              resto do cartão para baixo. Só listas com nome próprio aparecem. */}
+          {task.tasklistTitle && !priorityFromListTitle(task.tasklistTitle) && (
             <span className="muted" style={{ marginLeft: 8, fontSize: 11 }}>{task.tasklistTitle}</span>
           )}
           {!done && age !== null && age >= 3 && (

@@ -1,5 +1,6 @@
 import { ensureToken } from './googleAuth.js'
 import { fromInputs } from './dates.js'
+import { normalizePriority } from './priority.js'
 
 // Manda o texto para o Worker interpretar com o Gemini. O token do Google vai
 // junto porque a rota exige dono autenticado: sem isso ela seria cota grátis
@@ -34,7 +35,7 @@ export async function parseWithAI(text, calendars = []) {
 function toPreview(data) {
   const base = {
     title: data.title || '',
-    priority: data.priority || 'pode_esperar',
+    priority: normalizePriority(data.priority),
     calendarId: data.calendarId || '',
     durationMinutes: data.durationMinutes || 60,
   }

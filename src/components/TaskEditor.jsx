@@ -1,17 +1,13 @@
 import { useState } from 'react'
 import Modal from './Modal.jsx'
 import { toDateInput, fromInputs } from '../lib/dates.js'
+import { PRIORITIES, DEFAULT_PRIORITY } from '../lib/priority.js'
 
-const PRIORITIES = [
-  { id: 'urgente', label: 'Urgente' },
-  { id: 'importante', label: 'Importante' },
-  { id: 'pode_esperar', label: 'Pode esperar' },
-]
 
 export default function TaskEditor({ task, onSave, onDelete, onReopen, onComplete, onClose }) {
   const [title, setTitle] = useState(task.title || '')
   const [due, setDue] = useState(task.due ? toDateInput(new Date(task.due)) : '')
-  const [priority, setPriority] = useState(task.priority || 'pode_esperar')
+  const [priority, setPriority] = useState(task.priority || DEFAULT_PRIORITY)
   const [notes, setNotes] = useState(task.notesClean || '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)

@@ -5,11 +5,14 @@ const IMPORTANT_WORDS = ['importante', 'prazo', 'até', 'entregar']
 
 const DEFAULT_MINUTES = 60
 
+// Devolve null quando nada no texto indica urgência. Antes isso virava
+// "pode esperar", o que fazia o app afirmar uma prioridade que o usuário nunca
+// escreveu; agora quem decide o padrão é o formulário.
 function detectPriority(text) {
   const lower = text.toLowerCase()
-  if (URGENT_WORDS.some((w) => lower.includes(w))) return 'urgente'
-  if (IMPORTANT_WORDS.some((w) => lower.includes(w))) return 'importante'
-  return 'pode_esperar'
+  if (URGENT_WORDS.some((w) => lower.includes(w))) return 'alta'
+  if (IMPORTANT_WORDS.some((w) => lower.includes(w))) return 'media'
+  return null
 }
 
 // "por 40min", "durante 2 horas", "umas 2 horas", "de 1h30"

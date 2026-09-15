@@ -1,3 +1,4 @@
+import { normalizePriority, priorityFromListTitle, DEFAULT_PRIORITY } from './priority.js'
 import { ensureToken } from './googleAuth.js'
 import { toDateInput, addDays } from './dates.js'
 
@@ -116,21 +117,24 @@ export async function deleteEvent(event) {
 // ---------- Tasks ----------
 
 // Convenção usada por este app para guardar a prioridade dentro do Google Tasks:
-// a nota da tarefa começa com uma tag entre colchetes, ex: "[urgente] texto livre".
-const PRIORITY_TAG = /^\[(urgente|importante|pode_esperar)\]\s*/i
+// a nota da tarefa começa com uma tag entre colchetes, ex: "[alta] texto livre".
+// Os ids antigos ficam na expressão porque já existem tarefas gravadas assim.
+const PRIORITY_TAG = /^\[(alta|media|baixa|urgente|importante|pode_esperar)\]\s*/i
 
+// Devolve a prioridade escrita na nota, ou null quando não há tag — aí quem
+// decide é o nome da lista (ver priorityFromListTitle).
 export function parsePriorityFromNotes(notes) {
-  if (!notes) return { priority: 'pode_esperar', notes: '' }
+  if (!notes) return { priority: null, notes: '' }
   const match = notes.match(PRIORITY_TAG)
-  if (!match) return { priority: 'pode_esperar', notes }
+  if (!match) return { priority: null, notes }
   return {
-    priority: match[1].toLowerCase(),
+    priority: normalizePriority(match[1]),
     notes: notes.replace(PRIORITY_TAG, ''),
   }
 }
 
 function encodeNotes(priority, notes) {
-  return `[${priority}] ${notes || ''}`.trim()
+  return `[${normalizePriority(priority) || DEFAULT_PRIORITY}] ${notes || ''}`.trim()
 }
 
 export async function listTaskLists() {
@@ -138,16 +142,24 @@ export async function listTaskLists() {
   return data.items || []
 }
 
-export async function listTasks({ tasklistId = '@default', showCompleted = false } = {}) {
+export async function listTasks({ tasklistId = '@default', tasklistTitle = '', showCompleted = false } = {}) {
   const params = new URLSearchParams({
     showCompleted: String(showCompleted),
     showHidden: String(showCompleted),
     maxResults: '200',
   })
   const data = await request(`${TASKS_BASE}/lists/${encodeURIComponent(tasklistId)}/tasks?${params}`)
+  // Ordem de decisão: a tag explícita manda; sem tag, vale o nome da lista
+  // ("Prioridade Máxima (menos de uma semana)"); sem os dois, o padrão.
+  const fromList = priorityFromListTitle(tasklistTitle)
   return (data.items || []).map((t) => {
     const { priority, notes } = parsePriorityFromNotes(t.notes)
-    return { ...t, priority, notesClean: notes, tasklistId }
+    return {
+      ...t,
+      priority: priority || fromList || DEFAULT_PRIORITY,
+      notesClean: notes,
+      tasklistId,
+    }
   })
 }
 
@@ -157,7 +169,7 @@ export async function listAllTasks({ showCompleted = false } = {}) {
   const lists = await listTaskLists()
   const perList = await Promise.all(
     lists.map((list) =>
-      listTasks({ tasklistId: list.id, showCompleted })
+      listTasks({ tasklistId: list.id, tasklistTitle: list.title, showCompleted })
         .then((tasks) => tasks.map((t) => ({ ...t, tasklistTitle: list.title })))
         .catch((err) => {
           console.error(`Falha ao buscar tarefas da lista ${list.title}:`, err)
@@ -168,7 +180,7 @@ export async function listAllTasks({ showCompleted = false } = {}) {
   return perList.flat()
 }
 
-export async function createTask({ title, priority = 'pode_esperar', due, notes = '', tasklistId = '@default' }) {
+export async function createTask({ title, priority = DEFAULT_PRIORITY, due, notes = '', tasklistId = '@default' }) {
   return request(`${TASKS_BASE}/lists/${encodeURIComponent(tasklistId)}/tasks`, {
     method: 'POST',
     body: JSON.stringify({
