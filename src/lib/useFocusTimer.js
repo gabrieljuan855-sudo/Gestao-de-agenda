@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import { createEvent } from '../lib/googleApi.js'
+import { createEvent } from './googleApi.js'
 
 const FOCUS_MS = 25 * 60 * 1000
 const BREAK_MS = 5 * 60 * 1000
 
-function formatClock(ms) {
+export function formatClock(ms) {
   const total = Math.max(0, Math.ceil(ms / 1000))
   const m = Math.floor(total / 60)
   const s = total % 60
@@ -41,7 +41,10 @@ function notify(title, body) {
   }
 }
 
-export default function FocusTimer({ activeTask, onCycleComplete }) {
+// O estado do pomodoro mora aqui, e não dentro de um componente de tela, porque
+// agora três lugares precisam dele ao mesmo tempo: o botão do trilho (que
+// mostra o tempo correndo), o painel que abre nele e a tela cheia.
+export default function useFocusTimer({ activeTask, onCycleComplete }) {
   const [phase, setPhase] = useState('idle') // idle | focus | break
   const [endsAt, setEndsAt] = useState(null)
   const [pausedLeft, setPausedLeft] = useState(null)
@@ -117,9 +120,9 @@ export default function FocusTimer({ activeTask, onCycleComplete }) {
     }
   }
 
-  function startFocus() {
+  function start() {
     if (!activeTask) {
-      alert('Escolha uma tarefa do backlog antes de iniciar o foco.')
+      alert('Escolha uma tarefa na lista antes de iniciar o foco.')
       return
     }
     if ('Notification' in window && Notification.permission === 'default') {
@@ -160,51 +163,21 @@ export default function FocusTimer({ activeTask, onCycleComplete }) {
     onCycleComplete && onCycleComplete()
   }
 
-  const phaseLabel = phase === 'idle' ? 'Nenhum foco ativo' : phase === 'focus' ? 'Em foco agora' : 'Pausa'
-
-  return (
-    <>
-      <div className="card" style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-        <div style={{ minWidth: 0 }}>
-          <div className="muted">{phaseLabel}</div>
-          <div style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {activeTask ? activeTask.title : 'Selecione uma tarefa no backlog'}
-          </div>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: 22, fontVariantNumeric: 'tabular-nums' }}>{formatClock(remaining)}</span>
-          {phase === 'idle' ? (
-            <button className="primary" onClick={startFocus}>Iniciar</button>
-          ) : (
-            <>
-              <button onClick={() => setImmersive(true)}>Tela cheia</button>
-              <button onClick={stop}>Parar</button>
-            </>
-          )}
-        </div>
-      </div>
-
-      {immersive && phase !== 'idle' && (
-        <div className="focus-overlay" role="dialog" aria-label="Modo foco">
-          <div className="focus-phase">{phase === 'focus' ? 'Foco' : 'Pausa'}</div>
-          <div className="focus-clock">{formatClock(remaining)}</div>
-          <div className="focus-task">{activeTask ? activeTask.title : ''}</div>
-
-          <div className="focus-actions">
-            {pausedLeft === null ? (
-              <button onClick={pause}>Pausar</button>
-            ) : (
-              <button className="primary" onClick={resume}>Retomar</button>
-            )}
-            {phase === 'break' && <button onClick={skipBreak}>Pular pausa</button>}
-            <button onClick={stop}>Encerrar</button>
-          </div>
-
-          <button className="focus-exit" onClick={() => setImmersive(false)}>
-            sair da tela cheia (esc)
-          </button>
-        </div>
-      )}
-    </>
-  )
+  return {
+    phase,
+    remaining,
+    running,
+    paused: pausedLeft !== null,
+    immersive,
+    activeTask,
+    phaseLabel: phase === 'idle' ? 'Nenhum foco ativo' : phase === 'focus' ? 'Em foco agora' : 'Pausa',
+    clock: formatClock(remaining),
+    start,
+    pause,
+    resume,
+    stop,
+    skipBreak,
+    openImmersive: () => setImmersive(true),
+    closeImmersive: () => setImmersive(false),
+  }
 }

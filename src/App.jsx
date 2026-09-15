@@ -17,11 +17,13 @@ import {
 import { rangeForView, shiftReference } from './lib/dates.js'
 import QuickAdd from './components/QuickAdd.jsx'
 import Logo from './components/Logo.jsx'
-import FocusTimer from './components/FocusTimer.jsx'
+import Rail from './components/Rail.jsx'
+import FocusPanel from './components/FocusPanel.jsx'
+import FocusOverlay from './components/FocusOverlay.jsx'
+import useFocusTimer from './lib/useFocusTimer.js'
 import Backlog from './components/Backlog.jsx'
 import Scratchpad from './components/Scratchpad.jsx'
-import ViewToggle from './components/ViewToggle.jsx'
-import DateNav from './components/DateNav.jsx'
+import PeriodBar from './components/PeriodBar.jsx'
 import DayView from './components/DayView.jsx'
 import WeekView from './components/WeekView.jsx'
 import MonthView from './components/MonthView.jsx'
@@ -38,6 +40,15 @@ import {
   needsPresence,
   isDeclined,
 } from './lib/calendarPrefs.js'
+
+// "Bom dia" em vez do nome do app no topo: quem abre isso é uma pessoa só, e
+// ela já sabe onde está.
+function greeting(date = new Date()) {
+  const h = date.getHours()
+  if (h < 12) return 'Bom dia'
+  if (h < 18) return 'Boa tarde'
+  return 'Boa noite'
+}
 
 export default function App() {
   const [token, setToken] = useState(null)
@@ -121,6 +132,8 @@ export default function App() {
     setView('day')
   }
 
+  const focus = useFocusTimer({ activeTask, onCycleComplete: reload })
+
   const occupies = (event) => occupiesTime(event, calendarPrefs, presence)
   const declined = (event) => isDeclined(event, presence)
 
@@ -192,40 +205,65 @@ export default function App() {
     )
   }
 
+  const tools = [
+    {
+      id: 'add',
+      label: 'Nova tarefa',
+      icon: '+',
+      render: (close) => (
+        <QuickAdd
+          calendars={calendars}
+          taskLists={taskLists}
+          onCreateEvent={handleCreateEvent}
+          onCreateTask={handleCreateTask}
+          onDone={close}
+        />
+      ),
+    },
+    {
+      id: 'focus',
+      label: 'Pomodoro',
+      // O botão mostra o tempo correndo, então dá para acompanhar o ciclo sem
+      // abrir nada — era o que o cartão fixo fazia, ocupando a página inteira.
+      icon: focus.phase === 'idle' ? '25m' : focus.clock,
+      highlight: focus.phase !== 'idle',
+      render: () => <FocusPanel focus={focus} />,
+    },
+    {
+      id: 'notes',
+      label: 'Anotações',
+      icon: '≡',
+      render: () => <Scratchpad />,
+    },
+  ]
+
   return (
     <div className="app-shell">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Logo size={26} />
-          Gestão de agenda
-        </h2>
+      <div className="app-head">
+        <div className="app-head-title">
+          <Logo size={30} />
+          <div>
+            <h2>{greeting()}</h2>
+            <div className="muted app-head-sub">Gestão de agenda</div>
+          </div>
+        </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button onClick={() => setShowCalendarSettings(true)}>Agendas</button>
           <button onClick={signOut}>Sair</button>
         </div>
       </div>
 
-      <QuickAdd
-        calendars={calendars}
-        taskLists={taskLists}
-        onCreateEvent={handleCreateEvent}
-        onCreateTask={handleCreateTask}
-      />
-
-      <FocusTimer activeTask={activeTask} onCycleComplete={reload} />
-
-      <ViewToggle view={view} onChange={setView} />
-
-      <DateNav
+      <PeriodBar
         view={view}
+        onChangeView={setView}
         reference={reference}
         onPrev={() => setReference((r) => shiftReference(view, r, -1))}
         onNext={() => setReference((r) => shiftReference(view, r, 1))}
         onToday={() => setReference(new Date())}
       />
 
-      <div className={view === 'day' ? 'main-grid' : 'main-grid main-grid--stacked'}>
-        <div>
+      <div className={view === 'day' ? 'workspace' : 'workspace workspace--wide'}>
+        <div className="workspace-main">
           {view === 'day' && (
             <DayView
               date={reference}
@@ -270,9 +308,11 @@ export default function App() {
           showCompleted={showCompleted}
           onToggleShowCompleted={setShowCompleted}
         />
+
+        <Rail tools={tools} />
       </div>
 
-      <Scratchpad />
+      <FocusOverlay focus={focus} />
 
       {loading && <p className="muted">Atualizando...</p>}
 

@@ -38,10 +38,9 @@ export default function Scratchpad() {
   }
 
   return (
-    <div className="card" style={{ marginTop: 16 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, gap: 8 }}>
-        <div className="muted">Anotações</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+    <div>
+      <div className="panel-head">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginLeft: 'auto' }}>
           <span className="muted" style={{ fontSize: 11 }}>
             {text.length > 0 && `${text.length} caracteres`}
             {savedAt && ` · salvo ${savedAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`}
@@ -54,7 +53,7 @@ export default function Scratchpad() {
         value={text}
         onChange={(e) => setText(e.target.value)}
         placeholder="Espaço livre para rascunhar, pensar em voz alta, colar algo que você não quer perder..."
-        rows={8}
+        rows={12}
       />
 
       <div className="muted" style={{ fontSize: 11, marginTop: 6 }}>
