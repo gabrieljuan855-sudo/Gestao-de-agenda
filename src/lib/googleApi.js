@@ -26,7 +26,12 @@ async function request(url, options = {}) {
 
 // ---------- Calendar ----------
 
-export async function listEvents({ timeMin, timeMax }) {
+export async function listCalendars() {
+  const data = await request(`${CAL_BASE}/users/me/calendarList?minAccessRole=reader`)
+  return (data.items || []).filter((cal) => cal.selected !== false)
+}
+
+export async function listEvents({ timeMin, timeMax, calendarId = 'primary' }) {
   const params = new URLSearchParams({
     timeMin: timeMin.toISOString(),
     timeMax: timeMax.toISOString(),
@@ -34,8 +39,25 @@ export async function listEvents({ timeMin, timeMax }) {
     orderBy: 'startTime',
     maxResults: '250',
   })
-  const data = await request(`${CAL_BASE}/calendars/primary/events?${params}`)
-  return data.items || []
+  const data = await request(`${CAL_BASE}/calendars/${encodeURIComponent(calendarId)}/events?${params}`)
+  return (data.items || []).map((event) => ({ ...event, calendarId }))
+}
+
+// Busca eventos de todas as agendas marcadas como visíveis na conta do usuário
+// (não só a agenda principal), já que uma pessoa costuma ter várias agendas.
+export async function listAllEvents({ timeMin, timeMax }) {
+  const calendars = await listCalendars()
+  const perCalendar = await Promise.all(
+    calendars.map((cal) =>
+      listEvents({ timeMin, timeMax, calendarId: cal.id }).catch((err) => {
+        console.error(`Falha ao buscar eventos da agenda ${cal.summary}:`, err)
+        return []
+      })
+    )
+  )
+  return perCalendar
+    .flat()
+    .sort((a, b) => new Date(a.start?.dateTime || a.start?.date) - new Date(b.start?.dateTime || b.start?.date))
 }
 
 export async function createEvent({ title, start, end, description }) {

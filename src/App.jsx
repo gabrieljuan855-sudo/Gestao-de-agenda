@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { initGoogleAuth, signIn, signOut, isConfigured } from './lib/googleAuth.js'
-import { listEvents, createEvent, listTasks, createTask, completeTask } from './lib/googleApi.js'
+import { listAllEvents, createEvent, listTasks, createTask, completeTask } from './lib/googleApi.js'
 import QuickAdd from './components/QuickAdd.jsx'
 import FocusTimer from './components/FocusTimer.jsx'
 import Backlog from './components/Backlog.jsx'
@@ -30,7 +30,7 @@ export default function App() {
       const timeMax = new Date()
       timeMax.setDate(timeMax.getDate() + 35)
       const [evts, tks] = await Promise.all([
-        listEvents({ timeMin, timeMax }),
+        listAllEvents({ timeMin, timeMax }),
         listTasks(),
       ])
       setEvents(evts)
