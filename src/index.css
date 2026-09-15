@@ -77,6 +77,25 @@ input[type="text"] {
   font-weight: 500;
 }
 
+.now-banner {
+  background: var(--accent-bg);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  padding: 8px 12px;
+  font-size: 13px;
+  margin-bottom: 10px;
+}
+
+.now-banner.muted { background: var(--surface-2); border-color: var(--border); }
+
+.free-slot {
+  border: 1px dashed var(--border-strong);
+  border-radius: 4px;
+  padding: 5px 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
 .pill.urgente { background: var(--urgent-bg); color: var(--urgent); }
 .pill.importante { background: var(--important-bg); color: var(--important); }
 .pill.pode_esperar { background: var(--low-bg); color: var(--low); }

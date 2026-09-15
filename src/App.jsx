@@ -1,10 +1,12 @@
 import { useEffect, useState, useCallback } from 'react'
 import { initGoogleAuth, signIn, signOut, isConfigured } from './lib/googleAuth.js'
 import { listAllEvents, createEvent, listAllTasks, createTask, completeTask } from './lib/googleApi.js'
+import { rangeForView, shiftReference } from './lib/dates.js'
 import QuickAdd from './components/QuickAdd.jsx'
 import FocusTimer from './components/FocusTimer.jsx'
 import Backlog from './components/Backlog.jsx'
 import ViewToggle from './components/ViewToggle.jsx'
+import DateNav from './components/DateNav.jsx'
 import DayView from './components/DayView.jsx'
 import WeekView from './components/WeekView.jsx'
 import MonthView from './components/MonthView.jsx'
@@ -17,6 +19,7 @@ export default function App() {
   const [activeTask, setActiveTask] = useState(null)
   const [loading, setLoading] = useState(false)
   const [showCompleted, setShowCompleted] = useState(false)
+  const [reference, setReference] = useState(() => new Date())
 
   useEffect(() => {
     initGoogleAuth((newToken) => setToken(newToken))
@@ -26,10 +29,7 @@ export default function App() {
     if (!token) return
     setLoading(true)
     try {
-      const timeMin = new Date()
-      timeMin.setDate(timeMin.getDate() - 7)
-      const timeMax = new Date()
-      timeMax.setDate(timeMax.getDate() + 35)
+      const { timeMin, timeMax } = rangeForView(view, reference)
       const [evts, tks] = await Promise.all([
         listAllEvents({ timeMin, timeMax }),
         listAllTasks({ showCompleted }),
@@ -41,7 +41,7 @@ export default function App() {
     } finally {
       setLoading(false)
     }
-  }, [token, showCompleted])
+  }, [token, showCompleted, view, reference])
 
   useEffect(() => {
     reload()
@@ -102,11 +102,19 @@ export default function App() {
 
       <ViewToggle view={view} onChange={setView} />
 
+      <DateNav
+        view={view}
+        reference={reference}
+        onPrev={() => setReference((r) => shiftReference(view, r, -1))}
+        onNext={() => setReference((r) => shiftReference(view, r, 1))}
+        onToday={() => setReference(new Date())}
+      />
+
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
         <div>
-          {view === 'day' && <DayView date={new Date()} events={events} />}
-          {view === 'week' && <WeekView reference={new Date()} events={events} />}
-          {view === 'month' && <MonthView reference={new Date()} events={events} />}
+          {view === 'day' && <DayView date={reference} events={events} />}
+          {view === 'week' && <WeekView reference={reference} events={events} />}
+          {view === 'month' && <MonthView reference={reference} events={events} />}
         </div>
         <Backlog
           tasks={tasks}
