@@ -26,6 +26,16 @@ import WeekView from './components/WeekView.jsx'
 import MonthView from './components/MonthView.jsx'
 import EventEditor from './components/EventEditor.jsx'
 import TaskEditor from './components/TaskEditor.jsx'
+import CalendarSettings from './components/CalendarSettings.jsx'
+import {
+  loadCalendarPrefs,
+  saveCalendarPrefs,
+  loadPresence,
+  setPresence,
+  occupiesTime,
+  isInformational,
+  needsPresence,
+} from './lib/calendarPrefs.js'
 
 export default function App() {
   const [token, setToken] = useState(null)
@@ -40,6 +50,9 @@ export default function App() {
   const [editingTask, setEditingTask] = useState(null)
   const [calendars, setCalendars] = useState([])
   const [taskLists, setTaskLists] = useState([])
+  const [calendarPrefs, setCalendarPrefs] = useState({})
+  const [presence, setPresenceState] = useState(() => loadPresence())
+  const [showCalendarSettings, setShowCalendarSettings] = useState(false)
 
   useEffect(() => {
     initGoogleAuth((newToken) => setToken(newToken))
@@ -51,7 +64,9 @@ export default function App() {
     if (!token) return
     Promise.all([listCalendars(), listTaskLists()])
       .then(([cals, lists]) => {
-        setCalendars(cals.filter((c) => c.accessRole === 'owner' || c.accessRole === 'writer'))
+        const writable = cals.filter((c) => c.accessRole === 'owner' || c.accessRole === 'writer')
+        setCalendars(writable)
+        setCalendarPrefs(loadCalendarPrefs(cals))
         setTaskLists(lists)
       })
       .catch((err) => console.error('Não deu para carregar agendas e listas:', err))
@@ -102,6 +117,17 @@ export default function App() {
   function openDay(day) {
     setReference(day)
     setView('day')
+  }
+
+  const occupies = (event) => occupiesTime(event, calendarPrefs, presence)
+
+  function handleSetPresence(eventId, value) {
+    setPresenceState(setPresence(eventId, value))
+  }
+
+  function handleCalendarPrefs(next) {
+    setCalendarPrefs(next)
+    saveCalendarPrefs(next)
   }
 
   async function handleCompleteTask(task) {
@@ -166,7 +192,10 @@ export default function App() {
     <div className="app-shell">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <h2 style={{ margin: 0 }}>Gestão de agenda</h2>
-        <button onClick={signOut}>Sair</button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={() => setShowCalendarSettings(true)}>Agendas</button>
+          <button onClick={signOut}>Sair</button>
+        </div>
       </div>
 
       <QuickAdd
@@ -191,7 +220,16 @@ export default function App() {
       <div className={view === 'day' ? 'main-grid' : 'main-grid main-grid--stacked'}>
         <div>
           {view === 'day' && (
-            <DayView date={reference} events={events} onSelectEvent={setEditingEvent} />
+            <DayView
+              date={reference}
+              events={events}
+              onSelectEvent={setEditingEvent}
+              occupies={occupies}
+              isInfo={(e) => isInformational(e, calendarPrefs)}
+              asksPresence={(e) => needsPresence(e, calendarPrefs)}
+              presenceOf={(e) => presence[e.id] || null}
+              onSetPresence={handleSetPresence}
+            />
           )}
           {view === 'week' && (
             <WeekView
@@ -200,6 +238,7 @@ export default function App() {
               tasks={tasks}
               onSelectDay={openDay}
               onSelectEvent={setEditingEvent}
+              occupies={occupies}
             />
           )}
           {view === 'month' && (
@@ -208,6 +247,7 @@ export default function App() {
               events={events}
               onSelectDay={openDay}
               onSelectEvent={setEditingEvent}
+              occupies={occupies}
             />
           )}
         </div>
@@ -225,6 +265,15 @@ export default function App() {
       <Scratchpad />
 
       {loading && <p className="muted">Atualizando...</p>}
+
+      {showCalendarSettings && (
+        <CalendarSettings
+          calendars={calendars}
+          prefs={calendarPrefs}
+          onChange={handleCalendarPrefs}
+          onClose={() => setShowCalendarSettings(false)}
+        />
+      )}
 
       {editingEvent && (
         <EventEditor

@@ -344,6 +344,35 @@ button.danger:hover { background: var(--urgent-bg); }
 
 .now-banner.muted { background: var(--surface-2); border-color: var(--border); }
 
+.day-event { padding: 6px 10px; border-radius: 4px; }
+
+/* Informativo ou presença recusada: continua visível, mas em segundo plano. */
+.day-event--aside { opacity: 0.55; }
+
+.presence-row { display: flex; align-items: center; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+.presence-row button { padding: 3px 10px; font-size: 12px; min-height: 0; }
+.presence-row button.presence-on {
+  background: var(--low-bg);
+  color: var(--low);
+  border-color: var(--low);
+}
+.presence-row button.presence-off {
+  background: var(--urgent-bg);
+  color: var(--urgent);
+  border-color: var(--urgent);
+}
+
+.calendar-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 8px;
+}
+
+.calendar-toggle { display: flex; align-items: center; gap: 4px; font-size: 12px; cursor: pointer; }
+
 .free-slot {
   border: 1px dashed var(--border-strong);
   border-radius: 4px;
