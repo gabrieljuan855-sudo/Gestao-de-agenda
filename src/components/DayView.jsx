@@ -63,10 +63,10 @@ export default function DayView({
         {folga && ' · fora do expediente'}
       </div>
 
-      {/* O "Agora/Próximo" é sobre o que está acontecendo com você: um
-          compromisso recusado continua listado abaixo, riscado, mas não é
-          anunciado aqui como se você estivesse nele. */}
-      {showNow && <NextUp events={timed.filter((e) => !declined(e))} />}
+      {/* O "Agora/Próximo" é sobre o que está acontecendo com você. O que é
+          recusado ou meramente informativo continua listado abaixo, mas não é
+          anunciado aqui como se fosse compromisso seu. */}
+      {showNow && <NextUp events={timed.filter((e) => !declined(e) && !isInfo(e))} />}
 
       {allDay.length > 0 && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
