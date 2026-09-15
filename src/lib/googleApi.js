@@ -1,10 +1,10 @@
-import { getToken } from './googleAuth.js'
+import { ensureToken } from './googleAuth.js'
 
 const CAL_BASE = 'https://www.googleapis.com/calendar/v3'
 const TASKS_BASE = 'https://www.googleapis.com/tasks/v1'
 
 async function request(url, options = {}) {
-  const token = getToken()
+  const token = await ensureToken()
   if (!token) throw new Error('Sem token de acesso. Faça login primeiro.')
 
   const res = await fetch(url, {
