@@ -5,6 +5,7 @@ import { rangeForView, shiftReference } from './lib/dates.js'
 import QuickAdd from './components/QuickAdd.jsx'
 import FocusTimer from './components/FocusTimer.jsx'
 import Backlog from './components/Backlog.jsx'
+import Scratchpad from './components/Scratchpad.jsx'
 import ViewToggle from './components/ViewToggle.jsx'
 import DateNav from './components/DateNav.jsx'
 import DayView from './components/DayView.jsx'
@@ -134,6 +135,8 @@ export default function App() {
           onToggleShowCompleted={setShowCompleted}
         />
       </div>
+
+      <Scratchpad />
 
       {loading && <p className="muted">Atualizando...</p>}
     </div>
