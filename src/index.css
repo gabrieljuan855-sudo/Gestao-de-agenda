@@ -121,6 +121,13 @@ input[type="text"] {
 .field-row { display: flex; gap: 10px; }
 .field-row .field { flex: 1; }
 
+.quickadd-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 10px;
+}
+
+.field select,
 .field input[type="date"],
 .field input[type="time"] {
   border: 1px solid var(--border-strong);

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { parseQuickAdd } from '../lib/nlp.js'
+import { formatDuration, toTimeInput, fromInputs, toDateInput } from '../lib/dates.js'
 
 const PRIORITY_LABEL = {
   urgente: 'Urgente',
@@ -7,31 +8,61 @@ const PRIORITY_LABEL = {
   pode_esperar: 'Pode esperar',
 }
 
-export default function QuickAdd({ onCreateEvent, onCreateTask }) {
+const DURATION_OPTIONS = [20, 30, 45, 50, 60, 90, 120]
+
+export default function QuickAdd({ calendars = [], taskLists = [], onCreateEvent, onCreateTask }) {
   const [text, setText] = useState('')
   const [preview, setPreview] = useState(null)
+  const [calendarId, setCalendarId] = useState('')
+  const [tasklistId, setTasklistId] = useState('')
+  const [minutes, setMinutes] = useState(60)
+  const [startTime, setStartTime] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState(null)
 
   function handleChange(value) {
     setText(value)
-    setPreview(value.trim() ? parseQuickAdd(value) : null)
+    setError(null)
+    const parsed = value.trim() ? parseQuickAdd(value) : null
+    setPreview(parsed)
+    if (parsed?.type === 'event') {
+      setMinutes(parsed.durationMinutes || 60)
+      setStartTime(toTimeInput(parsed.start))
+    }
   }
+
+  const isEvent = preview?.type === 'event'
+  const needsCalendar = isEvent && calendars.length > 0 && !calendarId
+  const needsList = !isEvent && taskLists.length > 0 && !tasklistId
 
   async function handleConfirm() {
     if (!preview) return
-    if (preview.type === 'event') {
-      await onCreateEvent(preview)
-    } else {
-      await onCreateTask(preview)
+    setSaving(true)
+    setError(null)
+    try {
+      if (isEvent) {
+        const start = fromInputs(toDateInput(preview.start), startTime)
+        const end = new Date(start.getTime() + minutes * 60000)
+        await onCreateEvent({ ...preview, start, end, calendarId })
+      } else {
+        await onCreateTask({ ...preview, tasklistId })
+      }
+      setText('')
+      setPreview(null)
+      setCalendarId('')
+      setTasklistId('')
+    } catch (err) {
+      setError(`Não deu para salvar: ${err.message}`)
+    } finally {
+      setSaving(false)
     }
-    setText('')
-    setPreview(null)
   }
 
   return (
     <div className="card" style={{ marginBottom: 16 }}>
       <input
         type="text"
-        placeholder="Ex: reunião quarta 14h, ou ligar pra escola até sexta"
+        placeholder="Ex: Reunião de equipe terça 13h15 por 50min"
         value={text}
         onChange={(e) => handleChange(e.target.value)}
         style={{ width: '100%' }}
@@ -40,17 +71,84 @@ export default function QuickAdd({ onCreateEvent, onCreateTask }) {
       {preview && (
         <div style={{ marginTop: 10, fontSize: 13 }}>
           <div className="muted" style={{ marginBottom: 6 }}>Entendi assim:</div>
-          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 10 }}>
-            <span><strong>Tipo:</strong> {preview.type === 'event' ? 'compromisso' : 'tarefa'}</span>
-            {preview.start && (
-              <span><strong>Quando:</strong> {preview.start.toLocaleString('pt-BR')}</span>
-            )}
-            {preview.due && (
-              <span><strong>Prazo:</strong> {preview.due.toLocaleDateString('pt-BR')}</span>
-            )}
+
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 10 }}>
+            <strong>{preview.title}</strong>
             <span className={`pill ${preview.priority}`}>{PRIORITY_LABEL[preview.priority]}</span>
           </div>
-          <button className="primary" onClick={handleConfirm}>Confirmar</button>
+
+          <div className="quickadd-fields">
+            {isEvent ? (
+              <>
+                <label className="field">
+                  <span>Dia</span>
+                  <input
+                    type="date"
+                    value={toDateInput(preview.start)}
+                    onChange={(e) =>
+                      setPreview({ ...preview, start: fromInputs(e.target.value, startTime) })
+                    }
+                  />
+                </label>
+                <label className="field">
+                  <span>Início</span>
+                  <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} />
+                </label>
+                <label className="field">
+                  <span>Duração</span>
+                  <select value={minutes} onChange={(e) => setMinutes(Number(e.target.value))}>
+                    {[...new Set([...DURATION_OPTIONS, minutes])]
+                      .sort((a, b) => a - b)
+                      .map((m) => (
+                        <option key={m} value={m}>{formatDuration(m)}</option>
+                      ))}
+                  </select>
+                </label>
+                <label className="field">
+                  <span>Agenda</span>
+                  <select value={calendarId} onChange={(e) => setCalendarId(e.target.value)}>
+                    <option value="">Escolha a agenda...</option>
+                    {calendars.map((cal) => (
+                      <option key={cal.id} value={cal.id}>{cal.summaryOverride || cal.summary}</option>
+                    ))}
+                  </select>
+                </label>
+              </>
+            ) : (
+              <>
+                {preview.due && (
+                  <label className="field">
+                    <span>Prazo</span>
+                    <input
+                      type="date"
+                      value={toDateInput(preview.due)}
+                      onChange={(e) => setPreview({ ...preview, due: fromInputs(e.target.value) })}
+                    />
+                  </label>
+                )}
+                <label className="field">
+                  <span>Lista</span>
+                  <select value={tasklistId} onChange={(e) => setTasklistId(e.target.value)}>
+                    <option value="">Escolha a lista...</option>
+                    {taskLists.map((list) => (
+                      <option key={list.id} value={list.id}>{list.title}</option>
+                    ))}
+                  </select>
+                </label>
+              </>
+            )}
+          </div>
+
+          {error && <div className="form-error" style={{ marginTop: 8 }}>{error}</div>}
+
+          <button
+            className="primary"
+            style={{ marginTop: 10 }}
+            onClick={handleConfirm}
+            disabled={saving || needsCalendar || needsList}
+          >
+            {saving ? 'Salvando...' : isEvent ? 'Criar compromisso' : 'Criar tarefa'}
+          </button>
         </div>
       )}
     </div>
