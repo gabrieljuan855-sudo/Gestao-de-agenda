@@ -88,6 +88,62 @@ input[type="text"] {
   font-weight: 500;
 }
 
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgba(31, 30, 28, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.modal-card {
+  background: var(--surface-1);
+  border-radius: 12px;
+  padding: 16px;
+  width: 100%;
+  max-width: 420px;
+  max-height: 90vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.modal-head { display: flex; justify-content: space-between; align-items: center; }
+
+.modal-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 4px; }
+
+.field { display: flex; flex-direction: column; gap: 4px; }
+.field > span { font-size: 12px; color: var(--text-secondary); }
+.field-row { display: flex; gap: 10px; }
+.field-row .field { flex: 1; }
+
+.field input[type="date"],
+.field input[type="time"] {
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  padding: 9px 10px;
+  font-family: inherit;
+  font-size: 14px;
+  background: var(--surface-1);
+  color: var(--text-primary);
+  width: 100%;
+}
+
+button.danger { color: var(--urgent); border-color: var(--urgent-bg); }
+button.danger:hover { background: var(--urgent-bg); }
+
+.form-error {
+  background: var(--urgent-bg);
+  color: var(--urgent);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+  font-size: 12px;
+}
+
 .focus-overlay {
   position: fixed;
   inset: 0;

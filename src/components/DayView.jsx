@@ -33,7 +33,7 @@ function NextUp({ events }) {
   return <div className="now-banner muted">Nada mais marcado para hoje.</div>
 }
 
-export default function DayView({ date, events }) {
+export default function DayView({ date, events, onSelectEvent }) {
   const dayEvents = eventsOfDay(events, date)
   const allDay = dayEvents.filter(isAllDay)
   const timed = dayEvents.filter((e) => !isAllDay(e))
@@ -61,10 +61,12 @@ export default function DayView({ date, events }) {
             <span
               key={event.id}
               className="pill"
+              onClick={() => onSelectEvent && onSelectEvent(event)}
               style={{
                 background: 'var(--surface-2)',
                 border: `1px solid ${event.calendarColor || 'var(--border-strong)'}`,
                 color: 'var(--text-secondary)',
+                cursor: onSelectEvent ? 'pointer' : 'default',
               }}
             >
               {event.summary}
@@ -92,11 +94,13 @@ export default function DayView({ date, events }) {
           return (
             <div
               key={event.id}
+              onClick={() => onSelectEvent && onSelectEvent(event)}
               style={{
                 borderLeft: `3px solid ${borderColor}`,
                 background: isFocus ? 'var(--accent-bg)' : 'var(--surface-2)',
                 padding: '6px 10px',
                 borderRadius: 4,
+                cursor: onSelectEvent ? 'pointer' : 'default',
               }}
             >
               <div className="muted" style={{ fontSize: 11, display: 'flex', gap: 6, flexWrap: 'wrap' }}>

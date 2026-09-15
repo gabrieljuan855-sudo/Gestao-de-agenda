@@ -12,7 +12,7 @@ function daysSince(dateString) {
   return Math.floor(diff / (1000 * 60 * 60 * 24))
 }
 
-export default function Backlog({ tasks, activeTaskId, onSelect, onComplete, showCompleted, onToggleShowCompleted }) {
+export default function Backlog({ tasks, activeTaskId, onSelect, onComplete, onEdit, showCompleted, onToggleShowCompleted }) {
   const pending = tasks.filter((t) => t.status !== 'completed')
   const completed = tasks.filter((t) => t.status === 'completed')
   const sorted = [...pending].sort((a, b) => ORDER.indexOf(a.priority) - ORDER.indexOf(b.priority))
@@ -47,7 +47,10 @@ export default function Backlog({ tasks, activeTaskId, onSelect, onComplete, sho
             <span className="muted" style={{ marginLeft: 8 }}>parado há {age} dias</span>
           )}
         </div>
-        {!done && <button onClick={(e) => { e.stopPropagation(); onComplete(task) }}>Concluir</button>}
+        <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+          <button onClick={(e) => { e.stopPropagation(); onEdit(task) }}>Editar</button>
+          {!done && <button onClick={(e) => { e.stopPropagation(); onComplete(task) }}>Concluir</button>}
+        </div>
       </div>
     )
   }

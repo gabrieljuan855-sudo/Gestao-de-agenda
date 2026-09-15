@@ -14,7 +14,7 @@ function buildGrid(reference) {
   return Array.from({ length: weeks * 7 }, (_, i) => addDays(start, i))
 }
 
-export default function MonthView({ reference, events, onSelectDay }) {
+export default function MonthView({ reference, events, onSelectDay, onSelectEvent }) {
   const cells = buildGrid(reference)
   const month = reference.getMonth()
   const monthMinutes = cells
@@ -60,6 +60,11 @@ export default function MonthView({ reference, events, onSelectDay }) {
                       className={`month-chip${allDay ? ' month-chip--allday' : ''}`}
                       style={allDay ? { background: color } : undefined}
                       title={`${allDay ? '' : formatTime(eventStart(event)) + ' '}${event.summary}`}
+                      onClick={(e) => {
+                        // Sem isso o clique subiria para o dia e trocaria de visão.
+                        e.stopPropagation()
+                        onSelectEvent && onSelectEvent(event)
+                      }}
                     >
                       {!allDay && <span className="month-chip-dot" style={{ background: color }} />}
                       <span className="month-chip-text">

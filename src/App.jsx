@@ -1,6 +1,17 @@
 import { useEffect, useState, useCallback } from 'react'
 import { initGoogleAuth, signIn, signOut, isConfigured } from './lib/googleAuth.js'
-import { listAllEvents, createEvent, listAllTasks, createTask, completeTask } from './lib/googleApi.js'
+import {
+  listAllEvents,
+  createEvent,
+  updateEvent,
+  deleteEvent,
+  listAllTasks,
+  createTask,
+  completeTask,
+  updateTask,
+  reopenTask,
+  deleteTask,
+} from './lib/googleApi.js'
 import { rangeForView, shiftReference } from './lib/dates.js'
 import QuickAdd from './components/QuickAdd.jsx'
 import FocusTimer from './components/FocusTimer.jsx'
@@ -11,6 +22,8 @@ import DateNav from './components/DateNav.jsx'
 import DayView from './components/DayView.jsx'
 import WeekView from './components/WeekView.jsx'
 import MonthView from './components/MonthView.jsx'
+import EventEditor from './components/EventEditor.jsx'
+import TaskEditor from './components/TaskEditor.jsx'
 
 export default function App() {
   const [token, setToken] = useState(null)
@@ -21,6 +34,8 @@ export default function App() {
   const [loading, setLoading] = useState(false)
   const [showCompleted, setShowCompleted] = useState(false)
   const [reference, setReference] = useState(() => new Date())
+  const [editingEvent, setEditingEvent] = useState(null)
+  const [editingTask, setEditingTask] = useState(null)
 
   useEffect(() => {
     initGoogleAuth((newToken) => setToken(newToken))
@@ -66,6 +81,32 @@ export default function App() {
   async function handleCompleteTask(task) {
     await completeTask(task.id, task.tasklistId)
     if (activeTask?.id === task.id) setActiveTask(null)
+    await reload()
+  }
+
+  async function handleSaveEvent(patch) {
+    await updateEvent(editingEvent, patch)
+    await reload()
+  }
+
+  async function handleDeleteEvent() {
+    await deleteEvent(editingEvent)
+    await reload()
+  }
+
+  async function handleSaveTask(patch) {
+    await updateTask(editingTask, patch)
+    await reload()
+  }
+
+  async function handleDeleteTask() {
+    if (activeTask?.id === editingTask.id) setActiveTask(null)
+    await deleteTask(editingTask)
+    await reload()
+  }
+
+  async function handleReopenTask() {
+    await reopenTask(editingTask)
     await reload()
   }
 
@@ -118,12 +159,25 @@ export default function App() {
 
       <div className={view === 'day' ? 'main-grid' : 'main-grid main-grid--stacked'}>
         <div>
-          {view === 'day' && <DayView date={reference} events={events} />}
+          {view === 'day' && (
+            <DayView date={reference} events={events} onSelectEvent={setEditingEvent} />
+          )}
           {view === 'week' && (
-            <WeekView reference={reference} events={events} tasks={tasks} onSelectDay={openDay} />
+            <WeekView
+              reference={reference}
+              events={events}
+              tasks={tasks}
+              onSelectDay={openDay}
+              onSelectEvent={setEditingEvent}
+            />
           )}
           {view === 'month' && (
-            <MonthView reference={reference} events={events} onSelectDay={openDay} />
+            <MonthView
+              reference={reference}
+              events={events}
+              onSelectDay={openDay}
+              onSelectEvent={setEditingEvent}
+            />
           )}
         </div>
         <Backlog
@@ -131,6 +185,7 @@ export default function App() {
           activeTaskId={activeTask?.id}
           onSelect={setActiveTask}
           onComplete={handleCompleteTask}
+          onEdit={setEditingTask}
           showCompleted={showCompleted}
           onToggleShowCompleted={setShowCompleted}
         />
@@ -139,6 +194,26 @@ export default function App() {
       <Scratchpad />
 
       {loading && <p className="muted">Atualizando...</p>}
+
+      {editingEvent && (
+        <EventEditor
+          event={editingEvent}
+          onSave={handleSaveEvent}
+          onDelete={handleDeleteEvent}
+          onClose={() => setEditingEvent(null)}
+        />
+      )}
+
+      {editingTask && (
+        <TaskEditor
+          task={editingTask}
+          onSave={handleSaveTask}
+          onDelete={handleDeleteTask}
+          onReopen={handleReopenTask}
+          onComplete={() => handleCompleteTask(editingTask)}
+          onClose={() => setEditingTask(null)}
+        />
+      )}
     </div>
   )
 }
