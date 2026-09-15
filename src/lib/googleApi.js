@@ -33,7 +33,7 @@ export async function listCalendars() {
   return (data.items || []).filter((cal) => cal.selected !== false)
 }
 
-export async function listEvents({ timeMin, timeMax, calendarId = 'primary' }) {
+export async function listEvents({ timeMin, timeMax, calendarId = 'primary', q }) {
   const params = new URLSearchParams({
     timeMin: timeMin.toISOString(),
     timeMax: timeMax.toISOString(),
@@ -41,19 +41,21 @@ export async function listEvents({ timeMin, timeMax, calendarId = 'primary' }) {
     orderBy: 'startTime',
     maxResults: '250',
   })
+  // O Google já sabe procurar (título, descrição, local, convidados); "q" só
+  // entra quando tem texto, pra essa função continuar servindo o carregamento
+  // normal por período.
+  if (q) params.set('q', q)
   const data = await request(`${CAL_BASE}/calendars/${encodeURIComponent(calendarId)}/events?${params}`)
   return (data.items || []).map((event) => ({ ...event, calendarId }))
 }
 
-// Busca eventos de todas as agendas marcadas como visíveis na conta do usuário
-// (não só a agenda principal), já que uma pessoa costuma ter várias agendas.
-// Cada evento sai marcado com a cor e o nome da agenda de origem, do jeito que
-// o próprio Google Calendar mostra.
-export async function listAllEvents({ timeMin, timeMax }) {
-  const calendars = await listCalendars()
+// Junta o resultado de várias agendas, decorando cada evento com a cor e o
+// nome da agenda de origem — o mesmo acabamento que listAllEvents e
+// searchEvents precisam, cada um com seu próprio período/filtro.
+async function listAcrossCalendars(calendars, params) {
   const perCalendar = await Promise.all(
     calendars.map((cal) =>
-      listEvents({ timeMin, timeMax, calendarId: cal.id })
+      listEvents({ ...params, calendarId: cal.id })
         .then((events) =>
           events.map((event) => ({
             ...event,
@@ -67,9 +69,50 @@ export async function listAllEvents({ timeMin, timeMax }) {
         })
     )
   )
-  return perCalendar
-    .flat()
-    .sort((a, b) => new Date(a.start?.dateTime || a.start?.date) - new Date(b.start?.dateTime || b.start?.date))
+  return perCalendar.flat()
+}
+
+// Busca eventos de todas as agendas marcadas como visíveis na conta do usuário
+// (não só a agenda principal), já que uma pessoa costuma ter várias agendas.
+// Cada evento sai marcado com a cor e o nome da agenda de origem, do jeito que
+// o próprio Google Calendar mostra.
+export async function listAllEvents({ timeMin, timeMax }) {
+  const calendars = await listCalendars()
+  const events = await listAcrossCalendars(calendars, { timeMin, timeMax })
+  return events.sort(
+    (a, b) => new Date(a.start?.dateTime || a.start?.date) - new Date(b.start?.dateTime || b.start?.date)
+  )
+}
+
+// A busca não fica presa ao período que a tela está mostrando: cobre de 6
+// meses atrás a 1 ano à frente, o bastante pra achar tanto um compromisso já
+// realizado quanto um marcado com bastante antecedência.
+const SEARCH_PAST_DAYS = 180
+const SEARCH_FUTURE_DAYS = 365
+
+export async function searchEvents(query) {
+  const trimmed = query.trim()
+  if (!trimmed) return []
+
+  const calendars = await listCalendars()
+  const now = new Date()
+  const events = await listAcrossCalendars(calendars, {
+    timeMin: addDays(now, -SEARCH_PAST_DAYS),
+    timeMax: addDays(now, SEARCH_FUTURE_DAYS),
+    q: trimmed,
+  })
+
+  // Futuro primeiro (o mais próximo no topo, é o que costuma importar agora),
+  // e só depois o passado (o mais recente no topo).
+  const nowMs = now.getTime()
+  return events.sort((a, b) => {
+    const at = new Date(a.start?.dateTime || a.start?.date).getTime()
+    const bt = new Date(b.start?.dateTime || b.start?.date).getTime()
+    const aFuture = at >= nowMs
+    const bFuture = bt >= nowMs
+    if (aFuture !== bFuture) return aFuture ? -1 : 1
+    return aFuture ? at - bt : bt - at
+  })
 }
 
 export async function createEvent({ title, start, end, description, calendarId = 'primary' }) {
