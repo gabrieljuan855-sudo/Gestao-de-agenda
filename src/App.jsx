@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { initGoogleAuth, signIn, signOut, isConfigured } from './lib/googleAuth.js'
+import { initGoogleAuth, signIn, signOut, retryAuth, isConfigured } from './lib/googleAuth.js'
 import {
   listAllEvents,
   createEvent,
@@ -67,9 +67,10 @@ export default function App() {
   const [calendarPrefs, setCalendarPrefs] = useState({})
   const [presence, setPresenceState] = useState(() => loadPresence())
   const [showCalendarSettings, setShowCalendarSettings] = useState(false)
+  const [authStatus, setAuthStatus] = useState('loading')
 
   useEffect(() => {
-    initGoogleAuth((newToken) => setToken(newToken))
+    initGoogleAuth((newToken) => setToken(newToken), setAuthStatus)
   }, [])
 
   // As agendas e listas mudam raramente: basta buscar uma vez por sessão,
@@ -200,7 +201,19 @@ export default function App() {
           <Logo size={72} />
           <h2 style={{ marginTop: 12 }}>Gestão de agenda</h2>
           <p className="muted">Conecte sua conta Google para ver sua agenda e tarefas.</p>
-          <button className="primary" onClick={signIn}>Entrar com o Google</button>
+          {/* O botão só libera quando o script do Google está de pé: no celular
+              ele chega depois da tela, e clicar antes não abria login nenhum. */}
+          <button className="primary" onClick={signIn} disabled={authStatus !== 'ready'}>
+            {authStatus === 'ready' ? 'Entrar com o Google' : 'Preparando o login...'}
+          </button>
+          {authStatus === 'unavailable' && (
+            <div style={{ marginTop: 12 }}>
+              <p className="muted">
+                O login do Google não carregou. Verifique a conexão e tente de novo.
+              </p>
+              <button onClick={retryAuth}>Tentar de novo</button>
+            </div>
+          )}
         </div>
       </div>
     )
