@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { formatTime, formatDuration, isToday } from '../lib/dates.js'
 import { eventsOfDay, isAllDay, eventStart, eventEnd, findFreeGaps, nextEvent, currentEvent } from '../lib/events.js'
+import { workBlocksFor, isWorkday } from '../lib/schedule.js'
 
 function NextUp({ events }) {
   const [now, setNow] = useState(() => new Date())
@@ -36,8 +37,9 @@ export default function DayView({ date, events }) {
   const dayEvents = eventsOfDay(events, date)
   const allDay = dayEvents.filter(isAllDay)
   const timed = dayEvents.filter((e) => !isAllDay(e))
-  const gaps = findFreeGaps(events, date)
+  const gaps = findFreeGaps(events, date, workBlocksFor(date))
   const showNow = isToday(date)
+  const folga = !isWorkday(date)
 
   const timeline = [
     ...timed.map((event) => ({ kind: 'event', at: eventStart(event), event })),
@@ -48,6 +50,7 @@ export default function DayView({ date, events }) {
     <div className="card">
       <div className="muted" style={{ marginBottom: 10 }}>
         {date.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' })}
+        {folga && ' · fora do expediente'}
       </div>
 
       {showNow && <NextUp events={timed} />}

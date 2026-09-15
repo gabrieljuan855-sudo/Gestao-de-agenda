@@ -1,9 +1,18 @@
 import { startOfWeek, addDays, isToday, formatTime, formatDuration } from '../lib/dates.js'
-import { eventsOfDay, isAllDay, durationMinutes, eventStart } from '../lib/events.js'
+import { eventsOfDay, isAllDay, durationMinutes, eventStart, busyMinutesOn } from '../lib/events.js'
+import { isWorkday, workloadRatio, workMinutes } from '../lib/schedule.js'
 
-function loadLevel(hours) {
-  if (hours >= 5) return { label: 'lotado', className: 'urgente' }
-  if (hours >= 2) return { label: 'médio', className: 'importante' }
+// A carga é relativa ao expediente daquele dia: 2h numa sexta (6h de
+// expediente) pesam mais do que 2h numa segunda (8h30).
+function loadLevel(busyMinutes, day) {
+  if (!isWorkday(day)) {
+    return busyMinutes > 0
+      ? { label: 'folga', className: 'importante' }
+      : { label: 'folga', className: 'pode_esperar' }
+  }
+  const ratio = workloadRatio(busyMinutes, day)
+  if (ratio >= 0.75) return { label: 'lotado', className: 'urgente' }
+  if (ratio >= 0.4) return { label: 'médio', className: 'importante' }
   return { label: 'livre', className: 'pode_esperar' }
 }
 
@@ -19,25 +28,21 @@ export default function WeekView({ reference, events, tasks = [], onSelectDay })
   const start = startOfWeek(reference)
   const days = Array.from({ length: 7 }, (_, i) => addDays(start, i))
 
-  const weekMinutes = days.reduce(
-    (sum, day) => sum + eventsOfDay(events, day).filter((e) => !isAllDay(e)).reduce((s, e) => s + durationMinutes(e), 0),
-    0
-  )
+  const weekMinutes = days.reduce((sum, day) => sum + busyMinutesOn(events, day), 0)
+  const weekCapacity = days.reduce((sum, day) => sum + workMinutes(day), 0)
   const weekTasks = days.reduce((sum, day) => sum + tasksDueOn(tasks, day).length, 0)
 
   return (
     <div className="card">
       <div className="muted" style={{ marginBottom: 10 }}>
-        Semana · {formatDuration(weekMinutes)} comprometidos
+        Semana · {formatDuration(weekMinutes)} de {formatDuration(weekCapacity)} de expediente
         {weekTasks > 0 && ` · ${weekTasks} ${weekTasks === 1 ? 'tarefa vence' : 'tarefas vencem'}`}
       </div>
 
       <div className="week-grid">
         {days.map((day) => {
           const dayEvents = eventsOfDay(events, day)
-          const timed = dayEvents.filter((e) => !isAllDay(e))
-          const hours = timed.reduce((sum, e) => sum + durationMinutes(e) / 60, 0)
-          const level = loadLevel(hours)
+          const level = loadLevel(busyMinutesOn(events, day), day)
           const dueToday = tasksDueOn(tasks, day)
 
           return (
