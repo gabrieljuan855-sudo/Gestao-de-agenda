@@ -2,3 +2,6 @@ node_modules
 dist
 .env
 .env.local
+
+# Estado local do wrangler dev
+.wrangler
