@@ -1,16 +1,5 @@
-import { eventsOfDay, isAllDay, durationMinutes } from '../lib/events.js'
-
-function getWeekDays(reference) {
-  const start = new Date(reference)
-  const day = start.getDay()
-  const diffToMonday = day === 0 ? -6 : 1 - day
-  start.setDate(start.getDate() + diffToMonday)
-  return Array.from({ length: 5 }, (_, i) => {
-    const d = new Date(start)
-    d.setDate(start.getDate() + i)
-    return d
-  })
-}
+import { startOfWeek, addDays, isToday, formatTime, formatDuration } from '../lib/dates.js'
+import { eventsOfDay, isAllDay, durationMinutes, eventStart } from '../lib/events.js'
 
 function loadLevel(hours) {
   if (hours >= 5) return { label: 'lotado', className: 'urgente' }
@@ -18,23 +7,79 @@ function loadLevel(hours) {
   return { label: 'livre', className: 'pode_esperar' }
 }
 
-export default function WeekView({ reference, events }) {
-  const days = getWeekDays(reference)
+function tasksDueOn(tasks, day) {
+  return tasks.filter((t) => {
+    if (!t.due || t.status === 'completed') return false
+    const due = new Date(t.due)
+    return due.toDateString() === day.toDateString()
+  })
+}
+
+export default function WeekView({ reference, events, tasks = [], onSelectDay }) {
+  const start = startOfWeek(reference)
+  const days = Array.from({ length: 7 }, (_, i) => addDays(start, i))
+
+  const weekMinutes = days.reduce(
+    (sum, day) => sum + eventsOfDay(events, day).filter((e) => !isAllDay(e)).reduce((s, e) => s + durationMinutes(e), 0),
+    0
+  )
+  const weekTasks = days.reduce((sum, day) => sum + tasksDueOn(tasks, day).length, 0)
 
   return (
     <div className="card">
-      <div className="muted" style={{ marginBottom: 10 }}>Semana - carga por dia</div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8 }}>
-        {days.map((d) => {
-          const dayEvents = eventsOfDay(events, d).filter((e) => !isAllDay(e))
-          const hours = dayEvents.reduce((sum, e) => sum + durationMinutes(e) / 60, 0)
+      <div className="muted" style={{ marginBottom: 10 }}>
+        Semana · {formatDuration(weekMinutes)} comprometidos
+        {weekTasks > 0 && ` · ${weekTasks} ${weekTasks === 1 ? 'tarefa vence' : 'tarefas vencem'}`}
+      </div>
+
+      <div className="week-grid">
+        {days.map((day) => {
+          const dayEvents = eventsOfDay(events, day)
+          const timed = dayEvents.filter((e) => !isAllDay(e))
+          const hours = timed.reduce((sum, e) => sum + durationMinutes(e) / 60, 0)
           const level = loadLevel(hours)
+          const dueToday = tasksDueOn(tasks, day)
+
           return (
-            <div key={d.toDateString()} className={`pill ${level.className}`} style={{ textAlign: 'center', padding: '10px 4px' }}>
-              <div style={{ fontWeight: 500, fontSize: 12 }}>
-                {d.toLocaleDateString('pt-BR', { weekday: 'short' })}
+            <div
+              key={day.toDateString()}
+              className="week-day"
+              onClick={() => onSelectDay && onSelectDay(day)}
+              style={{ borderColor: isToday(day) ? 'var(--border-strong)' : 'var(--border)' }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 4 }}>
+                <span style={{ fontSize: 12, fontWeight: isToday(day) ? 600 : 500 }}>
+                  {day.toLocaleDateString('pt-BR', { weekday: 'short' })} {day.getDate()}
+                </span>
+                <span className={`pill ${level.className}`} style={{ fontSize: 10, padding: '1px 6px' }}>
+                  {level.label}
+                </span>
               </div>
-              <div style={{ fontSize: 11 }}>{level.label}</div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginTop: 6 }}>
+                {dayEvents.length === 0 && <span className="muted" style={{ fontSize: 11 }}>—</span>}
+                {dayEvents.slice(0, 4).map((event) => (
+                  <div key={event.id} className="week-event">
+                    <span
+                      className="week-dot"
+                      style={{ background: event.calendarColor || 'var(--accent)' }}
+                    />
+                    <span className="week-event-text">
+                      {!isAllDay(event) && `${formatTime(eventStart(event))} `}
+                      {event.summary}
+                    </span>
+                  </div>
+                ))}
+                {dayEvents.length > 4 && (
+                  <span className="muted" style={{ fontSize: 10 }}>+{dayEvents.length - 4} mais</span>
+                )}
+                {dueToday.map((task) => (
+                  <div key={task.id} className="week-event" style={{ opacity: 0.85 }}>
+                    <span className="week-dot" style={{ background: 'var(--important)' }} />
+                    <span className="week-event-text">prazo: {task.title}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           )
         })}

@@ -57,6 +57,11 @@ export default function App() {
     await reload()
   }
 
+  function openDay(day) {
+    setReference(day)
+    setView('day')
+  }
+
   async function handleCompleteTask(task) {
     await completeTask(task.id, task.tasklistId)
     if (activeTask?.id === task.id) setActiveTask(null)
@@ -113,8 +118,12 @@ export default function App() {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
         <div>
           {view === 'day' && <DayView date={reference} events={events} />}
-          {view === 'week' && <WeekView reference={reference} events={events} />}
-          {view === 'month' && <MonthView reference={reference} events={events} />}
+          {view === 'week' && (
+            <WeekView reference={reference} events={events} tasks={tasks} onSelectDay={openDay} />
+          )}
+          {view === 'month' && (
+            <MonthView reference={reference} events={events} onSelectDay={openDay} />
+          )}
         </div>
         <Backlog
           tasks={tasks}
