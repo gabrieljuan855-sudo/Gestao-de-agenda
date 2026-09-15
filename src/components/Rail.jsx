@@ -5,12 +5,14 @@ import { useEffect, useRef, useState } from 'react'
 // são coisas que a gente faz de vez em quando, não o tempo todo, então não
 // precisam ocupar a página enquanto estão paradas.
 //
-// Abrir no hover é bom no computador e não existe no celular, então o clique
-// também abre. Quem abriu no clique fica preso (pinned): sem isso o painel
-// fecharia no meio de uma digitação, assim que o ponteiro saísse dele.
+// O painel só abre no clique, em qualquer dispositivo. A primeira versão
+// abria no hover também: passar o mouse perto do trilho já estourava o
+// painel por cima da lista de tarefas, sem transição nenhuma — um "pulinho"
+// a cada vez que o cursor cruzava aquele canto da tela. O hover agora só
+// expande o rótulo da pílula (efeito puramente em CSS, via :hover), que é
+// a prévia que ele deveria ser desde o início.
 export default function Rail({ tools }) {
   const [openId, setOpenId] = useState(null)
-  const [pinned, setPinned] = useState(false)
   const wrapRef = useRef(null)
 
   useEffect(() => {
@@ -31,35 +33,22 @@ export default function Rail({ tools }) {
 
   function close() {
     setOpenId(null)
-    setPinned(false)
-  }
-
-  function handleEnter(id) {
-    if (!pinned) setOpenId(id)
-  }
-
-  function handleLeave() {
-    if (!pinned) setOpenId(null)
   }
 
   function handleClick(id) {
-    if (openId === id && pinned) return close()
-    setOpenId(id)
-    setPinned(true)
+    setOpenId((current) => (current === id ? null : id))
   }
 
   const open = tools.find((t) => t.id === openId) || null
 
   return (
-    <div className="rail-wrap" ref={wrapRef} onMouseLeave={handleLeave}>
+    <div className="rail-wrap" ref={wrapRef}>
       <div className="rail">
         {tools.map((tool) => (
           <button
             key={tool.id}
             type="button"
             className={`rail-btn${openId === tool.id ? ' is-open' : ''}${tool.highlight ? ' is-live' : ''}`}
-            onMouseEnter={() => handleEnter(tool.id)}
-            onFocus={() => handleEnter(tool.id)}
             onClick={() => handleClick(tool.id)}
             aria-expanded={openId === tool.id}
             aria-label={tool.label}
@@ -72,7 +61,7 @@ export default function Rail({ tools }) {
       </div>
 
       {open && (
-        <div className="rail-panel card" onMouseEnter={() => setOpenId(open.id)}>
+        <div className="rail-panel card">
           <div className="rail-panel-head">
             <strong>{open.label}</strong>
             <button type="button" className="rail-close" onClick={close} aria-label="Fechar">×</button>
