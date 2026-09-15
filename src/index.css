@@ -147,9 +147,21 @@ input[type="text"] {
   color: #6f6c64 !important;
 }
 
+/* O minmax(0, ...) é o que deixa as colunas encolherem: sem ele o conteúdo
+   define a largura mínima e a página ganha rolagem horizontal. */
+.main-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 16px;
+}
+
+/* Semana e mês precisam da largura inteira para o título do evento caber; o
+   backlog desce para baixo do calendário. */
+.main-grid--stacked { grid-template-columns: minmax(0, 1fr); }
+
 .week-grid {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 6px;
 }
 
@@ -214,3 +226,21 @@ input[type="text"] {
 .pill.urgente { background: var(--urgent-bg); color: var(--urgent); }
 .pill.importante { background: var(--important-bg); color: var(--important); }
 .pill.pode_esperar { background: var(--low-bg); color: var(--low); }
+
+@media (max-width: 700px) {
+  .app-shell { padding: 16px 12px 48px; }
+
+  /* Agenda e backlog lado a lado não cabem num celular. */
+  .main-grid { grid-template-columns: 1fr; }
+
+  /* Sete colunas a ~50px não comportam o título de nenhum evento, então a
+     semana vira uma lista de dias. */
+  .week-grid { grid-template-columns: 1fr; }
+  .week-day { min-height: 0; }
+  .week-event-text { font-size: 12px; white-space: normal; }
+
+  /* Alvos de toque confortáveis. */
+  button { min-height: 40px; }
+  .month-cell { min-height: 40px; }
+  .focus-actions button { min-height: 44px; padding: 10px 16px; }
+}
