@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { parseQuickAdd } from '../lib/nlp.js'
+import { parseWithAI } from '../lib/aiParse.js'
 import { formatDuration, toTimeInput, fromInputs, toDateInput } from '../lib/dates.js'
 
 const PRIORITY_LABEL = {
@@ -19,16 +20,36 @@ export default function QuickAdd({ calendars = [], taskLists = [], onCreateEvent
   const [startTime, setStartTime] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
+  const [asking, setAsking] = useState(false)
+  const [usedAI, setUsedAI] = useState(false)
 
-  function handleChange(value) {
-    setText(value)
-    setError(null)
-    const parsed = value.trim() ? parseQuickAdd(value) : null
+  function applyPreview(parsed) {
     setPreview(parsed)
     if (parsed?.type === 'event') {
       setMinutes(parsed.durationMinutes || 60)
       setStartTime(toTimeInput(parsed.start))
     }
+    if (parsed?.calendarId) setCalendarId(parsed.calendarId)
+  }
+
+  async function handleAskAI() {
+    setAsking(true)
+    setError(null)
+    try {
+      applyPreview(await parseWithAI(text, calendars))
+      setUsedAI(true)
+    } catch (err) {
+      setError(`A IA não conseguiu: ${err.message}`)
+    } finally {
+      setAsking(false)
+    }
+  }
+
+  function handleChange(value) {
+    setText(value)
+    setError(null)
+    setUsedAI(false)
+    applyPreview(value.trim() ? parseQuickAdd(value) : null)
   }
 
   const isEvent = preview?.type === 'event'
@@ -70,7 +91,12 @@ export default function QuickAdd({ calendars = [], taskLists = [], onCreateEvent
 
       {preview && (
         <div style={{ marginTop: 10, fontSize: 13 }}>
-          <div className="muted" style={{ marginBottom: 6 }}>Entendi assim:</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+            <span className="muted">{usedAI ? 'A IA entendeu assim:' : 'Entendi assim:'}</span>
+            <button onClick={handleAskAI} disabled={asking || !text.trim()}>
+              {asking ? 'Interpretando...' : 'Interpretar com IA'}
+            </button>
+          </div>
 
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 10 }}>
             <strong>{preview.title}</strong>
