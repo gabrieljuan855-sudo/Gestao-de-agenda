@@ -1,6 +1,10 @@
 import { startOfWeek, addDays, isToday, formatTime, formatDuration } from '../lib/dates.js'
-import { eventsOfDay, isAllDay, durationMinutes, eventStart, busyMinutesOn } from '../lib/events.js'
+import { eventsOfDay, isAllDay, eventStart, eventEnd, busyMinutesOn } from '../lib/events.js'
 import { isWorkday, workloadRatio, workMinutes } from '../lib/schedule.js'
+
+// Com sábado e domingo fora, sobra espaço pra mostrar mais coisa por dia sem
+// a coluna virar uma lista cortada.
+const MAX_EVENTS = 6
 
 // A carga é relativa ao expediente daquele dia: 2h numa sexta (6h de
 // expediente) pesam mais do que 2h numa segunda (8h30).
@@ -32,13 +36,24 @@ export default function WeekView({
   onSelectEvent,
   occupies = () => true,
   declined = () => false,
+  isInfo = () => false,
 }) {
   const start = startOfWeek(reference)
-  const days = Array.from({ length: 7 }, (_, i) => addDays(start, i))
+  const allDays = Array.from({ length: 7 }, (_, i) => addDays(start, i))
+  // O expediente é de segunda a sexta, e sábado/domingo quase sempre vêm
+  // vazios ("folga —"): tirá-los da grade dá mais espaço pros cinco dias que
+  // importam. Um compromisso que caia no fim de semana não desaparece, só
+  // sai da grade e vira uma linha de aviso embaixo.
+  const days = allDays.filter(isWorkday)
+  const weekendDays = allDays.filter((d) => !isWorkday(d))
 
   const weekMinutes = days.reduce((sum, day) => sum + busyMinutesOn(events, day, occupies), 0)
   const weekCapacity = days.reduce((sum, day) => sum + workMinutes(day), 0)
-  const weekTasks = days.reduce((sum, day) => sum + tasksDueOn(tasks, day).length, 0)
+  const weekTasks = allDays.reduce((sum, day) => sum + tasksDueOn(tasks, day).length, 0)
+
+  const weekendItems = weekendDays.flatMap((day) =>
+    eventsOfDay(events, day).map((event) => ({ day, event }))
+  )
 
   return (
     <div className="card">
@@ -52,6 +67,7 @@ export default function WeekView({
           const dayEvents = eventsOfDay(events, day)
           const level = loadLevel(busyMinutesOn(events, day, occupies), day)
           const dueToday = tasksDueOn(tasks, day)
+          const shown = dayEvents.slice(0, MAX_EVENTS)
 
           return (
             <div
@@ -70,29 +86,35 @@ export default function WeekView({
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginTop: 6 }}>
-                {dayEvents.length === 0 && <span className="muted" style={{ fontSize: 11 }}>—</span>}
-                {dayEvents.slice(0, 4).map((event) => (
-                  <div
-                    key={event.id}
-                    className={declined(event) ? 'week-event is-declined' : 'week-event'}
-                    onClick={(e) => {
-                      // Sem isso o clique subiria para o dia e trocaria de visão.
-                      e.stopPropagation()
-                      onSelectEvent && onSelectEvent(event)
-                    }}
-                  >
-                    <span
-                      className="week-dot"
-                      style={{ background: event.calendarColor || 'var(--accent)' }}
-                    />
-                    <span className="week-event-text">
-                      {!isAllDay(event) && `${formatTime(eventStart(event))} `}
-                      {event.summary}
-                    </span>
-                  </div>
-                ))}
-                {dayEvents.length > 4 && (
-                  <span className="muted" style={{ fontSize: 10 }}>+{dayEvents.length - 4} mais</span>
+                {dayEvents.length === 0 && dueToday.length === 0 && (
+                  <span className="muted" style={{ fontSize: 11 }}>—</span>
+                )}
+                {shown.map((event) => {
+                  const aside = declined(event) || isInfo(event)
+                  return (
+                    <div
+                      key={event.id}
+                      className={`week-event${aside ? ' week-event--aside' : ''}${declined(event) ? ' is-declined' : ''}`}
+                      onClick={(e) => {
+                        // Sem isso o clique subiria para o dia e trocaria de visão.
+                        e.stopPropagation()
+                        onSelectEvent && onSelectEvent(event)
+                      }}
+                    >
+                      <span
+                        className="week-dot"
+                        style={{ background: event.calendarColor || 'var(--accent)' }}
+                      />
+                      <span className="week-event-text">
+                        {!isAllDay(event) &&
+                          `${formatTime(eventStart(event))}–${formatTime(eventEnd(event))} `}
+                        {event.summary}
+                      </span>
+                    </div>
+                  )
+                })}
+                {dayEvents.length > MAX_EVENTS && (
+                  <span className="muted" style={{ fontSize: 10 }}>+{dayEvents.length - MAX_EVENTS} mais</span>
                 )}
                 {dueToday.map((task) => (
                   <div key={task.id} className="week-event" style={{ opacity: 0.85 }}>
@@ -105,6 +127,23 @@ export default function WeekView({
           )
         })}
       </div>
+
+      {weekendItems.length > 0 && (
+        <div className="week-weekend">
+          <span className="muted" style={{ fontSize: 12 }}>Fim de semana:</span>
+          {weekendItems.map(({ day, event }) => (
+            <button
+              key={event.id}
+              className="week-weekend-chip"
+              onClick={() => (onSelectEvent ? onSelectEvent(event) : onSelectDay && onSelectDay(day))}
+            >
+              <span className="week-dot" style={{ background: event.calendarColor || 'var(--accent)' }} />
+              {day.toLocaleDateString('pt-BR', { weekday: 'short' })}
+              {!isAllDay(event) && ` ${formatTime(eventStart(event))}`} · {event.summary}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

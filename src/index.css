@@ -409,9 +409,10 @@ button.danger:hover { background: var(--urgent-bg); }
   color: var(--text-secondary);
 }
 
+/* Cinco colunas, não sete: sábado e domingo saem da grade (ver WeekView.jsx). */
 .week-grid {
   display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 6px;
 }
 
@@ -428,6 +429,10 @@ button.danger:hover { background: var(--urgent-bg); }
 
 .week-event { display: flex; align-items: center; gap: 4px; min-width: 0; }
 
+/* Mesmo tratamento da visão de dia: evento informativo ou recusado continua
+   visível, só que apagado, pra não parecer compromisso de verdade. */
+.week-event--aside { opacity: 0.55; }
+
 .week-dot {
   width: 5px;
   height: 5px;
@@ -440,6 +445,28 @@ button.danger:hover { background: var(--urgent-bg); }
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* A linha de aviso do fim de semana: nada marcado ali quase sempre, então
+   fica reduzida a uma tira de chips, só aparecendo quando há algo mesmo. */
+.week-weekend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border);
+}
+
+.week-weekend-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  min-height: 0;
 }
 
 .month-head {
