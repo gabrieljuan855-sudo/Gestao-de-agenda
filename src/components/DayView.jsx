@@ -13,18 +13,20 @@ export default function DayView({ date, events }) {
         {dayEvents.length === 0 && <div className="muted">Nenhum compromisso hoje.</div>}
         {dayEvents.map((event) => {
           const isFocus = event.summary?.startsWith('Foco:')
+          const borderColor = event.calendarColor || (isFocus ? 'var(--accent)' : 'var(--border-strong)')
           return (
             <div
               key={event.id}
               style={{
-                borderLeft: `3px solid ${isFocus ? 'var(--accent)' : 'var(--border-strong)'}`,
+                borderLeft: `3px solid ${borderColor}`,
                 background: isFocus ? 'var(--accent-bg)' : 'var(--surface-2)',
                 padding: '6px 10px',
                 borderRadius: 4,
               }}
             >
-              <div className="muted" style={{ fontSize: 11 }}>
-                {new Date(event.start.dateTime).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+              <div className="muted" style={{ fontSize: 11, display: 'flex', gap: 6, alignItems: 'center' }}>
+                <span>{new Date(event.start.dateTime).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
+                {event.calendarSummary && <span>· {event.calendarSummary}</span>}
               </div>
               <div style={{ fontSize: 14, fontWeight: isFocus ? 500 : 400 }}>{event.summary}</div>
             </div>

@@ -13,11 +13,12 @@ function getMonthGrid(reference) {
 
 export default function MonthView({ reference, events }) {
   const cells = getMonthGrid(reference)
-  const countByDay = {}
+  const colorsByDay = {}
   events.forEach((e) => {
     if (!e.start?.dateTime) return
     const key = new Date(e.start.dateTime).toDateString()
-    countByDay[key] = (countByDay[key] || 0) + 1
+    if (!colorsByDay[key]) colorsByDay[key] = []
+    colorsByDay[key].push(e.calendarColor || 'var(--accent)')
   })
 
   return (
@@ -31,7 +32,7 @@ export default function MonthView({ reference, events }) {
         ))}
         {cells.map((date, i) => {
           if (!date) return <div key={i} />
-          const count = countByDay[date.toDateString()] || 0
+          const dayColors = colorsByDay[date.toDateString()] || []
           const isToday = date.toDateString() === new Date().toDateString()
           return (
             <div
@@ -45,10 +46,10 @@ export default function MonthView({ reference, events }) {
               }}
             >
               <div>{date.getDate()}</div>
-              {count > 0 && (
+              {dayColors.length > 0 && (
                 <div style={{ display: 'flex', justifyContent: 'center', gap: 2, marginTop: 2 }}>
-                  {Array.from({ length: Math.min(count, 3) }).map((_, dotIdx) => (
-                    <span key={dotIdx} style={{ width: 4, height: 4, borderRadius: '50%', background: 'var(--accent)', display: 'inline-block' }} />
+                  {dayColors.slice(0, 3).map((color, dotIdx) => (
+                    <span key={dotIdx} style={{ width: 4, height: 4, borderRadius: '50%', background: color, display: 'inline-block' }} />
                   ))}
                 </div>
               )}

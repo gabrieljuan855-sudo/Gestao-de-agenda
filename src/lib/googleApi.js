@@ -45,14 +45,24 @@ export async function listEvents({ timeMin, timeMax, calendarId = 'primary' }) {
 
 // Busca eventos de todas as agendas marcadas como visíveis na conta do usuário
 // (não só a agenda principal), já que uma pessoa costuma ter várias agendas.
+// Cada evento sai marcado com a cor e o nome da agenda de origem, do jeito que
+// o próprio Google Calendar mostra.
 export async function listAllEvents({ timeMin, timeMax }) {
   const calendars = await listCalendars()
   const perCalendar = await Promise.all(
     calendars.map((cal) =>
-      listEvents({ timeMin, timeMax, calendarId: cal.id }).catch((err) => {
-        console.error(`Falha ao buscar eventos da agenda ${cal.summary}:`, err)
-        return []
-      })
+      listEvents({ timeMin, timeMax, calendarId: cal.id })
+        .then((events) =>
+          events.map((event) => ({
+            ...event,
+            calendarSummary: cal.summaryOverride || cal.summary,
+            calendarColor: cal.backgroundColor,
+          }))
+        )
+        .catch((err) => {
+          console.error(`Falha ao buscar eventos da agenda ${cal.summary}:`, err)
+          return []
+        })
     )
   )
   return perCalendar
@@ -98,16 +108,43 @@ function encodeNotes(priority, notes) {
   return `[${priority}] ${notes || ''}`.trim()
 }
 
-export async function listTasks() {
-  const data = await request(`${TASKS_BASE}/lists/@default/tasks?showCompleted=false&maxResults=200`)
+export async function listTaskLists() {
+  const data = await request(`${TASKS_BASE}/users/@me/lists`)
+  return data.items || []
+}
+
+export async function listTasks({ tasklistId = '@default', showCompleted = false } = {}) {
+  const params = new URLSearchParams({
+    showCompleted: String(showCompleted),
+    showHidden: String(showCompleted),
+    maxResults: '200',
+  })
+  const data = await request(`${TASKS_BASE}/lists/${encodeURIComponent(tasklistId)}/tasks?${params}`)
   return (data.items || []).map((t) => {
     const { priority, notes } = parsePriorityFromNotes(t.notes)
-    return { ...t, priority, notesClean: notes }
+    return { ...t, priority, notesClean: notes, tasklistId }
   })
 }
 
-export async function createTask({ title, priority = 'pode_esperar', due, notes = '' }) {
-  return request(`${TASKS_BASE}/lists/@default/tasks`, {
+// Busca tarefas de todas as listas do usuário (equivalente às várias agendas
+// do Calendar), marcando cada tarefa com a lista de onde ela veio.
+export async function listAllTasks({ showCompleted = false } = {}) {
+  const lists = await listTaskLists()
+  const perList = await Promise.all(
+    lists.map((list) =>
+      listTasks({ tasklistId: list.id, showCompleted })
+        .then((tasks) => tasks.map((t) => ({ ...t, tasklistTitle: list.title })))
+        .catch((err) => {
+          console.error(`Falha ao buscar tarefas da lista ${list.title}:`, err)
+          return []
+        })
+    )
+  )
+  return perList.flat()
+}
+
+export async function createTask({ title, priority = 'pode_esperar', due, notes = '', tasklistId = '@default' }) {
+  return request(`${TASKS_BASE}/lists/${encodeURIComponent(tasklistId)}/tasks`, {
     method: 'POST',
     body: JSON.stringify({
       title,
@@ -117,15 +154,15 @@ export async function createTask({ title, priority = 'pode_esperar', due, notes 
   })
 }
 
-export async function completeTask(taskId) {
-  return request(`${TASKS_BASE}/lists/@default/tasks/${taskId}`, {
+export async function completeTask(taskId, tasklistId = '@default') {
+  return request(`${TASKS_BASE}/lists/${encodeURIComponent(tasklistId)}/tasks/${taskId}`, {
     method: 'PATCH',
     body: JSON.stringify({ status: 'completed' }),
   })
 }
 
 export async function updateTaskPriority(task, priority) {
-  return request(`${TASKS_BASE}/lists/@default/tasks/${task.id}`, {
+  return request(`${TASKS_BASE}/lists/${encodeURIComponent(task.tasklistId || '@default')}/tasks/${task.id}`, {
     method: 'PATCH',
     body: JSON.stringify({ notes: encodeNotes(priority, task.notesClean) }),
   })
