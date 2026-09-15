@@ -77,6 +77,51 @@ input[type="text"] {
   font-weight: 500;
 }
 
+.week-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+}
+
+.week-day {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 6px;
+  cursor: pointer;
+  background: var(--surface-1);
+  min-height: 92px;
+}
+
+.week-day:hover { background: var(--surface-2); }
+
+.week-event { display: flex; align-items: center; gap: 4px; min-width: 0; }
+
+.week-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.week-event-text {
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.month-cell {
+  text-align: center;
+  font-size: 12px;
+  padding: 6px 0;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: none;
+  width: 100%;
+}
+
+.month-cell:hover { background: var(--surface-2); }
+
 .now-banner {
   background: var(--accent-bg);
   border: 1px solid var(--accent);

@@ -1,4 +1,5 @@
-import { eventsOfDay } from '../lib/events.js'
+import { isToday, formatDuration } from '../lib/dates.js'
+import { eventsOfDay, isAllDay, durationMinutes } from '../lib/events.js'
 
 function getMonthGrid(reference) {
   const year = reference.getFullYear()
@@ -13,13 +14,19 @@ function getMonthGrid(reference) {
   return cells
 }
 
-export default function MonthView({ reference, events }) {
+export default function MonthView({ reference, events, onSelectDay }) {
   const cells = getMonthGrid(reference)
+  const monthMinutes = cells
+    .filter(Boolean)
+    .reduce(
+      (sum, day) => sum + eventsOfDay(events, day).filter((e) => !isAllDay(e)).reduce((s, e) => s + durationMinutes(e), 0),
+      0
+    )
 
   return (
     <div className="card">
       <div className="muted" style={{ marginBottom: 10 }}>
-        {reference.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
+        {reference.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })} · {formatDuration(monthMinutes)} comprometidos
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4 }}>
         {['S', 'T', 'Q', 'Q', 'S', 'S', 'D'].map((l, i) => (
@@ -27,28 +34,36 @@ export default function MonthView({ reference, events }) {
         ))}
         {cells.map((date, i) => {
           if (!date) return <div key={i} />
-          const dayColors = eventsOfDay(events, date).map((e) => e.calendarColor || 'var(--accent)')
-          const isToday = date.toDateString() === new Date().toDateString()
+          const dayEvents = eventsOfDay(events, date)
           return (
-            <div
+            <button
               key={i}
+              onClick={() => onSelectDay && onSelectDay(date)}
+              className="month-cell"
               style={{
-                textAlign: 'center',
-                fontSize: 12,
-                padding: '6px 0',
-                borderRadius: 6,
-                border: isToday ? '1px solid var(--border-strong)' : '1px solid transparent',
+                borderColor: isToday(date) ? 'var(--border-strong)' : 'transparent',
+                fontWeight: isToday(date) ? 600 : 400,
               }}
+              title={dayEvents.map((e) => e.summary).join('\n') || 'Sem compromissos'}
             >
               <div>{date.getDate()}</div>
-              {dayColors.length > 0 && (
+              {dayEvents.length > 0 && (
                 <div style={{ display: 'flex', justifyContent: 'center', gap: 2, marginTop: 2 }}>
-                  {dayColors.slice(0, 3).map((color, dotIdx) => (
-                    <span key={dotIdx} style={{ width: 4, height: 4, borderRadius: '50%', background: color, display: 'inline-block' }} />
+                  {dayEvents.slice(0, 3).map((event, dotIdx) => (
+                    <span
+                      key={dotIdx}
+                      style={{
+                        width: 4,
+                        height: 4,
+                        borderRadius: '50%',
+                        background: event.calendarColor || 'var(--accent)',
+                        display: 'inline-block',
+                      }}
+                    />
                   ))}
                 </div>
               )}
-            </div>
+            </button>
           )
         })}
       </div>
