@@ -116,7 +116,7 @@ export default function App() {
         onToday={() => setReference(new Date())}
       />
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+      <div className={view === 'day' ? 'main-grid' : 'main-grid main-grid--stacked'}>
         <div>
           {view === 'day' && <DayView date={reference} events={events} />}
           {view === 'week' && (
