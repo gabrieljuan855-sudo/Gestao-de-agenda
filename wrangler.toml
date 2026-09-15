@@ -1,8 +1,13 @@
 name = "gestaodeagenda"
+main = "worker/index.js"
 compatibility_date = "2024-09-23"
 
 [build]
 command = "npm run build"
 
+# O binding ASSETS deixa o próprio Worker servir os arquivos estáticos. Sem
+# `main` o projeto seria só de assets, e o Cloudflare bloqueia variáveis de
+# runtime nesse caso — é por isso que o segredo do Gemini precisa deste script.
 [assets]
 directory = "./dist"
+binding = "ASSETS"
