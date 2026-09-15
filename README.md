@@ -64,19 +64,35 @@ Para ativar:
 Para publicar manualmente em vez disso, basta rodar `npm run build` e subir o
 conteúdo da pasta `dist/` onde preferir.
 
-### 4. Publicar no Cloudflare Pages (alternativa)
+### 4. Publicar no Cloudflare Workers (alternativa)
 
-Depois de vincular este repositório a um projeto no Cloudflare Pages:
+O `wrangler.toml` na raiz já traz o necessário: ele roda `npm run build` e
+serve o conteúdo de `dist/` como assets estáticos. Depois de vincular o
+repositório ao projeto no Cloudflare:
 
-1. Em **Build settings**, configure:
-   - **Build command**: `npm run build`
-   - **Build output directory**: `dist`
-2. Cada push na branch escolhida (ex: `main`) dispara um novo deploy
-   automático.
-3. Pegue a URL gerada pelo Cloudflare Pages (ex:
-   `https://seu-projeto.pages.dev`) e adicione-a nas "Origens JavaScript
-   autorizadas" da credencial OAuth no Google Cloud Console — sem isso o
-   login com Google não funciona no domínio publicado.
+1. Em **Configurações > Build**:
+   - **Comando da build**: deixe vazio — quem roda o build é o `[build]` do
+     `wrangler.toml`.
+   - **Comando de implantação**: `npx wrangler deploy`.
+
+   Atenção ao `npx wrangler versions upload`: ele **sobe uma versão sem
+   publicar**, então o site continua servindo a versão antiga e os deploys
+   parecem bem-sucedidos sem nunca entrar no ar.
+
+2. Em **Controle da ramificação > Ramificação de produção**: use `main`.
+   Se apontar para qualquer outra branch, todo push no `main` vira build de
+   *não produção*: o build passa, o painel mostra "Deployment successful",
+   e mesmo assim nada chega ao site publicado.
+
+3. Em **Variáveis e segredos**, na seção de **build** (não a de runtime, que
+   fica desabilitada em Worker só de assets estáticos), defina
+   `VITE_GOOGLE_CLIENT_ID` — o Vite injeta essa variável durante o build.
+
+4. Pegue a URL gerada (ex: `https://seu-projeto.workers.dev`) e adicione-a
+   nas "Origens JavaScript autorizadas" da credencial OAuth no Google Cloud
+   Console — sem isso o login com Google não funciona no domínio publicado.
+   Enquanto o app estiver em modo "Teste", cadastre também o seu e-mail em
+   **Público-alvo > Usuários de teste**.
 
 ## Convenção de dados
 
