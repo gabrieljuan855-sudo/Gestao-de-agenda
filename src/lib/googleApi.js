@@ -1,4 +1,5 @@
 import { ensureToken } from './googleAuth.js'
+import { toDateInput, addDays } from './dates.js'
 
 const CAL_BASE = 'https://www.googleapis.com/calendar/v3'
 const TASKS_BASE = 'https://www.googleapis.com/tasks/v1'
@@ -82,10 +83,34 @@ export async function createEvent({ title, start, end, description }) {
   })
 }
 
-export async function deleteEvent(eventId) {
-  return request(`${CAL_BASE}/calendars/primary/events/${eventId}`, {
-    method: 'DELETE',
-  })
+// Recebe o evento inteiro, não só o id: ele carrega o calendarId de origem, e
+// eventos de agendas secundárias não estão em 'primary'.
+export async function updateEvent(event, { title, start, end, description, allDay = false }) {
+  const body = {}
+  if (title !== undefined) body.summary = title
+  if (description !== undefined) body.description = description
+  if (start && end) {
+    if (allDay) {
+      // O end.date do Google é exclusivo: quem escolhe "até dia 20" grava 21.
+      body.start = { date: toDateInput(start) }
+      body.end = { date: toDateInput(addDays(end, 1)) }
+    } else {
+      body.start = { dateTime: start.toISOString() }
+      body.end = { dateTime: end.toISOString() }
+    }
+  }
+
+  return request(
+    `${CAL_BASE}/calendars/${encodeURIComponent(event.calendarId || 'primary')}/events/${event.id}`,
+    { method: 'PATCH', body: JSON.stringify(body) }
+  )
+}
+
+export async function deleteEvent(event) {
+  return request(
+    `${CAL_BASE}/calendars/${encodeURIComponent(event.calendarId || 'primary')}/events/${event.id}`,
+    { method: 'DELETE' }
+  )
 }
 
 // ---------- Tasks ----------
@@ -161,9 +186,30 @@ export async function completeTask(taskId, tasklistId = '@default') {
   })
 }
 
-export async function updateTaskPriority(task, priority) {
+export async function updateTask(task, { title, due, priority, notes }) {
+  const body = {}
+  if (title !== undefined) body.title = title
+  // O Google Tasks guarda só a data do prazo; a hora é ignorada pela API.
+  if (due !== undefined) body.due = due ? due.toISOString() : null
+  if (priority !== undefined || notes !== undefined) {
+    body.notes = encodeNotes(priority ?? task.priority, notes ?? task.notesClean)
+  }
+
   return request(`${TASKS_BASE}/lists/${encodeURIComponent(task.tasklistId || '@default')}/tasks/${task.id}`, {
     method: 'PATCH',
-    body: JSON.stringify({ notes: encodeNotes(priority, task.notesClean) }),
+    body: JSON.stringify(body),
+  })
+}
+
+export async function reopenTask(task) {
+  return request(`${TASKS_BASE}/lists/${encodeURIComponent(task.tasklistId || '@default')}/tasks/${task.id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status: 'needsAction', completed: null }),
+  })
+}
+
+export async function deleteTask(task) {
+  return request(`${TASKS_BASE}/lists/${encodeURIComponent(task.tasklistId || '@default')}/tasks/${task.id}`, {
+    method: 'DELETE',
   })
 }

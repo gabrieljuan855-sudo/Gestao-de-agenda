@@ -70,6 +70,24 @@ export function shiftReference(view, reference, direction) {
   return addDays(reference, direction)
 }
 
+const pad = (n) => String(n).padStart(2, '0')
+
+// 'YYYY-MM-DD' no fuso local — toISOString() aqui jogaria para UTC e poderia
+// trocar o dia.
+export function toDateInput(date) {
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+}
+
+export function toTimeInput(date) {
+  return `${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
+export function fromInputs(dateValue, timeValue = '00:00') {
+  const [year, month, day] = dateValue.split('-').map(Number)
+  const [hours, minutes] = timeValue.split(':').map(Number)
+  return new Date(year, month - 1, day, hours, minutes, 0, 0)
+}
+
 export function formatTime(date) {
   return date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
 }
