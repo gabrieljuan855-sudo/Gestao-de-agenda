@@ -20,7 +20,7 @@ function findListForPriority(taskLists, priority) {
   return taskLists.find((list) => priorityFromListTitle(list.title) === priority) || null
 }
 
-export default function QuickAdd({ calendars = [], taskLists = [], onCreateEvent, onCreateTask }) {
+export default function QuickAdd({ calendars = [], taskLists = [], onCreateEvent, onCreateTask, onDone }) {
   const [text, setText] = useState('')
   const [preview, setPreview] = useState(null)
   const [calendarId, setCalendarId] = useState('')
@@ -113,6 +113,7 @@ export default function QuickAdd({ calendars = [], taskLists = [], onCreateEvent
         await onCreateTask({ ...preview, priority, tasklistId })
       }
       resetDefaults()
+      onDone && onDone()
     } catch (err) {
       setError(`Não deu para salvar: ${err.message}`)
     } finally {
@@ -121,7 +122,7 @@ export default function QuickAdd({ calendars = [], taskLists = [], onCreateEvent
   }
 
   return (
-    <div className="card" style={{ marginBottom: 16 }}>
+    <div>
       <input
         type="text"
         placeholder="Ex: Reunião de equipe terça 13h15 por 50min"

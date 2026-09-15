@@ -58,7 +58,7 @@ export default function Backlog({ tasks, activeTaskId, onSelect, onComplete, onE
   return (
     <div className="card">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-        <div className="muted">Backlog priorizado</div>
+        <div className="muted">Tarefas</div>
         <label className="muted" style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
           <input
             type="checkbox"
@@ -69,7 +69,7 @@ export default function Backlog({ tasks, activeTaskId, onSelect, onComplete, onE
         </label>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {sorted.length === 0 && <div className="muted">Nada no backlog. Use a busca acima para adicionar.</div>}
+        {sorted.length === 0 && <div className="muted">Nada por aqui. Use o + ao lado para adicionar.</div>}
         {sorted.map((task) => renderTask(task))}
         {showCompleted && completed.length > 0 && (
           <>

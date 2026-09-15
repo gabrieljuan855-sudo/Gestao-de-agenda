@@ -66,7 +66,7 @@ input[type="text"] {
 }
 
 .app-shell {
-  max-width: 960px;
+  max-width: 1180px;
   margin: 0 auto;
   padding: 20px 16px 60px;
 }
@@ -210,17 +210,204 @@ button.danger:hover { background: var(--urgent-bg); }
   color: #6f6c64 !important;
 }
 
-/* O minmax(0, ...) é o que deixa as colunas encolherem: sem ele o conteúdo
-   define a largura mínima e a página ganha rolagem horizontal. */
-.main-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
-  gap: 16px;
+/* ---------- cabeçalho ---------- */
+
+.app-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
 }
 
-/* Semana e mês precisam da largura inteira para o título do evento caber; o
-   backlog desce para baixo do calendário. */
-.main-grid--stacked { grid-template-columns: minmax(0, 1fr); }
+.app-head-title { display: flex; align-items: center; gap: 10px; }
+.app-head-title h2 { margin: 0; font-size: 22px; line-height: 1.1; }
+.app-head-sub { font-size: 12px; }
+
+/* ---------- barra de período ---------- */
+
+.period-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+
+.period-arrow { padding: 6px 12px; }
+
+.period-views {
+  display: flex;
+  gap: 4px;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px;
+}
+
+.period-view {
+  border: none;
+  background: transparent;
+  border-radius: 999px;
+  padding: 5px 14px;
+  color: var(--text-secondary);
+}
+
+.period-view.is-on {
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+/* A data fica depois das setas e cresce: em telas largas ela empurra o "Hoje"
+   para a ponta, em telas estreitas quebra para a linha de baixo sozinha. */
+.period-label {
+  flex: 1;
+  font-weight: 500;
+  font-size: 14px;
+}
+
+/* O pt-BR escreve a data em minúsculas; só a inicial sobe. `capitalize` faria
+   "Terça-Feira, 15 De Setembro". */
+.period-label::first-letter { text-transform: uppercase; }
+
+/* ---------- área de trabalho ---------- */
+
+/* O minmax(0, ...) é o que deixa as colunas encolherem: sem ele o conteúdo
+   define a largura mínima e a página ganha rolagem horizontal. A terceira
+   coluna é o trilho, que tem largura fixa. */
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: start;
+}
+
+/* Semana e mês precisam da largura inteira para o título do evento caber, então
+   a agenda ocupa a linha toda e a lista de tarefas desce para baixo dela. */
+.workspace--wide { grid-template-columns: minmax(0, 1fr) auto; }
+.workspace--wide .workspace-main { grid-column: 1 / -1; }
+
+/* ---------- trilho lateral ---------- */
+
+.rail-wrap { position: relative; }
+
+.rail {
+  position: sticky;
+  top: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+/* O botão é uma pílula de 46px que cresce para a esquerda quando abre: o ícone
+   fica ancorado à direita e o rótulo aparece no espaço que surge. */
+.rail-btn {
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: center;
+  height: 46px;
+  min-height: 46px;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-1);
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.rail-btn-icon {
+  width: 44px;
+  flex: 0 0 44px;
+  text-align: center;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+
+.rail-btn-label {
+  max-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  opacity: 0;
+  font-size: 13px;
+  transition: max-width 0.18s ease, opacity 0.18s ease, padding 0.18s ease;
+}
+
+.rail-btn:hover .rail-btn-label,
+.rail-btn:focus-visible .rail-btn-label {
+  max-width: 160px;
+  opacity: 1;
+  padding-left: 14px;
+}
+
+/* Com o painel aberto o título já está nele, e a pílula esticada passava por
+   baixo do painel. Recolhe. */
+.rail-btn.is-open .rail-btn-label,
+.rail-btn.is-open:hover .rail-btn-label {
+  max-width: 0;
+  opacity: 0;
+  padding-left: 0;
+}
+
+.rail-btn.is-open { border-color: var(--text-primary); }
+
+/* Pomodoro rodando: o botão fica marcado para o ciclo não sumir de vista. */
+.rail-btn.is-live {
+  background: var(--accent-bg);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.rail-panel {
+  position: absolute;
+  top: 0;
+  right: 58px;
+  width: 360px;
+  z-index: 40;
+  box-shadow: 0 10px 30px rgba(31, 30, 28, 0.13);
+}
+
+.rail-panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.rail-close {
+  border: none;
+  background: transparent;
+  font-size: 20px;
+  line-height: 1;
+  padding: 0 4px;
+  min-height: 0;
+  color: var(--text-muted);
+}
+
+.panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.panel-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+
+.focus-panel-clock {
+  font-size: 44px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  margin: 6px 0;
+}
+
+.focus-panel-task {
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
 
 .week-grid {
   display: grid;
@@ -394,8 +581,46 @@ button.danger:hover { background: var(--urgent-bg); }
 @media (max-width: 700px) {
   .app-shell { padding: 16px 12px 48px; }
 
-  /* Agenda e backlog lado a lado não cabem num celular. */
-  .main-grid { grid-template-columns: 1fr; }
+  /* Agenda, tarefas e trilho lado a lado não cabem num celular. */
+  .workspace,
+  .workspace--wide { grid-template-columns: 1fr; }
+
+  /* Sem hover no toque, o trilho vira uma barra fixa embaixo, no alcance do
+     polegar, e o painel sobe dela como uma gaveta. */
+  .rail-wrap { position: static; }
+  .rail {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    top: auto;
+    flex-direction: row;
+    justify-content: center;
+    gap: 14px;
+    padding: 8px 12px calc(8px + env(safe-area-inset-bottom, 0px));
+    background: var(--surface-1);
+    border-top: 1px solid var(--border);
+    z-index: 30;
+  }
+
+  /* O rótulo abriria por cima dos vizinhos numa barra horizontal. */
+  .rail-btn-label { display: none; }
+
+  .rail-panel {
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    top: auto;
+    bottom: 74px;
+    width: auto;
+    max-height: 70vh;
+    overflow-y: auto;
+  }
+
+  /* Espaço para a barra fixa não cobrir o fim da página. */
+  .app-shell { padding-bottom: 96px; }
+
+  .period-label { flex-basis: 100%; order: 4; }
 
   /* Sete colunas a ~50px não comportam o título de nenhum evento, então a
      semana vira uma lista de dias. */
