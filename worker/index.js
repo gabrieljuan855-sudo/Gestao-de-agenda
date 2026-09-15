@@ -60,7 +60,7 @@ Responda SOMENTE com JSON, sem comentários, neste formato:
   "time": "HH:MM em 24h, ou null se não houver hora",
   "durationMinutes": número de minutos ou null,
   "calendarId": "id da agenda mais provável, ou null",
-  "priority": "urgente" | "importante" | "pode_esperar"
+  "priority": "alta" | "media" | "baixa" | null
 }
 
 Regras:
@@ -70,7 +70,8 @@ Regras:
 - Horas em português como "13h15", "14h", "8h30" equivalem a 13:15, 14:00 e 08:30.
 - Um dia da semana sem data significa a próxima ocorrência a partir de hoje.
 - Só sugira calendarId se o texto indicar claramente a qual agenda pertence; na dúvida, null.
-- Se não houver duração explícita, devolva null em durationMinutes.`
+- Se não houver duração explícita, devolva null em durationMinutes.
+- Só devolva priority quando o texto indicar urgência ou prazo; caso contrário, null.`
 }
 
 async function callGemini(env, prompt) {
@@ -105,7 +106,7 @@ async function callGemini(env, prompt) {
   }
 }
 
-const PRIORITIES = new Set(['urgente', 'importante', 'pode_esperar'])
+const PRIORITIES = new Set(['alta', 'media', 'baixa'])
 
 // A resposta vem de um modelo: nada aqui é confiável por definição, então cada
 // campo é validado antes de virar um compromisso na agenda de alguém.
@@ -127,7 +128,9 @@ export function normalize(parsed) {
     time,
     durationMinutes,
     calendarId: typeof parsed?.calendarId === 'string' ? parsed.calendarId : null,
-    priority: PRIORITIES.has(parsed?.priority) ? parsed.priority : 'pode_esperar',
+    // null quando o texto não indica urgência: o formulário é que escolhe o
+    // padrão, em vez de o app inventar uma prioridade.
+    priority: PRIORITIES.has(parsed?.priority) ? parsed.priority : null,
   }
 }
 

@@ -1,27 +1,53 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { parseQuickAdd } from '../lib/nlp.js'
 import { parseWithAI } from '../lib/aiParse.js'
 import { formatDuration, toTimeInput, fromInputs, toDateInput } from '../lib/dates.js'
-
-const PRIORITY_LABEL = {
-  urgente: 'Urgente',
-  importante: 'Importante',
-  pode_esperar: 'Pode esperar',
-}
+import { PRIORITIES, DEFAULT_PRIORITY, priorityFromListTitle } from '../lib/priority.js'
 
 const DURATION_OPTIONS = [20, 30, 45, 50, 60, 90, 120]
+
+// A agenda de trabalho é onde quase tudo cai. Deixar "Escolha a agenda..." em
+// branco obrigava um clique a mais em todo compromisso, e bloqueava o botão de
+// salvar até que ele fosse dado.
+const DEFAULT_CALENDAR = 'creas'
+
+function findDefaultCalendar(calendars) {
+  const named = (cal) => (cal.summaryOverride || cal.summary || '').toLowerCase()
+  return calendars.find((cal) => named(cal).includes(DEFAULT_CALENDAR)) || null
+}
+
+function findListForPriority(taskLists, priority) {
+  return taskLists.find((list) => priorityFromListTitle(list.title) === priority) || null
+}
 
 export default function QuickAdd({ calendars = [], taskLists = [], onCreateEvent, onCreateTask }) {
   const [text, setText] = useState('')
   const [preview, setPreview] = useState(null)
   const [calendarId, setCalendarId] = useState('')
   const [tasklistId, setTasklistId] = useState('')
+  const [priority, setPriority] = useState(DEFAULT_PRIORITY)
   const [minutes, setMinutes] = useState(60)
   const [startTime, setStartTime] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
   const [asking, setAsking] = useState(false)
   const [usedAI, setUsedAI] = useState(false)
+
+  // As agendas chegam depois do primeiro render (vêm da API), por isso o padrão
+  // é aplicado aqui e não no useState.
+  useEffect(() => {
+    if (calendarId) return
+    const preferred = findDefaultCalendar(calendars)
+    if (preferred) setCalendarId(preferred.id)
+  }, [calendars, calendarId])
+
+  // Prioridade e lista são a mesma coisa no Google Tasks do usuário: as listas
+  // se chamam "Prioridade Máxima", "Prioridade Média"... Então escolher uma
+  // move a outra junto, em vez de pedir a mesma informação duas vezes.
+  useEffect(() => {
+    const list = findListForPriority(taskLists, priority)
+    if (list) setTasklistId(list.id)
+  }, [taskLists, priority])
 
   function applyPreview(parsed) {
     setPreview(parsed)
@@ -30,6 +56,9 @@ export default function QuickAdd({ calendars = [], taskLists = [], onCreateEvent
       setStartTime(toTimeInput(parsed.start))
     }
     if (parsed?.calendarId) setCalendarId(parsed.calendarId)
+    // O texto só muda a prioridade quando diz algo ("urgente", "prazo"); do
+    // contrário o que estiver selecionado continua valendo.
+    if (parsed?.priority) setPriority(parsed.priority)
   }
 
   async function handleAskAI() {
@@ -52,9 +81,24 @@ export default function QuickAdd({ calendars = [], taskLists = [], onCreateEvent
     applyPreview(value.trim() ? parseQuickAdd(value) : null)
   }
 
+  function handleListChange(id) {
+    setTasklistId(id)
+    const list = taskLists.find((l) => l.id === id)
+    const fromList = list && priorityFromListTitle(list.title)
+    if (fromList) setPriority(fromList)
+  }
+
   const isEvent = preview?.type === 'event'
   const needsCalendar = isEvent && calendars.length > 0 && !calendarId
   const needsList = !isEvent && taskLists.length > 0 && !tasklistId
+
+  function resetDefaults() {
+    setText('')
+    setPreview(null)
+    setPriority(DEFAULT_PRIORITY)
+    const preferred = findDefaultCalendar(calendars)
+    setCalendarId(preferred ? preferred.id : '')
+  }
 
   async function handleConfirm() {
     if (!preview) return
@@ -66,12 +110,9 @@ export default function QuickAdd({ calendars = [], taskLists = [], onCreateEvent
         const end = new Date(start.getTime() + minutes * 60000)
         await onCreateEvent({ ...preview, start, end, calendarId })
       } else {
-        await onCreateTask({ ...preview, tasklistId })
+        await onCreateTask({ ...preview, priority, tasklistId })
       }
-      setText('')
-      setPreview(null)
-      setCalendarId('')
-      setTasklistId('')
+      resetDefaults()
     } catch (err) {
       setError(`Não deu para salvar: ${err.message}`)
     } finally {
@@ -98,9 +139,8 @@ export default function QuickAdd({ calendars = [], taskLists = [], onCreateEvent
             </button>
           </div>
 
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 10 }}>
+          <div style={{ marginBottom: 10 }}>
             <strong>{preview.title}</strong>
-            <span className={`pill ${preview.priority}`}>{PRIORITY_LABEL[preview.priority]}</span>
           </div>
 
           <div className="quickadd-fields">
@@ -152,9 +192,27 @@ export default function QuickAdd({ calendars = [], taskLists = [], onCreateEvent
                     />
                   </label>
                 )}
+                <div className="field">
+                  <span>Prioridade</span>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    {PRIORITIES.map((p) => (
+                      <button
+                        key={p.id}
+                        onClick={() => setPriority(p.id)}
+                        className={`pill ${p.id}`}
+                        style={{
+                          border: priority === p.id ? '2px solid var(--text-primary)' : '1px solid transparent',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {p.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
                 <label className="field">
                   <span>Lista</span>
-                  <select value={tasklistId} onChange={(e) => setTasklistId(e.target.value)}>
+                  <select value={tasklistId} onChange={(e) => handleListChange(e.target.value)}>
                     <option value="">Escolha a lista...</option>
                     {taskLists.map((list) => (
                       <option key={list.id} value={list.id}>{list.title}</option>

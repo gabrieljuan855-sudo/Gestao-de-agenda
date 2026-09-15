@@ -381,9 +381,9 @@ button.danger:hover { background: var(--urgent-bg); }
   color: var(--text-muted);
 }
 
-.pill.urgente { background: var(--urgent-bg); color: var(--urgent); }
-.pill.importante { background: var(--important-bg); color: var(--important); }
-.pill.pode_esperar { background: var(--low-bg); color: var(--low); }
+.pill.alta { background: var(--urgent-bg); color: var(--urgent); }
+.pill.media { background: var(--important-bg); color: var(--important); }
+.pill.baixa { background: var(--low-bg); color: var(--low); }
 
 @media (max-width: 700px) {
   .app-shell { padding: 16px 12px 48px; }

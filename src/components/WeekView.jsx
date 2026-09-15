@@ -7,13 +7,13 @@ import { isWorkday, workloadRatio, workMinutes } from '../lib/schedule.js'
 function loadLevel(busyMinutes, day) {
   if (!isWorkday(day)) {
     return busyMinutes > 0
-      ? { label: 'folga', className: 'importante' }
-      : { label: 'folga', className: 'pode_esperar' }
+      ? { label: 'folga', className: 'media' }
+      : { label: 'folga', className: 'baixa' }
   }
   const ratio = workloadRatio(busyMinutes, day)
-  if (ratio >= 0.75) return { label: 'lotado', className: 'urgente' }
-  if (ratio >= 0.4) return { label: 'médio', className: 'importante' }
-  return { label: 'livre', className: 'pode_esperar' }
+  if (ratio >= 0.75) return { label: 'lotado', className: 'alta' }
+  if (ratio >= 0.4) return { label: 'médio', className: 'media' }
+  return { label: 'livre', className: 'baixa' }
 }
 
 function tasksDueOn(tasks, day) {
