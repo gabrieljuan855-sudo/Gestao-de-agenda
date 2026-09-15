@@ -324,26 +324,35 @@ button.danger:hover { background: var(--urgent-bg); }
 
 /* O minmax(0, ...) é o que deixa as colunas encolherem: sem ele o conteúdo
    define a largura mínima e a página ganha rolagem horizontal. A terceira
-   coluna é o trilho, que tem largura fixa. */
+   coluna (o trilho) é um valor fixo, não "auto": "auto" mede o conteúdo mais
+   largo do momento, e a pílula que cresce no hover contava como conteúdo —
+   cada hover recalculava a coluna e empurrava a lista de tarefas ao lado
+   (o "pulinho" relatado). Com largura fixa, a pílula pode crescer por cima
+   do vizinho sem mexer na grade.
+*/
 .workspace {
   display: grid;
-  grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr) 46px;
   gap: 16px;
   align-items: start;
 }
 
 /* Semana e mês precisam da largura inteira para o título do evento caber, então
    a agenda ocupa a linha toda e a lista de tarefas desce para baixo dela. */
-.workspace--wide { grid-template-columns: minmax(0, 1fr) auto; }
+.workspace--wide { grid-template-columns: minmax(0, 1fr) 46px; }
 .workspace--wide .workspace-main { grid-column: 1 / -1; }
 
 /* ---------- trilho lateral ---------- */
 
-.rail-wrap { position: relative; }
+/* Largura travada em 46px (o diâmetro do botão fechado), pelo mesmo motivo
+   da coluna acima: sem isso um flex column sem largura própria se ajusta ao
+   maior filho, e o filho mais largo muda toda vez que um botão expande. */
+.rail-wrap { position: relative; width: 46px; }
 
 .rail {
   position: sticky;
   top: 16px;
+  width: 46px;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -374,13 +383,20 @@ button.danger:hover { background: var(--urgent-bg); }
   font-variant-numeric: tabular-nums;
 }
 
+/* Fechar é rápido (o rótulo só precisa sumir da frente do cursor); abrir é
+   mais devagar e o texto só começa a aparecer um instante depois de o espaço
+   já estar se abrindo — sem esse atraso o texto "estica" junto com a pílula
+   em vez de parecer que ele esmaece para dentro dela. */
 .rail-btn-label {
   max-width: 0;
   overflow: hidden;
   white-space: nowrap;
   opacity: 0;
   font-size: 13px;
-  transition: max-width 0.18s ease, opacity 0.18s ease, padding 0.18s ease;
+  transition:
+    max-width 0.22s cubic-bezier(0.4, 0, 0.2, 1),
+    padding-left 0.22s cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 0.15s ease;
 }
 
 .rail-btn:hover .rail-btn-label,
@@ -388,15 +404,23 @@ button.danger:hover { background: var(--urgent-bg); }
   max-width: 160px;
   opacity: 1;
   padding-left: 14px;
+  transition:
+    max-width 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    padding-left 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 0.3s ease 0.08s;
 }
 
 /* Com o painel aberto o título já está nele, e a pílula esticada passava por
-   baixo do painel. Recolhe. */
+   baixo do painel. Recolhe, e rápido — mesma lógica do fechar comum. */
 .rail-btn.is-open .rail-btn-label,
 .rail-btn.is-open:hover .rail-btn-label {
   max-width: 0;
   opacity: 0;
   padding-left: 0;
+  transition:
+    max-width 0.22s cubic-bezier(0.4, 0, 0.2, 1),
+    padding-left 0.22s cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 0.15s ease;
 }
 
 .rail-btn.is-open { border-color: var(--text-primary); }
@@ -408,6 +432,13 @@ button.danger:hover { background: var(--urgent-bg); }
   color: var(--accent);
 }
 
+/* O painel só é montado no clique (ver Rail.jsx), então dá pra animar a
+   entrada com uma animação comum, sem precisar controlar classe de estado. */
+@keyframes rail-panel-in {
+  from { opacity: 0; transform: scale(0.97); }
+  to { opacity: 1; transform: scale(1); }
+}
+
 .rail-panel {
   position: absolute;
   top: 0;
@@ -415,6 +446,12 @@ button.danger:hover { background: var(--urgent-bg); }
   width: 360px;
   z-index: 40;
   box-shadow: 0 10px 30px var(--shadow);
+  animation: rail-panel-in 0.22s cubic-bezier(0.2, 0, 0.2, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rail-panel { animation: none; }
+  .rail-btn-label { transition: none; }
 }
 
 .rail-panel-head {
@@ -457,9 +494,10 @@ button.danger:hover { background: var(--urgent-bg); }
   color: var(--text-secondary);
 }
 
+/* Cinco colunas, não sete: sábado e domingo saem da grade (ver WeekView.jsx). */
 .week-grid {
   display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 6px;
 }
 
@@ -476,6 +514,10 @@ button.danger:hover { background: var(--urgent-bg); }
 
 .week-event { display: flex; align-items: center; gap: 4px; min-width: 0; }
 
+/* Mesmo tratamento da visão de dia: evento informativo ou recusado continua
+   visível, só que apagado, pra não parecer compromisso de verdade. */
+.week-event--aside { opacity: 0.55; }
+
 .week-dot {
   width: 5px;
   height: 5px;
@@ -488,6 +530,28 @@ button.danger:hover { background: var(--urgent-bg); }
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* A linha de aviso do fim de semana: nada marcado ali quase sempre, então
+   fica reduzida a uma tira de chips, só aparecendo quando há algo mesmo. */
+.week-weekend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border);
+}
+
+.week-weekend-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  min-height: 0;
 }
 
 .month-head {
@@ -634,14 +698,17 @@ button.danger:hover { background: var(--urgent-bg); }
   .workspace--wide { grid-template-columns: 1fr; }
 
   /* Sem hover no toque, o trilho vira uma barra fixa embaixo, no alcance do
-     polegar, e o painel sobe dela como uma gaveta. */
-  .rail-wrap { position: static; }
+     polegar, e o painel sobe dela como uma gaveta. A largura travada de 46px
+     (que existe só para o hover não empurrar as tarefas) não faz sentido
+     aqui: o trilho vira uma barra a largura toda. */
+  .rail-wrap { position: static; width: auto; }
   .rail {
     position: fixed;
     left: 0;
     right: 0;
     bottom: 0;
     top: auto;
+    width: auto;
     flex-direction: row;
     justify-content: center;
     gap: 14px;

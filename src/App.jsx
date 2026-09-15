@@ -286,6 +286,7 @@ export default function App() {
               onSelectEvent={setEditingEvent}
               occupies={occupies}
               declined={declined}
+              isInfo={(e) => isInformational(e, calendarPrefs)}
             />
           )}
           {view === 'month' && (
