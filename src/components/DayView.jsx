@@ -41,6 +41,7 @@ export default function DayView({
   isInfo = () => false,
   asksPresence = () => false,
   presenceOf = () => null,
+  declined = () => false,
   onSetPresence,
 }) {
   const dayEvents = eventsOfDay(events, date)
@@ -62,7 +63,10 @@ export default function DayView({
         {folga && ' · fora do expediente'}
       </div>
 
-      {showNow && <NextUp events={timed} />}
+      {/* O "Agora/Próximo" é sobre o que está acontecendo com você: um
+          compromisso recusado continua listado abaixo, riscado, mas não é
+          anunciado aqui como se você estivesse nele. */}
+      {showNow && <NextUp events={timed.filter((e) => !declined(e))} />}
 
       {allDay.length > 0 && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
@@ -101,6 +105,7 @@ export default function DayView({
           const isFocus = event.summary?.startsWith('Foco:')
           const borderColor = event.calendarColor || (isFocus ? 'var(--accent)' : 'var(--border-strong)')
           const info = isInfo(event)
+          const recusado = declined(event)
           const pedePresenca = asksPresence(event)
           const presenca = presenceOf(event)
 
@@ -108,7 +113,7 @@ export default function DayView({
             <div
               key={event.id}
               onClick={() => onSelectEvent && onSelectEvent(event)}
-              className={info || presenca === 'nao' ? 'day-event day-event--aside' : 'day-event'}
+              className={info || recusado ? 'day-event day-event--aside' : 'day-event'}
               style={{
                 borderLeft: `3px solid ${borderColor}`,
                 background: isFocus ? 'var(--accent-bg)' : 'var(--surface-2)',
@@ -124,7 +129,7 @@ export default function DayView({
               <div style={{
                 fontSize: 14,
                 fontWeight: isFocus ? 500 : 400,
-                textDecoration: presenca === 'nao' ? 'line-through' : 'none',
+                textDecoration: recusado ? 'line-through' : 'none',
               }}>
                 {event.summary}
               </div>

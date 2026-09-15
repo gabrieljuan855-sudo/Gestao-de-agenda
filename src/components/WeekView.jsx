@@ -24,7 +24,15 @@ function tasksDueOn(tasks, day) {
   })
 }
 
-export default function WeekView({ reference, events, tasks = [], onSelectDay, onSelectEvent, occupies = () => true }) {
+export default function WeekView({
+  reference,
+  events,
+  tasks = [],
+  onSelectDay,
+  onSelectEvent,
+  occupies = () => true,
+  declined = () => false,
+}) {
   const start = startOfWeek(reference)
   const days = Array.from({ length: 7 }, (_, i) => addDays(start, i))
 
@@ -66,7 +74,7 @@ export default function WeekView({ reference, events, tasks = [], onSelectDay, o
                 {dayEvents.slice(0, 4).map((event) => (
                   <div
                     key={event.id}
-                    className="week-event"
+                    className={declined(event) ? 'week-event is-declined' : 'week-event'}
                     onClick={(e) => {
                       // Sem isso o clique subiria para o dia e trocaria de visão.
                       e.stopPropagation()
