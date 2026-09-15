@@ -6,7 +6,10 @@
 // navegador — é justamente por isso que essa parte roda no servidor.
 
 const TOKENINFO_URL = 'https://www.googleapis.com/oauth2/v3/tokeninfo'
-const DEFAULT_MODEL = 'gemini-2.0-flash'
+// O Google aposenta modelo sem aviso: o gemini-2.0-flash passou a responder
+// 404 pedindo para trocar. Por isso GEMINI_MODEL existe — dá para corrigir
+// pelo painel, sem esperar um deploy.
+const DEFAULT_MODEL = 'gemini-3.6-flash'
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
