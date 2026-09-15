@@ -192,17 +192,83 @@ input[type="text"] {
   text-overflow: ellipsis;
 }
 
-.month-cell {
-  text-align: center;
-  font-size: 12px;
-  padding: 6px 0;
-  border-radius: 6px;
-  border: 1px solid transparent;
-  background: none;
-  width: 100%;
+.month-head {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 1px;
+  margin-bottom: 4px;
 }
 
-.month-cell:hover { background: var(--surface-2); }
+.month-head-cell {
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: lowercase;
+}
+
+.month-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.month-day {
+  background: var(--surface-1);
+  padding: 4px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.month-day:hover { background: var(--surface-2); }
+.month-day--outside { background: var(--surface-0); }
+.month-day--outside .month-daynum { color: var(--text-muted); }
+.month-day--off { background: var(--surface-2); }
+
+.month-daynum {
+  font-size: 12px;
+  line-height: 20px;
+  text-align: center;
+  width: 20px;
+  align-self: flex-start;
+}
+
+.month-daynum--today {
+  background: var(--text-primary);
+  color: #fff;
+  border-radius: 50%;
+  font-weight: 500;
+}
+
+.month-chips { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+
+.month-chip {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  border-radius: 3px;
+  padding: 0 2px;
+  min-width: 0;
+}
+
+.month-chip--allday { color: #fff; padding: 1px 4px; }
+
+.month-chip-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+
+.month-chip-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.month-more { font-size: 10px; color: var(--text-muted); padding-left: 2px; }
 
 .now-banner {
   background: var(--accent-bg);
@@ -241,6 +307,21 @@ input[type="text"] {
 
   /* Alvos de toque confortáveis. */
   button { min-height: 40px; }
-  .month-cell { min-height: 40px; }
   .focus-actions button { min-height: 44px; padding: 10px 16px; }
+
+  /* A ~50px de largura não cabe título nenhum: o evento vira uma barrinha
+     colorida e o dia se abre no toque, como no app do Google. */
+  .month-chip-text { display: none; }
+  .month-chip {
+    height: 4px;
+    border-radius: 2px;
+    background: var(--border-strong);
+    padding: 0;
+  }
+  .month-chip-dot { width: 100%; height: 4px; border-radius: 2px; }
+  .month-chip--allday { height: 4px; }
+  .month-day { padding: 3px 2px; }
+  .month-daynum { font-size: 11px; align-self: center; }
+  /* Sem texto nos chips, a célula não precisa de tanta altura. */
+  .month-grid { grid-template-rows: none !important; grid-auto-rows: minmax(56px, auto); }
 }
