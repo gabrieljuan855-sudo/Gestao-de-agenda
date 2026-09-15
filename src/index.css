@@ -15,8 +15,56 @@
   --important-bg: #faeeda;
   --low: #4c6b2b;
   --low-bg: #eaf3de;
+  /* Botão "sólido" (o preto de button.primary, o círculo do dia de hoje no
+     mês): em vez de reaproveitar --text-primary direto, tem token próprio.
+     Se ele reaproveitasse --text-primary, o botão sumiria no escuro — lá
+     --text-primary vira claro, e um botão claro com texto branco é
+     ilegível. */
+  --solid-bg: #1f1e1c;
+  --solid-fg: #ffffff;
+  --shadow: rgba(31, 30, 28, 0.13);
+  /* Cores do logo que não são a marca do Google (essas ficam fixas nos dois
+     temas): o cinza das argolas e o cinza quase invisível do anel do
+     pomodoro que ainda não passou. */
+  --logo-mark: #5f6368;
+  --logo-track: #e8eaed;
   --radius: 10px;
+  /* Diz pro navegador que a página tem os dois temas prontos, pra coisas que
+     o CSS não pinta sozinho (barra de rolagem, o seletor nativo de <input
+     type="date">) seguirem o mesmo lado escolhido pelo sistema. */
+  color-scheme: light dark;
   font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* O ajuste é só por preferência do sistema (Windows, celular): sem alternador
+   dentro do app. Os valores escuros mantêm a mesma lógica do claro — fundo
+   quente, texto quase preto vira quase branco — só invertida, e os tons de
+   prioridade ficam um pouco mais claros para continuar legíveis sobre fundo
+   escuro. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --surface-0: #18171a;
+    --surface-1: #242321;
+    --surface-2: #2c2b28;
+    --border: #38362f;
+    --border-strong: #504d46;
+    --text-primary: #f2f0ec;
+    --text-secondary: #c7c3ba;
+    --text-muted: #8f8b82;
+    --accent: #7aa9de;
+    --accent-bg: #1f2c3b;
+    --urgent: #e2826a;
+    --urgent-bg: #3a241c;
+    --important: #d9a94a;
+    --important-bg: #362b16;
+    --low: #8ab86a;
+    --low-bg: #1f2b18;
+    --solid-bg: #f2f0ec;
+    --solid-fg: #18171a;
+    --shadow: rgba(0, 0, 0, 0.4);
+    --logo-mark: #9aa0a6;
+    --logo-track: #3a3835;
+  }
 }
 
 * { box-sizing: border-box; }
@@ -54,9 +102,9 @@ button {
 button:hover { background: var(--surface-2); }
 
 button.primary {
-  background: var(--text-primary);
-  color: #fff;
-  border-color: var(--text-primary);
+  background: var(--solid-bg);
+  color: var(--solid-fg);
+  border-color: var(--solid-bg);
 }
 
 input[type="text"] {
@@ -366,7 +414,7 @@ button.danger:hover { background: var(--urgent-bg); }
   right: 58px;
   width: 360px;
   z-index: 40;
-  box-shadow: 0 10px 30px rgba(31, 30, 28, 0.13);
+  box-shadow: 0 10px 30px var(--shadow);
 }
 
 .rail-panel-head {
@@ -490,8 +538,8 @@ button.danger:hover { background: var(--urgent-bg); }
 }
 
 .month-daynum--today {
-  background: var(--text-primary);
-  color: #fff;
+  background: var(--solid-bg);
+  color: var(--solid-fg);
   border-radius: 50%;
   font-weight: 500;
 }
