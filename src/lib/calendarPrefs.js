@@ -63,6 +63,13 @@ export function presenceOf(event, presence) {
   return presence[event.id] || null
 }
 
+// "Não vou" é uma recusa, não um compromisso mais fraco: o evento continua na
+// tela para você lembrar que ele existe, mas riscado, e sem ser anunciado como
+// algo que está acontecendo com você.
+export function isDeclined(event, presence) {
+  return presence[event.id] === 'nao'
+}
+
 // Um evento só consome tempo se a agenda dele conta tempo e, quando a agenda
 // pede confirmação, se você tiver confirmado presença.
 export function occupiesTime(event, prefs, presence) {

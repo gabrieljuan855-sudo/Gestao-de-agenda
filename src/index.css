@@ -349,6 +349,12 @@ button.danger:hover { background: var(--urgent-bg); }
 /* Informativo ou presença recusada: continua visível, mas em segundo plano. */
 .day-event--aside { opacity: 0.55; }
 
+/* Compromisso recusado: continua visível para você lembrar que existe, mas
+   riscado e apagado, para não se confundir com o que de fato ocupa o dia. */
+.is-declined { opacity: 0.5; }
+.is-declined .week-event-text,
+.is-declined .month-chip-text { text-decoration: line-through; }
+
 .presence-row { display: flex; align-items: center; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
 .presence-row button { padding: 3px 10px; font-size: 12px; min-height: 0; }
 .presence-row button.presence-on {

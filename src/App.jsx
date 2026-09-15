@@ -35,6 +35,7 @@ import {
   occupiesTime,
   isInformational,
   needsPresence,
+  isDeclined,
 } from './lib/calendarPrefs.js'
 
 export default function App() {
@@ -120,6 +121,7 @@ export default function App() {
   }
 
   const occupies = (event) => occupiesTime(event, calendarPrefs, presence)
+  const declined = (event) => isDeclined(event, presence)
 
   function handleSetPresence(eventId, value) {
     setPresenceState(setPresence(eventId, value))
@@ -225,6 +227,7 @@ export default function App() {
               events={events}
               onSelectEvent={setEditingEvent}
               occupies={occupies}
+              declined={declined}
               isInfo={(e) => isInformational(e, calendarPrefs)}
               asksPresence={(e) => needsPresence(e, calendarPrefs)}
               presenceOf={(e) => presence[e.id] || null}
@@ -239,6 +242,7 @@ export default function App() {
               onSelectDay={openDay}
               onSelectEvent={setEditingEvent}
               occupies={occupies}
+              declined={declined}
             />
           )}
           {view === 'month' && (
@@ -248,6 +252,7 @@ export default function App() {
               onSelectDay={openDay}
               onSelectEvent={setEditingEvent}
               occupies={occupies}
+              declined={declined}
             />
           )}
         </div>
