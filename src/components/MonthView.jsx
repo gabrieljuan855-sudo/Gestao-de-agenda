@@ -1,69 +1,79 @@
-import { isToday, formatDuration } from '../lib/dates.js'
-import { eventsOfDay, isAllDay, durationMinutes } from '../lib/events.js'
+import { startOfMonth, startOfWeek, addDays, isToday, formatTime, formatDuration } from '../lib/dates.js'
+import { eventsOfDay, isAllDay, eventStart, busyMinutesOn } from '../lib/events.js'
+import { isWorkday } from '../lib/schedule.js'
 
-function getMonthGrid(reference) {
-  const year = reference.getFullYear()
-  const month = reference.getMonth()
-  const firstDay = new Date(year, month, 1)
-  const startOffset = (firstDay.getDay() + 6) % 7 // semana começando na segunda
-  const daysInMonth = new Date(year, month + 1, 0).getDate()
+const WEEKDAYS = ['seg', 'ter', 'qua', 'qui', 'sex', 'sáb', 'dom']
+const MAX_CHIPS = 3
 
-  const cells = []
-  for (let i = 0; i < startOffset; i++) cells.push(null)
-  for (let d = 1; d <= daysInMonth; d++) cells.push(new Date(year, month, d))
-  return cells
+function buildGrid(reference) {
+  const first = startOfMonth(reference)
+  const start = startOfWeek(first)
+  const daysInMonth = new Date(reference.getFullYear(), reference.getMonth() + 1, 0).getDate()
+  const offset = Math.round((first - start) / 86400000)
+  const weeks = Math.ceil((offset + daysInMonth) / 7)
+  return Array.from({ length: weeks * 7 }, (_, i) => addDays(start, i))
 }
 
 export default function MonthView({ reference, events, onSelectDay }) {
-  const cells = getMonthGrid(reference)
+  const cells = buildGrid(reference)
+  const month = reference.getMonth()
   const monthMinutes = cells
-    .filter(Boolean)
-    .reduce(
-      (sum, day) => sum + eventsOfDay(events, day).filter((e) => !isAllDay(e)).reduce((s, e) => s + durationMinutes(e), 0),
-      0
-    )
+    .filter((day) => day.getMonth() === month)
+    .reduce((sum, day) => sum + busyMinutesOn(events, day), 0)
 
   return (
     <div className="card">
       <div className="muted" style={{ marginBottom: 10 }}>
         {reference.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })} · {formatDuration(monthMinutes)} comprometidos
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4 }}>
-        {['S', 'T', 'Q', 'Q', 'S', 'S', 'D'].map((l, i) => (
-          <div key={i} className="muted" style={{ textAlign: 'center', fontSize: 11 }}>{l}</div>
+
+      <div className="month-head">
+        {WEEKDAYS.map((label) => (
+          <div key={label} className="month-head-cell">{label}</div>
         ))}
-        {cells.map((date, i) => {
-          if (!date) return <div key={i} />
-          const dayEvents = eventsOfDay(events, date)
+      </div>
+
+      <div className="month-grid" style={{ gridTemplateRows: `repeat(${cells.length / 7}, minmax(84px, auto))` }}>
+        {cells.map((day) => {
+          const dayEvents = eventsOfDay(events, day)
+          const outside = day.getMonth() !== month
+          const today = isToday(day)
+
           return (
-            <button
-              key={i}
-              onClick={() => onSelectDay && onSelectDay(date)}
-              className="month-cell"
-              style={{
-                borderColor: isToday(date) ? 'var(--border-strong)' : 'transparent',
-                fontWeight: isToday(date) ? 600 : 400,
-              }}
-              title={dayEvents.map((e) => e.summary).join('\n') || 'Sem compromissos'}
+            <div
+              key={day.toISOString()}
+              className={`month-day${outside ? ' month-day--outside' : ''}${isWorkday(day) ? '' : ' month-day--off'}`}
+              onClick={() => onSelectDay && onSelectDay(day)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => e.key === 'Enter' && onSelectDay && onSelectDay(day)}
             >
-              <div>{date.getDate()}</div>
-              {dayEvents.length > 0 && (
-                <div style={{ display: 'flex', justifyContent: 'center', gap: 2, marginTop: 2 }}>
-                  {dayEvents.slice(0, 3).map((event, dotIdx) => (
-                    <span
-                      key={dotIdx}
-                      style={{
-                        width: 4,
-                        height: 4,
-                        borderRadius: '50%',
-                        background: event.calendarColor || 'var(--accent)',
-                        display: 'inline-block',
-                      }}
-                    />
-                  ))}
-                </div>
-              )}
-            </button>
+              <div className={`month-daynum${today ? ' month-daynum--today' : ''}`}>{day.getDate()}</div>
+
+              <div className="month-chips">
+                {dayEvents.slice(0, MAX_CHIPS).map((event) => {
+                  const allDay = isAllDay(event)
+                  const color = event.calendarColor || 'var(--accent)'
+                  return (
+                    <div
+                      key={event.id}
+                      className={`month-chip${allDay ? ' month-chip--allday' : ''}`}
+                      style={allDay ? { background: color } : undefined}
+                      title={`${allDay ? '' : formatTime(eventStart(event)) + ' '}${event.summary}`}
+                    >
+                      {!allDay && <span className="month-chip-dot" style={{ background: color }} />}
+                      <span className="month-chip-text">
+                        {!allDay && `${formatTime(eventStart(event))} `}
+                        {event.summary}
+                      </span>
+                    </div>
+                  )
+                })}
+                {dayEvents.length > MAX_CHIPS && (
+                  <div className="month-more">+{dayEvents.length - MAX_CHIPS}</div>
+                )}
+              </div>
+            </div>
           )
         })}
       </div>
