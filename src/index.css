@@ -77,6 +77,65 @@ input[type="text"] {
   font-weight: 500;
 }
 
+.focus-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: #111110;
+  color: #f4f3ef;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px;
+  text-align: center;
+}
+
+.focus-phase {
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-size: 12px;
+  color: #8f8c83;
+}
+
+.focus-clock {
+  font-size: clamp(64px, 22vw, 180px);
+  font-weight: 200;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.focus-task {
+  font-size: 16px;
+  color: #c9c6ba;
+  max-width: 28ch;
+}
+
+.focus-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin-top: 16px; }
+
+.focus-overlay button {
+  background: transparent;
+  color: #f4f3ef;
+  border-color: #46443f;
+}
+
+.focus-overlay button:hover { background: #1d1c1a; }
+
+.focus-overlay button.primary {
+  background: #f4f3ef;
+  color: #1f1e1c;
+  border-color: #f4f3ef;
+}
+
+.focus-exit {
+  position: absolute;
+  bottom: 24px;
+  font-size: 12px;
+  border: none !important;
+  color: #6f6c64 !important;
+}
+
 .week-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
