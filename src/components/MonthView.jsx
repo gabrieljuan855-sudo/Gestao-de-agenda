@@ -1,3 +1,5 @@
+import { eventsOfDay } from '../lib/events.js'
+
 function getMonthGrid(reference) {
   const year = reference.getFullYear()
   const month = reference.getMonth()
@@ -13,13 +15,6 @@ function getMonthGrid(reference) {
 
 export default function MonthView({ reference, events }) {
   const cells = getMonthGrid(reference)
-  const colorsByDay = {}
-  events.forEach((e) => {
-    if (!e.start?.dateTime) return
-    const key = new Date(e.start.dateTime).toDateString()
-    if (!colorsByDay[key]) colorsByDay[key] = []
-    colorsByDay[key].push(e.calendarColor || 'var(--accent)')
-  })
 
   return (
     <div className="card">
@@ -32,7 +27,7 @@ export default function MonthView({ reference, events }) {
         ))}
         {cells.map((date, i) => {
           if (!date) return <div key={i} />
-          const dayColors = colorsByDay[date.toDateString()] || []
+          const dayColors = eventsOfDay(events, date).map((e) => e.calendarColor || 'var(--accent)')
           const isToday = date.toDateString() === new Date().toDateString()
           return (
             <div
