@@ -27,9 +27,20 @@ body {
   color: var(--text-primary);
 }
 
-button, input {
+button, input, textarea {
   font-family: inherit;
   font-size: 14px;
+}
+
+textarea {
+  width: 100%;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  resize: vertical;
+  background: var(--surface-1);
+  color: var(--text-primary);
+  line-height: 1.5;
 }
 
 button {
