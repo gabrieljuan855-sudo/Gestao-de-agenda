@@ -16,6 +16,7 @@ import {
 } from './lib/googleApi.js'
 import { rangeForView, shiftReference } from './lib/dates.js'
 import QuickAdd from './components/QuickAdd.jsx'
+import Logo from './components/Logo.jsx'
 import FocusTimer from './components/FocusTimer.jsx'
 import Backlog from './components/Backlog.jsx'
 import Scratchpad from './components/Scratchpad.jsx'
@@ -182,7 +183,8 @@ export default function App() {
     return (
       <div className="app-shell">
         <div className="card" style={{ textAlign: 'center' }}>
-          <h2>Gestão de agenda</h2>
+          <Logo size={72} />
+          <h2 style={{ marginTop: 12 }}>Gestão de agenda</h2>
           <p className="muted">Conecte sua conta Google para ver sua agenda e tarefas.</p>
           <button className="primary" onClick={signIn}>Entrar com o Google</button>
         </div>
@@ -193,7 +195,10 @@ export default function App() {
   return (
     <div className="app-shell">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <h2 style={{ margin: 0 }}>Gestão de agenda</h2>
+        <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Logo size={26} />
+          Gestão de agenda
+        </h2>
         <div style={{ display: 'flex', gap: 8 }}>
           <button onClick={() => setShowCalendarSettings(true)}>Agendas</button>
           <button onClick={signOut}>Sair</button>
