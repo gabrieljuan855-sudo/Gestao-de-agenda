@@ -55,13 +55,17 @@ export function currentEvent(events, now = new Date()) {
   return events.find((e) => !isAllDay(e) && eventStart(e) <= now && eventEnd(e) > now) || null
 }
 
-// Vãos livres do dia dentro do horário útil, para enxergar onde cabe um bloco
-// de foco sem precisar cruzar os compromissos na cabeça.
-export function findFreeGaps(events, day, { startHour = 8, endHour = 20, minMinutes = 30 } = {}) {
-  const windowStart = new Date(day)
-  windowStart.setHours(startHour, 0, 0, 0)
-  const windowEnd = new Date(day)
-  windowEnd.setHours(endHour, 0, 0, 0)
+export function busyMinutesOn(events, day) {
+  return events
+    .filter((e) => !isAllDay(e) && occursOnDay(e, day))
+    .reduce((sum, e) => sum + durationMinutes(e), 0)
+}
+
+// Vãos livres dentro dos blocos de expediente do dia, para enxergar onde cabe
+// um bloco de foco sem cruzar os compromissos na cabeça. Recebe os blocos de
+// fora para não misturar o horário de trabalho com a leitura do Calendar.
+export function findFreeGaps(events, day, blocks, { minMinutes = 30 } = {}) {
+  if (!blocks || blocks.length === 0) return []
 
   const busy = events
     .filter((e) => !isAllDay(e) && occursOnDay(e, day))
@@ -69,14 +73,16 @@ export function findFreeGaps(events, day, { startHour = 8, endHour = 20, minMinu
     .sort((a, b) => a.start - b.start)
 
   const gaps = []
-  let cursor = windowStart
-  for (const slot of busy) {
-    if (slot.start > cursor) {
-      gaps.push({ start: new Date(cursor), end: new Date(Math.min(slot.start, windowEnd)) })
+  for (const block of blocks) {
+    let cursor = block.start
+    for (const slot of busy) {
+      if (slot.end <= cursor) continue
+      if (slot.start >= block.end) break
+      if (slot.start > cursor) gaps.push({ start: new Date(cursor), end: new Date(slot.start) })
+      if (slot.end > cursor) cursor = slot.end > block.end ? block.end : slot.end
     }
-    if (slot.end > cursor) cursor = slot.end
+    if (cursor < block.end) gaps.push({ start: new Date(cursor), end: new Date(block.end) })
   }
-  if (cursor < windowEnd) gaps.push({ start: new Date(cursor), end: new Date(windowEnd) })
 
   return gaps.filter((gap) => gap.end > gap.start && (gap.end - gap.start) / 60000 >= minMinutes)
 }
