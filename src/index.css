@@ -199,6 +199,27 @@ button.danger:hover { background: var(--urgent-bg); }
   font-size: 12px;
 }
 
+/* Uma linha de resultado de busca: ícone/pílula, título que trunca, e a
+   informação de quando (ou nada, pra tarefa) alinhada à direita. */
+.search-result {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  min-height: 0;
+}
+
+.search-result-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
 .focus-overlay {
   position: fixed;
   inset: 0;
@@ -378,7 +399,10 @@ button.danger:hover { background: var(--urgent-bg); }
 .rail-btn-icon {
   width: 44px;
   flex: 0 0 44px;
-  text-align: center;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-size: 15px;
   font-variant-numeric: tabular-nums;
 }

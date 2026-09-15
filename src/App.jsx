@@ -23,6 +23,7 @@ import FocusOverlay from './components/FocusOverlay.jsx'
 import useFocusTimer from './lib/useFocusTimer.js'
 import Backlog from './components/Backlog.jsx'
 import Scratchpad from './components/Scratchpad.jsx'
+import SearchPanel from './components/SearchPanel.jsx'
 import PeriodBar from './components/PeriodBar.jsx'
 import DayView from './components/DayView.jsx'
 import WeekView from './components/WeekView.jsx'
@@ -217,6 +218,24 @@ export default function App() {
           onCreateEvent={handleCreateEvent}
           onCreateTask={handleCreateTask}
           onDone={close}
+        />
+      ),
+    },
+    {
+      id: 'search',
+      label: 'Buscar',
+      icon: (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
+          <circle cx="10.5" cy="10.5" r="6.5" />
+          <line x1="21" y1="21" x2="15.5" y2="15.5" />
+        </svg>
+      ),
+      render: (close) => (
+        <SearchPanel
+          tasks={tasks}
+          onSelectEvent={setEditingEvent}
+          onSelectTask={setEditingTask}
+          close={close}
         />
       ),
     },
