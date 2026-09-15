@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { initGoogleAuth, signIn, signOut, isConfigured } from './lib/googleAuth.js'
-import { listAllEvents, createEvent, listTasks, createTask, completeTask } from './lib/googleApi.js'
+import { listAllEvents, createEvent, listAllTasks, createTask, completeTask } from './lib/googleApi.js'
 import QuickAdd from './components/QuickAdd.jsx'
 import FocusTimer from './components/FocusTimer.jsx'
 import Backlog from './components/Backlog.jsx'
@@ -16,6 +16,7 @@ export default function App() {
   const [tasks, setTasks] = useState([])
   const [activeTask, setActiveTask] = useState(null)
   const [loading, setLoading] = useState(false)
+  const [showCompleted, setShowCompleted] = useState(false)
 
   useEffect(() => {
     initGoogleAuth((newToken) => setToken(newToken))
@@ -31,7 +32,7 @@ export default function App() {
       timeMax.setDate(timeMax.getDate() + 35)
       const [evts, tks] = await Promise.all([
         listAllEvents({ timeMin, timeMax }),
-        listTasks(),
+        listAllTasks({ showCompleted }),
       ])
       setEvents(evts)
       setTasks(tks)
@@ -40,7 +41,7 @@ export default function App() {
     } finally {
       setLoading(false)
     }
-  }, [token])
+  }, [token, showCompleted])
 
   useEffect(() => {
     reload()
@@ -57,7 +58,7 @@ export default function App() {
   }
 
   async function handleCompleteTask(task) {
-    await completeTask(task.id)
+    await completeTask(task.id, task.tasklistId)
     if (activeTask?.id === task.id) setActiveTask(null)
     await reload()
   }
@@ -112,6 +113,8 @@ export default function App() {
           activeTaskId={activeTask?.id}
           onSelect={setActiveTask}
           onComplete={handleCompleteTask}
+          showCompleted={showCompleted}
+          onToggleShowCompleted={setShowCompleted}
         />
       </div>
 
