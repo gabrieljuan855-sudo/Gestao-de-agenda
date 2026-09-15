@@ -4,6 +4,9 @@
 const SCOPES = [
   'https://www.googleapis.com/auth/calendar',
   'https://www.googleapis.com/auth/tasks',
+  // Sem este escopo o token não carrega e-mail, e a rota /api/parse não
+  // consegue confirmar que quem chamou é o dono da conta.
+  'https://www.googleapis.com/auth/userinfo.email',
 ].join(' ')
 
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID
