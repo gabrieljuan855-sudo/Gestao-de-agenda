@@ -86,7 +86,7 @@ export default function EventEditor({ event, onSave, onDelete, onClose }) {
       )}
 
       {event.calendarSummary && (
-        <div className="muted" style={{ fontSize: 11 }}>
+        <div className="muted" style={{ fontSize: 'var(--label-sm)' }}>
           Agenda: {event.calendarSummary}
         </div>
       )}

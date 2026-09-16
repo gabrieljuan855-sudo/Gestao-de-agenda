@@ -145,7 +145,7 @@ export default function QuickAdd({ calendars = [], taskLists = [], onCreateEvent
       />
 
       {preview && (
-        <div style={{ marginTop: 10, fontSize: 13 }}>
+        <div style={{ marginTop: 10, fontSize: 'var(--body-sm)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 6 }}>
             <span className="muted">{usedAI ? 'A IA entendeu assim:' : 'Entendi assim:'}</span>
             <button onClick={handleAskAI} disabled={asking || !text.trim()}>

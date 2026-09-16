@@ -80,7 +80,7 @@ export default function TaskEditor({ task, onSave, onDelete, onReopen, onComplet
       </label>
 
       {task.tasklistTitle && (
-        <div className="muted" style={{ fontSize: 11 }}>Lista: {task.tasklistTitle}</div>
+        <div className="muted" style={{ fontSize: 'var(--label-sm)' }}>Lista: {task.tasklistTitle}</div>
       )}
 
       {error && <div className="form-error">{error}</div>}

@@ -8,7 +8,7 @@ export default function CalendarSettings({ calendars, prefs, onChange, onClose }
 
   return (
     <Modal title="Suas agendas" onClose={onClose}>
-      <div className="muted" style={{ fontSize: 12 }}>
+      <div className="muted" style={{ fontSize: 'var(--label-md)' }}>
         Agenda que não ocupa tempo continua aparecendo, mas não conta na sua carga
         nem tira os vãos livres do dia.
       </div>
@@ -28,7 +28,7 @@ export default function CalendarSettings({ calendars, prefs, onChange, onClose }
                     background: calendar.backgroundColor || 'var(--accent)',
                   }}
                 />
-                <span style={{ fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <span style={{ fontSize: 'var(--body-sm)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {calendar.summaryOverride || calendar.summary}
                 </span>
               </div>

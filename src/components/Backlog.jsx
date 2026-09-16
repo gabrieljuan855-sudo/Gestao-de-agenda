@@ -33,7 +33,7 @@ export default function Backlog({ tasks, activeTaskId, onSelect, onComplete, onE
         }}
       >
         <div>
-          <div style={{ fontWeight: 500, fontSize: 14, textDecoration: done ? 'line-through' : 'none' }}>
+          <div style={{ fontWeight: 500, fontSize: 'var(--body-md)', textDecoration: done ? 'line-through' : 'none' }}>
             {task.title}
           </div>
           <span className={`pill ${task.priority}`}>{PRIORITY_LABEL[task.priority]}</span>
@@ -41,7 +41,7 @@ export default function Backlog({ tasks, activeTaskId, onSelect, onComplete, onE
               ditas pela pílula ao lado: repetir o nome inteiro só empurrava o
               resto do cartão para baixo. Só listas com nome próprio aparecem. */}
           {task.tasklistTitle && !priorityFromListTitle(task.tasklistTitle) && (
-            <span className="muted" style={{ marginLeft: 8, fontSize: 11 }}>{task.tasklistTitle}</span>
+            <span className="muted" style={{ marginLeft: 8, fontSize: 'var(--label-sm)' }}>{task.tasklistTitle}</span>
           )}
           {!done && age !== null && age >= 3 && (
             <span className="muted" style={{ marginLeft: 8 }}>parado há {age} dias</span>
@@ -59,7 +59,7 @@ export default function Backlog({ tasks, activeTaskId, onSelect, onComplete, onE
     <div className="card">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
         <div className="muted">Tarefas</div>
-        <label className="muted" style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
+        <label className="muted" style={{ fontSize: 'var(--label-md)', display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
           <input
             type="checkbox"
             checked={showCompleted}
@@ -73,7 +73,7 @@ export default function Backlog({ tasks, activeTaskId, onSelect, onComplete, onE
         {sorted.map((task) => renderTask(task))}
         {showCompleted && completed.length > 0 && (
           <>
-            <div className="muted" style={{ marginTop: 10, fontSize: 12 }}>Concluídas</div>
+            <div className="muted" style={{ marginTop: 10, fontSize: 'var(--label-md)' }}>Concluídas</div>
             {completed.map((task) => renderTask(task, { done: true }))}
           </>
         )}

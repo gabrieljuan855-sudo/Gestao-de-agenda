@@ -1,34 +1,126 @@
 :root {
-  --surface-0: #f4f3ef;
-  --surface-1: #ffffff;
-  --surface-2: #fbfaf7;
-  --border: #e3e1d9;
-  --border-strong: #c9c6ba;
-  --text-primary: #1f1e1c;
-  --text-secondary: #605e57;
-  --text-muted: #939085;
-  --accent: #3a6ea5;
-  --accent-bg: #e6eef7;
+  /* ====================================================================
+     Fundação de design, organizada pelos papéis do Material Design 3.
+
+     A paleta é a mesma de sempre — quente, sóbria, de papel. O que o MD3
+     traz aqui não é uma cara nova: é o vocabulário. Antes cada tela
+     escolhia o seu tamanho de fonte (dez valores diferentes no CSS e mais
+     vinte e nove embutidos nos componentes) e o seu raio de canto (oito
+     valores). Com papéis nomeados, escolher vira consultar.
+     ==================================================================== */
+
+  /* ---------- cor: pares fundo/conteúdo ---------- */
+  /* Todo par vem junto de propósito: quem usa --primary sabe que o texto
+     por cima é --on-primary, e não sobra combinação ilegível por descuido. */
+  --primary: #3a6ea5;
+  --on-primary: #ffffff;
+  --primary-container: #e6eef7;
+  --on-primary-container: #24466a;
+
+  /* O "sólido" é o preto do botão principal e do dia de hoje no mês. Tem
+     papel próprio porque no escuro ele inverte: reaproveitar a cor do texto
+     faria um botão claro com texto branco. */
+  --solid: #1f1e1c;
+  --on-solid: #ffffff;
+
+  /* Superfícies. Neste app o cartão é mais claro que a página (aparência de
+     papel sobre mesa), o inverso do tema claro padrão do MD3 — os nomes
+     seguem o papel, não o tom. */
+  --surface: #f4f3ef;
+  --surface-container: #ffffff;
+  --surface-variant: #fbfaf7;
+  --on-surface: #1f1e1c;
+  --on-surface-variant: #605e57;
+  --on-surface-muted: #939085;
+
+  --outline: #c9c6ba;
+  --outline-variant: #e3e1d9;
+
+  /* Prioridades e erro, também em pares. */
   --urgent: #b3441f;
-  --urgent-bg: #f7e6df;
+  --urgent-container: #f7e6df;
   --important: #92650b;
-  --important-bg: #faeeda;
+  --important-container: #faeeda;
   --low: #4c6b2b;
-  --low-bg: #eaf3de;
-  /* Botão "sólido" (o preto de button.primary, o círculo do dia de hoje no
-     mês): em vez de reaproveitar --text-primary direto, tem token próprio.
-     Se ele reaproveitasse --text-primary, o botão sumiria no escuro — lá
-     --text-primary vira claro, e um botão claro com texto branco é
-     ilegível. */
-  --solid-bg: #1f1e1c;
-  --solid-fg: #ffffff;
+  --low-container: #eaf3de;
+
+  /* A tela cheia do foco é escura nos dois temas de propósito: ela existe
+     para tirar o resto do mundo da frente. */
+  --focus-surface: #111110;
+  --focus-on-surface: #f4f3ef;
+  --focus-on-surface-variant: #c9c6ba;
+  --focus-outline: #46443f;
+  --focus-state: #1d1c1a;
+  --focus-muted: #8f8c83;
+
   --shadow: rgba(31, 30, 28, 0.13);
+  --shadow-weak: rgba(31, 30, 28, 0.07);
+
   /* Cores do logo que não são a marca do Google (essas ficam fixas nos dois
-     temas): o cinza das argolas e o cinza quase invisível do anel do
-     pomodoro que ainda não passou. */
+     temas): o cinza das argolas e o anel do pomodoro que ainda não passou. */
   --logo-mark: #5f6368;
   --logo-track: #e8eaed;
-  --radius: 10px;
+
+  /* ---------- forma ---------- */
+  /* Escala de seis degraus, no lugar dos oito valores soltos de antes. */
+  --shape-xs: 4px;
+  --shape-sm: 8px;
+  --shape-md: 12px;
+  --shape-lg: 16px;
+  --shape-xl: 28px;
+  --shape-full: 999px;
+
+  /* ---------- tipografia ---------- */
+  --display-md: 44px;
+  --headline-sm: 22px;
+  --title-lg: 20px;
+  --title-md: 16px;
+  --body-lg: 15px;
+  --body-md: 14px;
+  --body-sm: 13px;
+  --label-md: 12px;
+  --label-sm: 11px;
+  /* Exceção densa: chips da semana e do mês, onde 11px já estoura. */
+  --label-xs: 10px;
+
+  /* ---------- camadas de estado ---------- */
+  /* No MD3 hover e clique não trocam a cor do componente: sobrepõem uma
+     película da cor do conteúdo. Uma regra serve para qualquer fundo, o que
+     era impossível com a troca de cor fixa que havia antes. */
+  --state-hover: 8%;
+  --state-focus: 10%;
+  --state-press: 12%;
+
+  /* ---------- elevação ---------- */
+  --elevation-1: 0 1px 2px var(--shadow), 0 1px 3px 1px var(--shadow-weak);
+  --elevation-2: 0 1px 2px var(--shadow), 0 2px 6px 2px var(--shadow-weak);
+  --elevation-3: 0 4px 8px 3px var(--shadow-weak), 0 1px 3px var(--shadow);
+
+  /* ---------- movimento ---------- */
+  --ease-emphasized: cubic-bezier(0.2, 0, 0, 1);
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --dur-short: 150ms;
+  --dur-medium: 250ms;
+
+  /* Nomes antigos, ainda usados em estilo embutido dentro dos componentes.
+     Ficam como apelidos para a migração não precisar ser feita de uma vez. */
+  --surface-0: var(--surface);
+  --surface-1: var(--surface-container);
+  --surface-2: var(--surface-variant);
+  --border: var(--outline-variant);
+  --border-strong: var(--outline);
+  --text-primary: var(--on-surface);
+  --text-secondary: var(--on-surface-variant);
+  --text-muted: var(--on-surface-muted);
+  --accent: var(--primary);
+  --accent-bg: var(--primary-container);
+  --urgent-bg: var(--urgent-container);
+  --important-bg: var(--important-container);
+  --low-bg: var(--low-container);
+  --solid-bg: var(--solid);
+  --solid-fg: var(--on-solid);
+  --radius: var(--shape-md);
+
   /* Diz pro navegador que a página tem os dois temas prontos, pra coisas que
      o CSS não pinta sozinho (barra de rolagem, o seletor nativo de <input
      type="date">) seguirem o mesmo lado escolhido pelo sistema. */
@@ -37,31 +129,39 @@
 }
 
 /* O ajuste é só por preferência do sistema (Windows, celular): sem alternador
-   dentro do app. Os valores escuros mantêm a mesma lógica do claro — fundo
-   quente, texto quase preto vira quase branco — só invertida, e os tons de
-   prioridade ficam um pouco mais claros para continuar legíveis sobre fundo
-   escuro. */
+   dentro do app. Mesma lógica do claro — fundo quente, texto quase preto vira
+   quase branco — só invertida, com os tons de prioridade um pouco mais claros
+   para continuar legíveis sobre fundo escuro. */
 @media (prefers-color-scheme: dark) {
   :root {
-    --surface-0: #18171a;
-    --surface-1: #242321;
-    --surface-2: #2c2b28;
-    --border: #38362f;
-    --border-strong: #504d46;
-    --text-primary: #f2f0ec;
-    --text-secondary: #c7c3ba;
-    --text-muted: #8f8b82;
-    --accent: #7aa9de;
-    --accent-bg: #1f2c3b;
+    --primary: #7aa9de;
+    --on-primary: #10243a;
+    --primary-container: #1f2c3b;
+    --on-primary-container: #cfe0f4;
+
+    --solid: #f2f0ec;
+    --on-solid: #18171a;
+
+    --surface: #18171a;
+    --surface-container: #242321;
+    --surface-variant: #2c2b28;
+    --on-surface: #f2f0ec;
+    --on-surface-variant: #c7c3ba;
+    --on-surface-muted: #8f8b82;
+
+    --outline: #504d46;
+    --outline-variant: #38362f;
+
     --urgent: #e2826a;
-    --urgent-bg: #3a241c;
+    --urgent-container: #3a241c;
     --important: #d9a94a;
-    --important-bg: #362b16;
+    --important-container: #362b16;
     --low: #8ab86a;
-    --low-bg: #1f2b18;
-    --solid-bg: #f2f0ec;
-    --solid-fg: #18171a;
+    --low-container: #1f2b18;
+
     --shadow: rgba(0, 0, 0, 0.4);
+    --shadow-weak: rgba(0, 0, 0, 0.22);
+
     --logo-mark: #9aa0a6;
     --logo-track: #3a3835;
   }
@@ -77,13 +177,13 @@ body {
 
 button, input, textarea {
   font-family: inherit;
-  font-size: 14px;
+  font-size: var(--body-md);
 }
 
 textarea {
   width: 100%;
   border: 1px solid var(--border-strong);
-  border-radius: var(--radius);
+  border-radius: var(--shape-md);
   padding: 10px 12px;
   resize: vertical;
   background: var(--surface-1);
@@ -91,26 +191,64 @@ textarea {
   line-height: 1.5;
 }
 
+/* A camada de estado do MD3: hover e clique não trocam a cor do botão,
+   sobrepõem uma película da cor do próprio conteúdo. Uma regra só passa a
+   servir para qualquer fundo — inclusive o botão principal, que é escuro, e
+   os botões da tela cheia, que ficam sobre preto. Antes cada um precisava do
+   seu :hover com uma cor fixa, e o da tela cheia tinha três. */
 button {
+  position: relative;
   cursor: pointer;
-  border-radius: var(--radius);
-  border: 1px solid var(--border-strong);
-  background: var(--surface-1);
+  border-radius: var(--shape-md);
+  border: 1px solid var(--outline);
+  background: var(--surface-container);
+  color: var(--on-surface);
   padding: 8px 12px;
 }
 
-button:hover { background: var(--surface-2); }
+button::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: currentColor;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-short) var(--ease-standard);
+}
+
+button:hover::after { opacity: calc(var(--state-hover) / 100%); }
+button:focus-visible::after { opacity: calc(var(--state-focus) / 100%); }
+button:active::after { opacity: calc(var(--state-press) / 100%); }
+button:disabled::after { opacity: 0; }
+button:disabled { opacity: 0.38; cursor: default; }
+
+button:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
 
 button.primary {
-  background: var(--solid-bg);
-  color: var(--solid-fg);
-  border-color: var(--solid-bg);
+  background: var(--solid);
+  color: var(--on-solid);
+  border-color: var(--solid);
 }
 
 input[type="text"] {
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius);
+  border: 1px solid var(--outline);
+  border-radius: var(--shape-md);
   padding: 10px 12px;
+  background: var(--surface-container);
+  color: var(--on-surface);
+}
+
+input[type="text"]:focus-visible,
+textarea:focus-visible,
+.field select:focus-visible,
+.field input:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -1px;
+  border-color: var(--primary);
 }
 
 .app-shell {
@@ -120,21 +258,34 @@ input[type="text"] {
 }
 
 .card {
-  background: var(--surface-1);
-  border: 1px solid var(--border);
-  border-radius: 12px;
+  background: var(--surface-container);
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--shape-lg);
   padding: 16px;
 }
 
-.muted { color: var(--text-secondary); font-size: 13px; }
+.muted { color: var(--on-surface-variant); font-size: var(--body-sm); }
 
 .pill {
   display: inline-block;
-  border-radius: 999px;
+  border-radius: var(--shape-full);
   padding: 2px 10px;
-  font-size: 12px;
+  font-size: var(--label-md);
   font-weight: 500;
 }
+
+/* ---------- tipografia ----------
+   Classes para os componentes pararem de escolher tamanho no estilo
+   embutido. Eram vinte e nove escolhas soltas espalhadas pelas telas. */
+.t-display { font-size: var(--display-md); }
+.t-headline { font-size: var(--headline-sm); }
+.t-title { font-size: var(--title-md); }
+.t-body { font-size: var(--body-md); }
+.t-body-sm { font-size: var(--body-sm); }
+.t-label { font-size: var(--label-md); }
+.t-label-sm { font-size: var(--label-sm); }
+.t-label-xs { font-size: var(--label-xs); }
+.t-body-lg { font-size: var(--body-lg); }
 
 .modal-backdrop {
   position: fixed;
@@ -149,7 +300,7 @@ input[type="text"] {
 
 .modal-card {
   background: var(--surface-1);
-  border-radius: 12px;
+  border-radius: var(--shape-md);
   padding: 16px;
   width: 100%;
   max-width: 420px;
@@ -165,7 +316,7 @@ input[type="text"] {
 .modal-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 4px; }
 
 .field { display: flex; flex-direction: column; gap: 4px; }
-.field > span { font-size: 12px; color: var(--text-secondary); }
+.field > span { font-size: var(--label-md); color: var(--text-secondary); }
 .field-row { display: flex; gap: 10px; }
 .field-row .field { flex: 1; }
 
@@ -179,10 +330,10 @@ input[type="text"] {
 .field input[type="date"],
 .field input[type="time"] {
   border: 1px solid var(--border-strong);
-  border-radius: var(--radius);
+  border-radius: var(--shape-md);
   padding: 9px 10px;
   font-family: inherit;
-  font-size: 14px;
+  font-size: var(--body-md);
   background: var(--surface-1);
   color: var(--text-primary);
   width: 100%;
@@ -194,9 +345,9 @@ button.danger:hover { background: var(--urgent-bg); }
 .form-error {
   background: var(--urgent-bg);
   color: var(--urgent);
-  border-radius: var(--radius);
+  border-radius: var(--shape-md);
   padding: 8px 10px;
-  font-size: 12px;
+  font-size: var(--label-md);
 }
 
 /* Uma linha de resultado de busca: ícone/pílula, título que trunca, e a
@@ -217,15 +368,15 @@ button.danger:hover { background: var(--urgent-bg); }
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 13px;
+  font-size: var(--body-sm);
 }
 
 .focus-overlay {
   position: fixed;
   inset: 0;
   z-index: 50;
-  background: #111110;
-  color: #f4f3ef;
+  background: var(--focus-surface);
+  color: var(--focus-on-surface);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -238,8 +389,8 @@ button.danger:hover { background: var(--urgent-bg); }
 .focus-phase {
   text-transform: uppercase;
   letter-spacing: 0.18em;
-  font-size: 12px;
-  color: #8f8c83;
+  font-size: var(--label-md);
+  color: var(--focus-muted);
 }
 
 .focus-clock {
@@ -250,8 +401,8 @@ button.danger:hover { background: var(--urgent-bg); }
 }
 
 .focus-task {
-  font-size: 16px;
-  color: #c9c6ba;
+  font-size: var(--title-md);
+  color: var(--focus-on-surface-variant);
   max-width: 28ch;
 }
 
@@ -259,24 +410,22 @@ button.danger:hover { background: var(--urgent-bg); }
 
 .focus-overlay button {
   background: transparent;
-  color: #f4f3ef;
-  border-color: #46443f;
+  color: var(--focus-on-surface);
+  border-color: var(--focus-outline);
 }
 
-.focus-overlay button:hover { background: #1d1c1a; }
-
 .focus-overlay button.primary {
-  background: #f4f3ef;
-  color: #1f1e1c;
-  border-color: #f4f3ef;
+  background: var(--focus-on-surface);
+  color: var(--focus-surface);
+  border-color: var(--focus-on-surface);
 }
 
 .focus-exit {
   position: absolute;
   bottom: 24px;
-  font-size: 12px;
+  font-size: var(--label-md);
   border: none !important;
-  color: #6f6c64 !important;
+  color: var(--focus-muted) !important;
 }
 
 /* ---------- cabeçalho ---------- */
@@ -290,8 +439,8 @@ button.danger:hover { background: var(--urgent-bg); }
 }
 
 .app-head-title { display: flex; align-items: center; gap: 10px; }
-.app-head-title h2 { margin: 0; font-size: 22px; line-height: 1.1; }
-.app-head-sub { font-size: 12px; }
+.app-head-title h2 { margin: 0; font-size: var(--headline-sm); line-height: 1.1; }
+.app-head-sub { font-size: var(--label-md); }
 
 /* ---------- barra de período ---------- */
 
@@ -310,14 +459,14 @@ button.danger:hover { background: var(--urgent-bg); }
   gap: 4px;
   background: var(--surface-1);
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--shape-full);
   padding: 3px;
 }
 
 .period-view {
   border: none;
   background: transparent;
-  border-radius: 999px;
+  border-radius: var(--shape-full);
   padding: 5px 14px;
   color: var(--text-secondary);
 }
@@ -334,7 +483,7 @@ button.danger:hover { background: var(--urgent-bg); }
 .period-label {
   flex: 1;
   font-weight: 500;
-  font-size: 14px;
+  font-size: var(--body-md);
 }
 
 /* O pt-BR escreve a data em minúsculas; só a inicial sobe. `capitalize` faria
@@ -389,7 +538,7 @@ button.danger:hover { background: var(--urgent-bg); }
   height: 46px;
   min-height: 46px;
   padding: 0;
-  border-radius: 999px;
+  border-radius: var(--shape-full);
   border: 1px solid var(--border-strong);
   background: var(--surface-1);
   overflow: hidden;
@@ -403,7 +552,7 @@ button.danger:hover { background: var(--urgent-bg); }
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 15px;
+  font-size: var(--body-lg);
   font-variant-numeric: tabular-nums;
 }
 
@@ -416,7 +565,7 @@ button.danger:hover { background: var(--urgent-bg); }
   overflow: hidden;
   white-space: nowrap;
   opacity: 0;
-  font-size: 13px;
+  font-size: var(--body-sm);
   transition:
     max-width 0.22s cubic-bezier(0.4, 0, 0.2, 1),
     padding-left 0.22s cubic-bezier(0.4, 0, 0.2, 1),
@@ -492,7 +641,7 @@ button.danger:hover { background: var(--urgent-bg); }
 .rail-close {
   border: none;
   background: transparent;
-  font-size: 20px;
+  font-size: var(--title-lg);
   line-height: 1;
   padding: 0 4px;
   min-height: 0;
@@ -510,7 +659,7 @@ button.danger:hover { background: var(--urgent-bg); }
 .panel-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
 
 .focus-panel-clock {
-  font-size: 44px;
+  font-size: var(--display-md);
   font-variant-numeric: tabular-nums;
   text-align: center;
   margin: 6px 0;
@@ -518,7 +667,7 @@ button.danger:hover { background: var(--urgent-bg); }
 
 .focus-panel-task {
   text-align: center;
-  font-size: 13px;
+  font-size: var(--body-sm);
   color: var(--text-secondary);
 }
 
@@ -531,7 +680,7 @@ button.danger:hover { background: var(--urgent-bg); }
 
 .week-day {
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--shape-sm);
   padding: 8px 6px;
   cursor: pointer;
   background: var(--surface-1);
@@ -554,7 +703,7 @@ button.danger:hover { background: var(--urgent-bg); }
 }
 
 .week-event-text {
-  font-size: 11px;
+  font-size: var(--label-sm);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -577,8 +726,8 @@ button.danger:hover { background: var(--urgent-bg); }
   align-items: center;
   gap: 5px;
   padding: 3px 10px;
-  border-radius: 999px;
-  font-size: 12px;
+  border-radius: var(--shape-full);
+  font-size: var(--label-md);
   min-height: 0;
 }
 
@@ -591,7 +740,7 @@ button.danger:hover { background: var(--urgent-bg); }
 
 .month-head-cell {
   text-align: center;
-  font-size: 11px;
+  font-size: var(--label-sm);
   color: var(--text-muted);
   text-transform: lowercase;
 }
@@ -602,7 +751,7 @@ button.danger:hover { background: var(--urgent-bg); }
   gap: 1px;
   background: var(--border);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--shape-sm);
   overflow: hidden;
 }
 
@@ -622,7 +771,7 @@ button.danger:hover { background: var(--urgent-bg); }
 .month-day--off { background: var(--surface-2); }
 
 .month-daynum {
-  font-size: 12px;
+  font-size: var(--label-md);
   line-height: 20px;
   text-align: center;
   width: 20px;
@@ -642,7 +791,7 @@ button.danger:hover { background: var(--urgent-bg); }
   display: flex;
   align-items: center;
   gap: 3px;
-  font-size: 11px;
+  font-size: var(--label-sm);
   border-radius: 3px;
   padding: 0 2px;
   min-width: 0;
@@ -658,20 +807,20 @@ button.danger:hover { background: var(--urgent-bg); }
   text-overflow: ellipsis;
 }
 
-.month-more { font-size: 10px; color: var(--text-muted); padding-left: 2px; }
+.month-more { font-size: var(--label-sm); color: var(--text-muted); padding-left: 2px; }
 
 .now-banner {
   background: var(--accent-bg);
   border: 1px solid var(--accent);
-  border-radius: var(--radius);
+  border-radius: var(--shape-md);
   padding: 8px 12px;
-  font-size: 13px;
+  font-size: var(--body-sm);
   margin-bottom: 10px;
 }
 
 .now-banner.muted { background: var(--surface-2); border-color: var(--border); }
 
-.day-event { padding: 6px 10px; border-radius: 4px; }
+.day-event { padding: 6px 10px; border-radius: var(--shape-xs); }
 
 /* Informativo ou presença recusada: continua visível, mas em segundo plano. */
 .day-event--aside { opacity: 0.55; }
@@ -683,7 +832,7 @@ button.danger:hover { background: var(--urgent-bg); }
 .is-declined .month-chip-text { text-decoration: line-through; }
 
 .presence-row { display: flex; align-items: center; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
-.presence-row button { padding: 3px 10px; font-size: 12px; min-height: 0; }
+.presence-row button { padding: 3px 10px; font-size: var(--label-md); min-height: 0; }
 .presence-row button.presence-on {
   background: var(--low-bg);
   color: var(--low);
@@ -704,13 +853,13 @@ button.danger:hover { background: var(--urgent-bg); }
   padding-bottom: 8px;
 }
 
-.calendar-toggle { display: flex; align-items: center; gap: 4px; font-size: 12px; cursor: pointer; }
+.calendar-toggle { display: flex; align-items: center; gap: 4px; font-size: var(--label-md); cursor: pointer; }
 
 .free-slot {
   border: 1px dashed var(--border-strong);
-  border-radius: 4px;
+  border-radius: var(--shape-xs);
   padding: 5px 10px;
-  font-size: 12px;
+  font-size: var(--label-md);
   color: var(--text-muted);
 }
 
@@ -769,7 +918,7 @@ button.danger:hover { background: var(--urgent-bg); }
      semana vira uma lista de dias. */
   .week-grid { grid-template-columns: 1fr; }
   .week-day { min-height: 0; }
-  .week-event-text { font-size: 12px; white-space: normal; }
+  .week-event-text { font-size: var(--label-md); white-space: normal; }
 
   /* Alvos de toque confortáveis. */
   button { min-height: 40px; }
@@ -787,7 +936,7 @@ button.danger:hover { background: var(--urgent-bg); }
   .month-chip-dot { width: 100%; height: 4px; border-radius: 2px; }
   .month-chip--allday { height: 4px; }
   .month-day { padding: 3px 2px; }
-  .month-daynum { font-size: 11px; align-self: center; }
+  .month-daynum { font-size: var(--label-sm); align-self: center; }
   /* Sem texto nos chips, a célula não precisa de tanta altura. */
   .month-grid { grid-template-rows: none !important; grid-auto-rows: minmax(56px, auto); }
 }
