@@ -103,9 +103,6 @@
   --dur-short: 150ms;
   --dur-medium: 250ms;
 
-  /* Quanto da janela está coberto por baixo — o teclado do celular. Quem
-     mantém em dia é o useViewportInset; no computador fica sempre zero. */
-  --viewport-inset-bottom: 0px;
 
   /* Nomes antigos, ainda usados em estilo embutido dentro dos componentes.
      Ficam como apelidos para a migração não precisar ser feita de uma vez. */
@@ -700,8 +697,6 @@ button.danger:hover { background: var(--urgent-bg); }
   .rail-btn-label { transition: none; }
 }
 
-.rail-scrim { display: none; }
-
 .rail-panel-head {
   display: flex;
   justify-content: space-between;
@@ -951,14 +946,11 @@ button.danger:hover { background: var(--urgent-bg); }
      (que existe só para o hover não empurrar as tarefas) não faz sentido
      aqui: o trilho vira uma barra a largura toda. */
   .rail-wrap { position: static; width: auto; }
-  /* O iOS não encolhe a viewport de layout quando o teclado abre, e
-     position:fixed se guia por ela: sem descontar o teclado, a barra ia parar
-     no meio da tela, por cima do conteúdo. */
   .rail {
     position: fixed;
     left: 0;
     right: 0;
-    bottom: var(--viewport-inset-bottom);
+    bottom: 0;
     top: auto;
     width: auto;
     flex-direction: row;
@@ -973,29 +965,45 @@ button.danger:hover { background: var(--urgent-bg); }
   /* O rótulo abriria por cima dos vizinhos numa barra horizontal. */
   .rail-btn-label { display: none; }
 
+  /* Em tela estreita o painel é tela cheia, não uma gaveta flutuando acima da
+     barra. Foi a saída depois de duas tentativas de acertar a posição por
+     cálculo: num web app instalado no iOS, um elemento fixo no rodapé com o
+     teclado aberto não tem conta que feche. Tela cheia não depende de conta
+     nenhuma — e é o que o Material Design 3 faz em tela estreita. */
   .rail-panel {
     position: fixed;
-    left: 12px;
-    right: 12px;
-    top: auto;
-    bottom: calc(var(--viewport-inset-bottom) + 74px);
+    inset: 0;
     width: auto;
-    /* Com o teclado aberto sobra pouca altura: o painel encolhe junto em vez
-       de crescer para trás dele. */
-    max-height: calc(100vh - var(--viewport-inset-bottom) - 96px);
+    max-height: none;
+    border: none;
+    border-radius: 0;
     overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
     z-index: 40;
+    padding: calc(14px + env(safe-area-inset-top, 0px)) 16px
+      calc(28px + env(safe-area-inset-bottom, 0px));
+    animation: none;
   }
 
-  /* Véu da gaveta: deixa claro que o painel está por cima, e fechá-lo é um
-     toque em qualquer lugar de fora. */
-  .rail-scrim {
-    display: block;
-    position: fixed;
-    inset: 0;
-    z-index: 29;
-    background: rgba(0, 0, 0, 0.32);
+  /* O cabeçalho acompanha a rolagem: com o painel ocupando a tela, o botão de
+     fechar não pode ficar para trás. */
+  .rail-panel-head {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--surface-container);
+    padding: 4px 0 10px;
   }
+
+  .rail-close {
+    font-size: var(--title-lg);
+    padding: 4px 10px;
+    min-height: 40px;
+  }
+
+  /* Com o painel em cena a barra sai: ela não tem mais o que fazer, e era ela
+     que aparecia fora do lugar quando o teclado abria. */
+  .rail-wrap.tem-painel .rail { display: none; }
 
   /* Campo abaixo de 16px faz o iOS dar zoom sozinho ao receber o foco — e,
      desde que os painéis focam o campo ao abrir, isso acontecia em toda

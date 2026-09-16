@@ -22,7 +22,6 @@ import Rail from './components/Rail.jsx'
 import FocusPanel from './components/FocusPanel.jsx'
 import FocusOverlay from './components/FocusOverlay.jsx'
 import useFocusTimer from './lib/useFocusTimer.js'
-import useViewportInset from './lib/useViewportInset.js'
 import Backlog from './components/Backlog.jsx'
 import Scratchpad from './components/Scratchpad.jsx'
 import SearchPanel from './components/SearchPanel.jsx'
@@ -102,10 +101,6 @@ export default function App() {
   const [loadError, setLoadError] = useState(null)
   const [loginError] = useState(motivoDoLogin)
   const [presenceError, setPresenceError] = useState(null)
-
-  // Mantém --viewport-inset-bottom em dia para a barra do trilho não subir
-  // para o meio da tela quando o teclado do celular abre.
-  useViewportInset()
 
   useEffect(() => {
     initGoogleAuth(setSignedIn, setAuthStatus)
