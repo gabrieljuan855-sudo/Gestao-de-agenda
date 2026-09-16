@@ -1,8 +1,10 @@
 # Gestão de agenda
 
 Site pessoal para gerenciar demandas, tarefas e compromissos usando o **Google
-Calendar** e o **Google Tasks** como base de dados — sem banco de dados próprio,
-sem backend. Tudo roda no navegador e fala direto com as APIs do Google.
+Calendar** e o **Google Tasks** como base de dados — sem banco de dados próprio.
+A tela roda no navegador e fala direto com as APIs do Google; o Worker que
+serve o site cuida apenas do login e da interpretação por IA, que precisam de
+segredos e por isso não podem ficar no navegador.
 
 ## Funcionalidades
 
@@ -26,13 +28,13 @@ sem backend. Tudo roda no navegador e fala direto com as APIs do Google.
    - Google Calendar API
    - Google Tasks API
 3. Em **APIs e serviços > Tela de consentimento OAuth**, configure como
-   "Externo" e adicione seu próprio e-mail como usuário de teste (suficiente
-   para uso pessoal).
+   "Externo". Para uso diário, publique em **Em produção** (ver passo 4): em
+   modo de teste o Google descarta o refresh token a cada 7 dias.
 4. Em **APIs e serviços > Credenciais**, crie uma credencial do tipo
    **ID do cliente OAuth**, tipo de aplicativo **Aplicativo da Web**.
    - Em "Origens JavaScript autorizadas", adicione o endereço onde o site vai
      rodar (ex: `http://localhost:5173` para testar local, e o endereço do
-     GitHub Pages depois de publicado).
+     Worker depois de publicado).
 5. Copie o **Client ID** gerado.
 
 ### 2. Configurar o projeto
@@ -47,24 +49,42 @@ npm run dev
 Abra o endereço mostrado no terminal (normalmente `http://localhost:5173`) e
 clique em "Entrar com o Google".
 
-### 3. Publicar (opcional)
+### 3. Publicar no Cloudflare Workers
 
-O repositório já inclui um workflow (`.github/workflows/deploy.yml`) que builda
-e publica o site no GitHub Pages automaticamente a cada push na branch `main`.
-Para ativar:
+O app **não roda em hospedagem estática**. O login (`/api/auth/*`) e a
+interpretação por IA (`/api/parse`) são rotas do próprio Worker, então servir
+só o conteúdo de `dist/` em algum lugar resultaria num site sem login. Era por
+isso que existia um workflow de GitHub Pages aqui; ele foi removido.
 
-1. Em **Settings > Pages** do repositório, em "Source", selecione
-   **GitHub Actions**.
-2. Faça um push (ou merge) na branch `main` — o workflow builda o projeto e
-   publica o conteúdo de `dist/`.
-3. Pegue a URL final mostrada em **Settings > Pages** e adicione-a nas
-   "Origens JavaScript autorizadas" da credencial OAuth no Google Cloud
-   Console.
+O `wrangler.toml` na raiz já traz o necessário: ele roda `npm run build` e
+serve o conteúdo de `dist/` como assets estáticos. Depois de vincular o
+repositório ao projeto no Cloudflare:
 
-Para publicar manualmente em vez disso, basta rodar `npm run build` e subir o
-conteúdo da pasta `dist/` onde preferir.
+1. Em **Configurações > Build**:
+   - **Comando da build**: deixe vazio — quem roda o build é o `[build]` do
+     `wrangler.toml`.
+   - **Comando de implantação**: `npx wrangler deploy`.
 
-### 3.5. Login que não expira (recomendado, obrigatório no atalho do celular)
+   Atenção ao `npx wrangler versions upload`: ele **sobe uma versão sem
+   publicar**, então o site continua servindo a versão antiga e os deploys
+   parecem bem-sucedidos sem nunca entrar no ar.
+
+2. Em **Controle da ramificação > Ramificação de produção**: use `main`.
+   Se apontar para qualquer outra branch, todo push no `main` vira build de
+   *não produção*: o build passa, o painel mostra "Deployment successful",
+   e mesmo assim nada chega ao site publicado.
+
+3. Em **Variáveis e segredos**, na seção de **build** (não a de runtime, que
+   fica desabilitada em Worker só de assets estáticos), defina
+   `VITE_GOOGLE_CLIENT_ID` — o Vite injeta essa variável durante o build.
+
+4. Pegue a URL gerada (ex: `https://seu-projeto.workers.dev`) e adicione-a
+   nas "Origens JavaScript autorizadas" da credencial OAuth no Google Cloud
+   Console — sem isso o login com Google não funciona no domínio publicado.
+   Enquanto o app estiver em modo "Teste", cadastre também o seu e-mail em
+   **Público-alvo > Usuários de teste**.
+
+### 4. Login que não expira (obrigatório no atalho do celular)
 
 Por padrão o app usa o fluxo implícito do Google: um token de uma hora,
 renovado por um iframe invisível que depende do cookie de sessão do Google no
@@ -110,36 +130,6 @@ desconecta tudo de uma vez, se precisar.
 
 Mantenha o `VITE_GOOGLE_CLIENT_ID` do passo 2 como está: ele é a rede de
 segurança para o caso de o login pelo servidor sair do ar.
-
-### 4. Publicar no Cloudflare Workers (alternativa)
-
-O `wrangler.toml` na raiz já traz o necessário: ele roda `npm run build` e
-serve o conteúdo de `dist/` como assets estáticos. Depois de vincular o
-repositório ao projeto no Cloudflare:
-
-1. Em **Configurações > Build**:
-   - **Comando da build**: deixe vazio — quem roda o build é o `[build]` do
-     `wrangler.toml`.
-   - **Comando de implantação**: `npx wrangler deploy`.
-
-   Atenção ao `npx wrangler versions upload`: ele **sobe uma versão sem
-   publicar**, então o site continua servindo a versão antiga e os deploys
-   parecem bem-sucedidos sem nunca entrar no ar.
-
-2. Em **Controle da ramificação > Ramificação de produção**: use `main`.
-   Se apontar para qualquer outra branch, todo push no `main` vira build de
-   *não produção*: o build passa, o painel mostra "Deployment successful",
-   e mesmo assim nada chega ao site publicado.
-
-3. Em **Variáveis e segredos**, na seção de **build** (não a de runtime, que
-   fica desabilitada em Worker só de assets estáticos), defina
-   `VITE_GOOGLE_CLIENT_ID` — o Vite injeta essa variável durante o build.
-
-4. Pegue a URL gerada (ex: `https://seu-projeto.workers.dev`) e adicione-a
-   nas "Origens JavaScript autorizadas" da credencial OAuth no Google Cloud
-   Console — sem isso o login com Google não funciona no domínio publicado.
-   Enquanto o app estiver em modo "Teste", cadastre também o seu e-mail em
-   **Público-alvo > Usuários de teste**.
 
 ## Convenção de dados
 
