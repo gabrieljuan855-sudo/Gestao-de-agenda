@@ -76,6 +76,12 @@ export default function useFocusTimer({ activeTask, onCycleComplete }) {
   const running = (phase === 'focus' || phase === 'break') && pausedLeft === null
   const remaining = pausedLeft !== null ? pausedLeft : endsAt ? endsAt - now : FOCUS_MS
 
+  // Fração já percorrida da fase atual, para o anel de progresso. Parado ou
+  // concluído o anel fica cheio: é o ciclo inteiro esperando, não zero.
+  const duracaoDaFase = phase === 'break' ? BREAK_MS : FOCUS_MS
+  const progress =
+    phase === 'idle' || phase === 'done' ? 0 : Math.min(1, Math.max(0, 1 - remaining / duracaoDaFase))
+
   // O tempo vem do timestamp de término, não de um contador decrescente: assim
   // bloquear a tela do celular não atrasa o ciclo nem falseia o que é gravado
   // no Calendar.
@@ -212,6 +218,7 @@ export default function useFocusTimer({ activeTask, onCycleComplete }) {
   return {
     phase,
     remaining,
+    progress,
     running,
     paused: pausedLeft !== null,
     immersive,
