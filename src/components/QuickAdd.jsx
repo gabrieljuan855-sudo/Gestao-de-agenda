@@ -37,7 +37,10 @@ export default function QuickAdd({ calendars = [], taskLists = [], onCreateEvent
   // é aplicado aqui e não no useState.
   useEffect(() => {
     if (calendarId) return
-    const preferred = findDefaultCalendar(calendars)
+    // Se nenhuma agenda tem o nome esperado, vale a primeira: o seletor logo
+    // abaixo mostra qual é. Deixar em branco travava o botão de salvar e não
+    // dizia por quê — o compromisso simplesmente não tinha como ser criado.
+    const preferred = findDefaultCalendar(calendars) || calendars[0]
     if (preferred) setCalendarId(preferred.id)
   }, [calendars, calendarId])
 
@@ -46,7 +49,17 @@ export default function QuickAdd({ calendars = [], taskLists = [], onCreateEvent
   // move a outra junto, em vez de pedir a mesma informação duas vezes.
   useEffect(() => {
     const list = findListForPriority(taskLists, priority)
-    if (list) setTasklistId(list.id)
+    if (list) {
+      setTasklistId(list.id)
+      return
+    }
+    // Sem lista com o nome dessa prioridade (listas com nome próprio, ou uma
+    // prioridade que não tem lista): mantém a que já estava escolhida, ou cai
+    // na primeira. O que não pode é ficar vazio — era isso que travava o
+    // botão "Criar tarefa" sem nenhuma explicação na tela.
+    setTasklistId((current) =>
+      current && taskLists.some((l) => l.id === current) ? current : taskLists[0]?.id || ''
+    )
   }, [taskLists, priority])
 
   function applyPreview(parsed) {

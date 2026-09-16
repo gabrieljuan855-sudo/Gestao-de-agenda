@@ -471,6 +471,10 @@ button.danger:hover { background: var(--urgent-bg); }
   z-index: 40;
   box-shadow: 0 10px 30px var(--shadow);
   animation: rail-panel-in 0.22s cubic-bezier(0.2, 0, 0.2, 1);
+  /* Uma busca com muitos resultados esticava o painel para além da tela.
+     O limite valia só no celular; no computador ele crescia sem parar. */
+  max-height: calc(100vh - 140px);
+  overflow-y: auto;
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -52,7 +52,10 @@ function greeting(date = new Date()) {
 }
 
 export default function App() {
-  const [token, setToken] = useState(null)
+  // Booleano, e não o token: o token gira sozinho a cada renovação, e a tela
+  // não tem nada a ver com o valor dele. Guardar a string aqui fazia cada
+  // renovação disparar um recarregamento inteiro da agenda.
+  const [signedIn, setSignedIn] = useState(false)
   const [view, setView] = useState('day')
   const [events, setEvents] = useState([])
   const [tasks, setTasks] = useState([])
@@ -68,15 +71,16 @@ export default function App() {
   const [presence, setPresenceState] = useState(() => loadPresence())
   const [showCalendarSettings, setShowCalendarSettings] = useState(false)
   const [authStatus, setAuthStatus] = useState('loading')
+  const [loadError, setLoadError] = useState(null)
 
   useEffect(() => {
-    initGoogleAuth((newToken) => setToken(newToken), setAuthStatus)
+    initGoogleAuth(setSignedIn, setAuthStatus)
   }, [])
 
   // As agendas e listas mudam raramente: basta buscar uma vez por sessão,
   // para alimentar os seletores de onde gravar.
   useEffect(() => {
-    if (!token) return
+    if (!signedIn) return
     Promise.all([listCalendars(), listTaskLists()])
       .then(([cals, lists]) => {
         const writable = cals.filter((c) => c.accessRole === 'owner' || c.accessRole === 'writer')
@@ -85,11 +89,12 @@ export default function App() {
         setTaskLists(lists)
       })
       .catch((err) => console.error('Não deu para carregar agendas e listas:', err))
-  }, [token])
+  }, [signedIn])
 
   const reload = useCallback(async () => {
-    if (!token) return
+    if (!signedIn) return
     setLoading(true)
+    setLoadError(null)
     try {
       const { timeMin, timeMax } = rangeForView(view, reference)
       const [evts, tks] = await Promise.all([
@@ -99,11 +104,14 @@ export default function App() {
       setEvents(evts)
       setTasks(tks)
     } catch (err) {
+      // Engolir o erro deixava a tela com a agenda vazia, como se o dia não
+      // tivesse nada marcado — indistinguível de estar tudo certo.
       console.error(err)
+      setLoadError(err.message)
     } finally {
       setLoading(false)
     }
-  }, [token, showCompleted, view, reference])
+  }, [signedIn, showCompleted, view, reference])
 
   useEffect(() => {
     reload()
@@ -194,7 +202,7 @@ export default function App() {
     )
   }
 
-  if (!token) {
+  if (!signedIn) {
     return (
       <div className="app-shell">
         <div className="card" style={{ textAlign: 'center' }}>
@@ -346,6 +354,13 @@ export default function App() {
       </div>
 
       <FocusOverlay focus={focus} />
+
+      {loadError && (
+        <div className="form-error" style={{ marginTop: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+          <span>Não deu para carregar a agenda: {loadError}</span>
+          <button onClick={reload} style={{ flexShrink: 0 }}>Tentar de novo</button>
+        </div>
+      )}
 
       {loading && <p className="muted">Atualizando...</p>}
 
