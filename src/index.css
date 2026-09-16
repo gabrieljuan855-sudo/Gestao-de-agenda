@@ -103,6 +103,10 @@
   --dur-short: 150ms;
   --dur-medium: 250ms;
 
+  /* Quanto da janela está coberto por baixo — o teclado do celular. Quem
+     mantém em dia é o useViewportInset; no computador fica sempre zero. */
+  --viewport-inset-bottom: 0px;
+
   /* Nomes antigos, ainda usados em estilo embutido dentro dos componentes.
      Ficam como apelidos para a migração não precisar ser feita de uma vez. */
   --surface-0: var(--surface);
@@ -696,6 +700,8 @@ button.danger:hover { background: var(--urgent-bg); }
   .rail-btn-label { transition: none; }
 }
 
+.rail-scrim { display: none; }
+
 .rail-panel-head {
   display: flex;
   justify-content: space-between;
@@ -945,11 +951,14 @@ button.danger:hover { background: var(--urgent-bg); }
      (que existe só para o hover não empurrar as tarefas) não faz sentido
      aqui: o trilho vira uma barra a largura toda. */
   .rail-wrap { position: static; width: auto; }
+  /* O iOS não encolhe a viewport de layout quando o teclado abre, e
+     position:fixed se guia por ela: sem descontar o teclado, a barra ia parar
+     no meio da tela, por cima do conteúdo. */
   .rail {
     position: fixed;
     left: 0;
     right: 0;
-    bottom: 0;
+    bottom: var(--viewport-inset-bottom);
     top: auto;
     width: auto;
     flex-direction: row;
@@ -969,10 +978,35 @@ button.danger:hover { background: var(--urgent-bg); }
     left: 12px;
     right: 12px;
     top: auto;
-    bottom: 74px;
+    bottom: calc(var(--viewport-inset-bottom) + 74px);
     width: auto;
-    max-height: 70vh;
+    /* Com o teclado aberto sobra pouca altura: o painel encolhe junto em vez
+       de crescer para trás dele. */
+    max-height: calc(100vh - var(--viewport-inset-bottom) - 96px);
     overflow-y: auto;
+    z-index: 40;
+  }
+
+  /* Véu da gaveta: deixa claro que o painel está por cima, e fechá-lo é um
+     toque em qualquer lugar de fora. */
+  .rail-scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 29;
+    background: rgba(0, 0, 0, 0.32);
+  }
+
+  /* Campo abaixo de 16px faz o iOS dar zoom sozinho ao receber o foco — e,
+     desde que os painéis focam o campo ao abrir, isso acontecia em toda
+     abertura. 16px é o limiar exato, não uma preferência de tamanho. */
+  input,
+  textarea,
+  select,
+  .field select,
+  .field input[type="date"],
+  .field input[type="time"] {
+    font-size: var(--title-md);
   }
 
   /* Espaço para a barra fixa não cobrir o fim da página. */

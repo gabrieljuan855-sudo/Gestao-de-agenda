@@ -60,6 +60,11 @@ export default function Rail({ tools }) {
         ))}
       </div>
 
+      {/* No celular o painel é uma gaveta: o véu escurece o que está atrás,
+          para ele ler como algo por cima e não como algo sobreposto por
+          acidente. No computador o véu não aparece. */}
+      {open && <div className="rail-scrim" onClick={close} aria-hidden="true" />}
+
       {open && (
         <div className="rail-panel card">
           <div className="rail-panel-head">
