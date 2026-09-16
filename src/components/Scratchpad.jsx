@@ -41,7 +41,7 @@ export default function Scratchpad() {
     <div>
       <div className="panel-head">
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginLeft: 'auto' }}>
-          <span className="muted" style={{ fontSize: 11 }}>
+          <span className="muted" style={{ fontSize: 'var(--label-sm)' }}>
             {text.length > 0 && `${text.length} caracteres`}
             {savedAt && ` · salvo ${savedAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`}
           </span>
@@ -56,7 +56,7 @@ export default function Scratchpad() {
         rows={12}
       />
 
-      <div className="muted" style={{ fontSize: 11, marginTop: 6 }}>
+      <div className="muted" style={{ fontSize: 'var(--label-sm)', marginTop: 6 }}>
         Fica salvo neste navegador, sem passar por servidor nenhum.
       </div>
     </div>

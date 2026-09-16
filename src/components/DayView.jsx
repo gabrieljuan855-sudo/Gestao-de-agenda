@@ -120,14 +120,14 @@ export default function DayView({
                 cursor: onSelectEvent ? 'pointer' : 'default',
               }}
             >
-              <div className="muted" style={{ fontSize: 11, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              <div className="muted" style={{ fontSize: 'var(--label-sm)', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                 <span>{formatTime(eventStart(event))}–{formatTime(eventEnd(event))}</span>
                 {event.calendarSummary && <span>· {event.calendarSummary}</span>}
                 {info && <span>· informativo</span>}
               </div>
 
               <div style={{
-                fontSize: 14,
+                fontSize: 'var(--body-md)',
                 fontWeight: isFocus ? 500 : 400,
                 textDecoration: recusado ? 'line-through' : 'none',
               }}>
@@ -148,7 +148,7 @@ export default function DayView({
                   >
                     Não vou
                   </button>
-                  {!presenca && <span className="muted" style={{ fontSize: 11 }}>não conta no seu tempo até confirmar</span>}
+                  {!presenca && <span className="muted" style={{ fontSize: 'var(--label-sm)' }}>não conta no seu tempo até confirmar</span>}
                 </div>
               )}
             </div>

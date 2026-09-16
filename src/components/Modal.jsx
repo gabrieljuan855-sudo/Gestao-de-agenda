@@ -16,7 +16,7 @@ export default function Modal({ title, onClose, children }) {
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal-card" onClick={(e) => e.stopPropagation()} role="dialog" aria-label={title}>
         <div className="modal-head">
-          <strong style={{ fontSize: 15 }}>{title}</strong>
+          <strong style={{ fontSize: 'var(--body-lg)' }}>{title}</strong>
           <button onClick={onClose} aria-label="Fechar">✕</button>
         </div>
         {children}

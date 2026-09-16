@@ -88,18 +88,18 @@ export default function SearchPanel({ tasks = [], onSelectEvent, onSelectTask, c
       />
 
       {!trimmed && (
-        <div className="muted" style={{ marginTop: 10, fontSize: 12 }}>
+        <div className="muted" style={{ marginTop: 10, fontSize: 'var(--label-md)' }}>
           Busca nos compromissos dos últimos 6 meses e dos próximos 12, e nas suas tarefas.
         </div>
       )}
       {trimmed && !ready && (
-        <div className="muted" style={{ marginTop: 10, fontSize: 12 }}>Digite ao menos 2 letras.</div>
+        <div className="muted" style={{ marginTop: 10, fontSize: 'var(--label-md)' }}>Digite ao menos 2 letras.</div>
       )}
       {error && <div className="form-error" style={{ marginTop: 10 }}>Não deu para buscar: {error}</div>}
 
       {matchingTasks.length > 0 && (
         <div style={{ marginTop: 10 }}>
-          <div className="muted" style={{ fontSize: 11, marginBottom: 4 }}>Tarefas</div>
+          <div className="muted" style={{ fontSize: 'var(--label-sm)', marginBottom: 4 }}>Tarefas</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {matchingTasks.map((task) => (
               <button
@@ -110,7 +110,7 @@ export default function SearchPanel({ tasks = [], onSelectEvent, onSelectTask, c
                   close()
                 }}
               >
-                <span className={`pill ${task.priority}`} style={{ fontSize: 10, flexShrink: 0 }}>
+                <span className={`pill ${task.priority}`} style={{ fontSize: 'var(--label-xs)', flexShrink: 0 }}>
                   {PRIORITY_LABEL[task.priority]}
                 </span>
                 <span className="search-result-text">{task.title}</span>
@@ -122,7 +122,7 @@ export default function SearchPanel({ tasks = [], onSelectEvent, onSelectTask, c
 
       {events.length > 0 && (
         <div style={{ marginTop: 10 }}>
-          <div className="muted" style={{ fontSize: 11, marginBottom: 4 }}>Compromissos</div>
+          <div className="muted" style={{ fontSize: 'var(--label-sm)', marginBottom: 4 }}>Compromissos</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {events.slice(0, MAX_RESULTS).map((event) => (
               <button
@@ -135,7 +135,7 @@ export default function SearchPanel({ tasks = [], onSelectEvent, onSelectTask, c
               >
                 <span className="week-dot" style={{ background: event.calendarColor || 'var(--accent)', flexShrink: 0 }} />
                 <span className="search-result-text">{event.summary || '(sem título)'}</span>
-                <span className="muted" style={{ fontSize: 11, flexShrink: 0 }}>{whenLabel(event)}</span>
+                <span className="muted" style={{ fontSize: 'var(--label-sm)', flexShrink: 0 }}>{whenLabel(event)}</span>
               </button>
             ))}
           </div>
@@ -143,13 +143,13 @@ export default function SearchPanel({ tasks = [], onSelectEvent, onSelectTask, c
       )}
 
       {events.length > MAX_RESULTS && (
-        <div className="muted" style={{ marginTop: 6, fontSize: 11 }}>
+        <div className="muted" style={{ marginTop: 6, fontSize: 'var(--label-sm)' }}>
           Mostrando {MAX_RESULTS} de {events.length}. Escreva mais para afinar a busca.
         </div>
       )}
 
-      {loading && <div className="muted" style={{ marginTop: 10, fontSize: 12 }}>Buscando...</div>}
-      {nothingFound && <div className="muted" style={{ marginTop: 10, fontSize: 12 }}>Nada encontrado.</div>}
+      {loading && <div className="muted" style={{ marginTop: 10, fontSize: 'var(--label-md)' }}>Buscando...</div>}
+      {nothingFound && <div className="muted" style={{ marginTop: 10, fontSize: 'var(--label-md)' }}>Nada encontrado.</div>}
     </div>
   )
 }

@@ -77,17 +77,17 @@ export default function WeekView({
               style={{ borderColor: isToday(day) ? 'var(--border-strong)' : 'var(--border)' }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 4 }}>
-                <span style={{ fontSize: 12, fontWeight: isToday(day) ? 600 : 500 }}>
+                <span style={{ fontSize: 'var(--label-md)', fontWeight: isToday(day) ? 600 : 500 }}>
                   {day.toLocaleDateString('pt-BR', { weekday: 'short' })} {day.getDate()}
                 </span>
-                <span className={`pill ${level.className}`} style={{ fontSize: 10, padding: '1px 6px' }}>
+                <span className={`pill ${level.className}`} style={{ fontSize: 'var(--label-xs)', padding: '1px 6px' }}>
                   {level.label}
                 </span>
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginTop: 6 }}>
                 {dayEvents.length === 0 && dueToday.length === 0 && (
-                  <span className="muted" style={{ fontSize: 11 }}>—</span>
+                  <span className="muted" style={{ fontSize: 'var(--label-sm)' }}>—</span>
                 )}
                 {shown.map((event) => {
                   const aside = declined(event) || isInfo(event)
@@ -114,7 +114,7 @@ export default function WeekView({
                   )
                 })}
                 {dayEvents.length > MAX_EVENTS && (
-                  <span className="muted" style={{ fontSize: 10 }}>+{dayEvents.length - MAX_EVENTS} mais</span>
+                  <span className="muted" style={{ fontSize: 'var(--label-xs)' }}>+{dayEvents.length - MAX_EVENTS} mais</span>
                 )}
                 {dueToday.map((task) => (
                   <div key={task.id} className="week-event" style={{ opacity: 0.85 }}>
@@ -130,7 +130,7 @@ export default function WeekView({
 
       {weekendItems.length > 0 && (
         <div className="week-weekend">
-          <span className="muted" style={{ fontSize: 12 }}>Fim de semana:</span>
+          <span className="muted" style={{ fontSize: 'var(--label-md)' }}>Fim de semana:</span>
           {weekendItems.map(({ day, event }) => (
             <button
               key={event.id}
