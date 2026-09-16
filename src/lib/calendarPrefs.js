@@ -48,9 +48,17 @@ export function loadPresence() {
   return read(PRESENCE_KEY)
 }
 
-// A confirmação é sua e privada: os eventos da agenda da gestão não têm lista
-// de convidados, então não há RSVP do Google para responder, e alterar o
-// evento mudaria ele para todo mundo que enxerga aquela agenda.
+// Nome da propriedade em que a escolha é gravada no próprio evento, para os
+// compromissos em que não há convite a responder. O Google guarda isso na
+// cópia do evento, então vale em todos os aparelhos.
+export const PRESENCE_PROP = 'gestaoAgendaPresenca'
+
+// Como o RSVP do Google se traduz no vocabulário do app.
+const FROM_RSVP = { accepted: 'vou', declined: 'nao' }
+export const TO_RSVP = { vou: 'accepted', nao: 'declined' }
+
+// Guarda a escolha neste aparelho. Continua existindo como cache e como
+// último recurso: numa agenda só de leitura não há o que gravar no Google.
 export function setPresence(eventId, value) {
   const all = read(PRESENCE_KEY)
   if (value) all[eventId] = value
@@ -59,7 +67,17 @@ export function setPresence(eventId, value) {
   return all
 }
 
-export function presenceOf(event, presence) {
+// A escolha gravada no Google manda, porque é a que vale em todo aparelho; o
+// que está guardado aqui só entra quando o evento não traz nada. Antes só
+// existia a versão local, e por isso marcar "não vou" no celular não aparecia
+// no computador.
+export function presenceOf(event, presence = {}) {
+  const eu = (event.attendees || []).find((a) => a.self)
+  if (eu && FROM_RSVP[eu.responseStatus]) return FROM_RSVP[eu.responseStatus]
+
+  const noEvento = event.extendedProperties?.private?.[PRESENCE_PROP]
+  if (noEvento) return noEvento
+
   return presence[event.id] || null
 }
 
@@ -67,7 +85,7 @@ export function presenceOf(event, presence) {
 // tela para você lembrar que ele existe, mas riscado, e sem ser anunciado como
 // algo que está acontecendo com você.
 export function isDeclined(event, presence) {
-  return presence[event.id] === 'nao'
+  return presenceOf(event, presence) === 'nao'
 }
 
 // Um evento só consome tempo se a agenda dele conta tempo e, quando a agenda
@@ -76,7 +94,7 @@ export function occupiesTime(event, prefs, presence) {
   const pref = prefs[event.calendarId]
   if (!pref) return true
   if (!pref.occupies) return false
-  if (pref.needsPresence) return presence[event.id] === 'vou'
+  if (pref.needsPresence) return presenceOf(event, presence) === 'vou'
   return true
 }
 

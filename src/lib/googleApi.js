@@ -1,6 +1,7 @@
 import { normalizePriority, priorityFromListTitle, DEFAULT_PRIORITY } from './priority.js'
 import { ensureToken, refreshAfterUnauthorized } from './googleAuth.js'
 import { toDateInput, addDays } from './dates.js'
+import { PRESENCE_PROP, TO_RSVP } from './calendarPrefs.js'
 
 const CAL_BASE = 'https://www.googleapis.com/calendar/v3'
 const TASKS_BASE = 'https://www.googleapis.com/tasks/v1'
@@ -177,6 +178,32 @@ export async function updateEvent(event, { title, start, end, description, allDa
       body.end = { dateTime: end.toISOString() }
     }
   }
+
+  return request(
+    `${CAL_BASE}/calendars/${encodeURIComponent(event.calendarId || 'primary')}/events/${event.id}`,
+    { method: 'PATCH', body: JSON.stringify(body) }
+  )
+}
+
+// Grava no Google a escolha de ir ou não a um compromisso, para ela valer em
+// todos os aparelhos em vez de ficar presa no navegador onde foi feita.
+//
+// São dois caminhos porque o Google tem dois lugares para isso:
+// - Você é convidado do evento: responde o RSVP de verdade, que é o que o
+//   organizador espera ver.
+// - Não há convite (o caso da agenda da gestão): grava numa propriedade
+//   privada da cópia do evento. Ela não muda nada do que os outros veem do
+//   compromisso — é o lugar que o Google reserva para marcação de uso próprio.
+export async function setEventPresence(event, value) {
+  const eu = (event.attendees || []).find((a) => a.self)
+  const body = eu
+    ? {
+        attendees: event.attendees.map((a) =>
+          a.self ? { ...a, responseStatus: TO_RSVP[value] || 'needsAction' } : a
+        ),
+      }
+    // null apaga a propriedade, que é como se desmarca a escolha.
+    : { extendedProperties: { private: { [PRESENCE_PROP]: value || null } } }
 
   return request(
     `${CAL_BASE}/calendars/${encodeURIComponent(event.calendarId || 'primary')}/events/${event.id}`,

@@ -5,6 +5,7 @@ import {
   createEvent,
   updateEvent,
   deleteEvent,
+  setEventPresence,
   listAllTasks,
   listCalendars,
   listTaskLists,
@@ -36,6 +37,7 @@ import {
   saveCalendarPrefs,
   loadPresence,
   setPresence,
+  presenceOf,
   occupiesTime,
   isInformational,
   needsPresence,
@@ -72,6 +74,7 @@ export default function App() {
   const [showCalendarSettings, setShowCalendarSettings] = useState(false)
   const [authStatus, setAuthStatus] = useState('loading')
   const [loadError, setLoadError] = useState(null)
+  const [presenceError, setPresenceError] = useState(null)
 
   useEffect(() => {
     initGoogleAuth(setSignedIn, setAuthStatus)
@@ -147,8 +150,20 @@ export default function App() {
   const occupies = (event) => occupiesTime(event, calendarPrefs, presence)
   const declined = (event) => isDeclined(event, presence)
 
-  function handleSetPresence(eventId, value) {
-    setPresenceState(setPresence(eventId, value))
+  async function handleSetPresence(event, value) {
+    // Marca na hora e grava depois: quem tocou no botão não precisa esperar a
+    // rede para ver a própria escolha.
+    setPresenceState(setPresence(event.id, value))
+    setPresenceError(null)
+    try {
+      await setEventPresence(event, value)
+      await reload()
+    } catch (err) {
+      // Agenda só de leitura, ou sem permissão de escrita: a escolha continua
+      // valendo neste aparelho — é preciso dizer que só aqui.
+      console.error('Não deu para gravar a presença no Google:', err)
+      setPresenceError('A escolha foi guardada só neste aparelho: o Google não deixou gravar nesta agenda.')
+    }
   }
 
   function handleCalendarPrefs(next) {
@@ -316,7 +331,7 @@ export default function App() {
               declined={declined}
               isInfo={(e) => isInformational(e, calendarPrefs)}
               asksPresence={(e) => needsPresence(e, calendarPrefs)}
-              presenceOf={(e) => presence[e.id] || null}
+              presenceOf={(e) => presenceOf(e, presence)}
               onSetPresence={handleSetPresence}
             />
           )}
@@ -357,6 +372,13 @@ export default function App() {
       </div>
 
       <FocusOverlay focus={focus} />
+
+      {presenceError && (
+        <div className="form-error" style={{ marginTop: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+          <span>{presenceError}</span>
+          <button onClick={() => setPresenceError(null)} style={{ flexShrink: 0 }}>Entendi</button>
+        </div>
+      )}
 
       {loadError && (
         <div className="form-error" style={{ marginTop: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
