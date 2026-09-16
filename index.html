@@ -16,7 +16,10 @@
     <meta name="theme-color" content="#faf9f7" />
     <meta name="apple-mobile-web-app-title" content="Agenda" />
 
-    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <!-- O script do Google não vem mais fixo aqui: quando o login é feito
+         pelo Worker ele não serve para nada, e era uma requisição a um
+         terceiro em toda abertura. Quem o carrega é o googleAuth.js, só no
+         fluxo antigo. -->
   </head>
   <body>
     <div id="root"></div>

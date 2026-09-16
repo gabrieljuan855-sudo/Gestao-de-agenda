@@ -5,6 +5,8 @@
 // A chave do Gemini fica como segredo do Cloudflare e nunca chega ao
 // navegador — é justamente por isso que essa parte roda no servidor.
 
+import { handleAuth } from './auth.js'
+
 const TOKENINFO_URL = 'https://www.googleapis.com/oauth2/v3/tokeninfo'
 // O Google aposenta modelo sem aviso: o gemini-2.0-flash passou a responder
 // 404 pedindo para trocar. Por isso GEMINI_MODEL existe — dá para corrigir
@@ -174,6 +176,10 @@ async function handleParse(request, env) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url)
+
+    if (url.pathname.startsWith('/api/auth/')) {
+      return handleAuth(request, env, url.pathname)
+    }
 
     if (url.pathname === '/api/parse') {
       if (request.method !== 'POST') return json({ error: 'Use POST.' }, 405)
