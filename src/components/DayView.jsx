@@ -138,13 +138,13 @@ export default function DayView({
                 <div className="presence-row" onClick={(e) => e.stopPropagation()}>
                   <button
                     className={presenca === 'vou' ? 'presence-on' : ''}
-                    onClick={() => onSetPresence(event.id, presenca === 'vou' ? null : 'vou')}
+                    onClick={() => onSetPresence(event, presenca === 'vou' ? null : 'vou')}
                   >
                     Vou
                   </button>
                   <button
                     className={presenca === 'nao' ? 'presence-off' : ''}
-                    onClick={() => onSetPresence(event.id, presenca === 'nao' ? null : 'nao')}
+                    onClick={() => onSetPresence(event, presenca === 'nao' ? null : 'nao')}
                   >
                     Não vou
                   </button>
