@@ -44,6 +44,31 @@ import {
   isDeclined,
 } from './lib/calendarPrefs.js'
 
+// O Worker devolve o motivo de um login que falhou em /?erro_login=<codigo>
+// (ver worker/auth.js). Sem traduzir isso para a tela, o usuário só via a tela
+// de login de novo, sem nenhuma pista do que houve.
+const MOTIVO_LOGIN = {
+  pedido_incompleto: 'O Google não devolveu os dados do login. Tente de novo.',
+  estado_invalido:
+    'O cookie do login não voltou — costuma ser bloqueio de cookies no navegador, ou a tentativa ter demorado mais de 10 minutos. Tente de novo.',
+  sem_refresh_token:
+    'O Google não enviou a credencial de longa duração. Remova o acesso deste app em myaccount.google.com/permissions e entre de novo.',
+  conta_nao_autorizada: 'Essa conta do Google não é a autorizada neste app.',
+  access_denied: 'A permissão foi recusada na tela do Google.',
+  redirect_uri_mismatch:
+    'O endereço de retorno não confere com o cadastrado no Google Cloud (URIs de redirecionamento autorizados).',
+}
+
+// Lê e limpa o motivo da URL: deixá-lo ali faria o aviso reaparecer a cada
+// recarregamento, muito depois de ter deixado de valer.
+function motivoDoLogin() {
+  const params = new URLSearchParams(window.location.search)
+  const codigo = params.get('erro_login')
+  if (!codigo) return null
+  window.history.replaceState({}, '', window.location.pathname)
+  return { codigo, texto: MOTIVO_LOGIN[codigo] || codigo }
+}
+
 // "Bom dia" em vez do nome do app no topo: quem abre isso é uma pessoa só, e
 // ela já sabe onde está.
 function greeting(date = new Date()) {
@@ -74,6 +99,7 @@ export default function App() {
   const [showCalendarSettings, setShowCalendarSettings] = useState(false)
   const [authStatus, setAuthStatus] = useState('loading')
   const [loadError, setLoadError] = useState(null)
+  const [loginError] = useState(motivoDoLogin)
   const [presenceError, setPresenceError] = useState(null)
 
   useEffect(() => {
@@ -227,6 +253,13 @@ export default function App() {
           <Logo size={72} />
           <h2 style={{ marginTop: 12 }}>Gestão de agenda</h2>
           <p className="muted">Conecte sua conta Google para ver sua agenda e tarefas.</p>
+          {loginError && (
+            <div className="form-error" style={{ marginBottom: 12, textAlign: 'left' }}>
+              <strong>O login não foi concluído.</strong>
+              <div style={{ marginTop: 4 }}>{loginError.texto}</div>
+              <div className="muted" style={{ marginTop: 6, fontSize: 11 }}>código: {loginError.codigo}</div>
+            </div>
+          )}
           {/* O botão só libera quando o script do Google está de pé: no celular
               ele chega depois da tela, e clicar antes não abria login nenhum. */}
           <button className="primary" onClick={signIn} disabled={authStatus !== 'ready'}>
