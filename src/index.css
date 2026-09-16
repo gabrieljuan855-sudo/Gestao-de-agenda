@@ -72,6 +72,7 @@
 
   /* ---------- tipografia ---------- */
   --display-md: 44px;
+  --display-sm: 36px;
   --headline-sm: 22px;
   --title-lg: 20px;
   --title-md: 16px;
@@ -278,6 +279,7 @@ textarea:focus-visible,
    Classes para os componentes pararem de escolher tamanho no estilo
    embutido. Eram vinte e nove escolhas soltas espalhadas pelas telas. */
 .t-display { font-size: var(--display-md); }
+.t-display-sm { font-size: var(--display-sm); }
 .t-headline { font-size: var(--headline-sm); }
 .t-title { font-size: var(--title-md); }
 .t-body { font-size: var(--body-md); }
@@ -371,6 +373,69 @@ button.danger:hover { background: var(--urgent-bg); }
   font-size: var(--body-sm);
 }
 
+
+/* ---------- anel de progresso do pomodoro ---------- */
+/* Um componente para os dois tamanhos: o SVG tem viewBox fixo e quem manda no
+   tamanho é o CSS, então o painel e a tela cheia dividem o mesmo desenho. */
+.focus-ring {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 148px;
+  height: 148px;
+  margin: 4px auto 10px;
+}
+
+.focus-ring svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.focus-ring-track {
+  stroke: var(--outline-variant);
+  stroke-width: 6;
+}
+
+.focus-ring-arc {
+  stroke: var(--primary);
+  stroke-width: 6;
+  /* O passo do relógio é de 250ms; a transição acompanha em linear para o
+     arco andar contínuo em vez de pulsar a cada atualização. */
+  transition: stroke-dashoffset var(--dur-short) linear, stroke var(--dur-medium) var(--ease-standard);
+}
+
+/* Cada fase tem a sua cor, então dá para saber em qual se está sem ler nada. */
+.focus-ring--break .focus-ring-arc { stroke: var(--low); }
+.focus-ring--done .focus-ring-arc,
+.focus-ring--idle .focus-ring-arc { stroke: var(--outline); }
+
+/* Pausado: o anel esmaece, para a tela não parecer que o tempo corre. */
+.focus-ring.is-paused .focus-ring-arc { opacity: 0.45; }
+
+.focus-ring-center {
+  position: relative;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* A versão da tela cheia: grande, sobre fundo escuro. */
+.focus-ring--grande {
+  width: clamp(260px, 58vmin, 440px);
+  height: clamp(260px, 58vmin, 440px);
+  margin: 0;
+}
+
+.focus-ring--grande .focus-ring-track { stroke: var(--focus-outline); stroke-width: 3; }
+.focus-ring--grande .focus-ring-arc { stroke: var(--focus-on-surface); stroke-width: 3; }
+.focus-ring--grande.focus-ring--break .focus-ring-arc { stroke: var(--low); }
+.focus-ring--grande.focus-ring--done .focus-ring-arc { stroke: var(--focus-muted); }
+
+@media (prefers-reduced-motion: reduce) {
+  .focus-ring-arc { transition: none; }
+}
+
 .focus-overlay {
   position: fixed;
   inset: 0;
@@ -394,7 +459,7 @@ button.danger:hover { background: var(--urgent-bg); }
 }
 
 .focus-clock {
-  font-size: clamp(64px, 22vw, 180px);
+  font-size: clamp(44px, 13vmin, 92px);
   font-weight: 200;
   font-variant-numeric: tabular-nums;
   line-height: 1;
@@ -659,10 +724,11 @@ button.danger:hover { background: var(--urgent-bg); }
 .panel-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
 
 .focus-panel-clock {
-  font-size: var(--display-md);
+  /* Um degrau abaixo do display grande: a 44px o relógio encostava no anel. */
+  font-size: var(--display-sm);
+  font-weight: 300;
   font-variant-numeric: tabular-nums;
-  text-align: center;
-  margin: 6px 0;
+  line-height: 1;
 }
 
 .focus-panel-task {
