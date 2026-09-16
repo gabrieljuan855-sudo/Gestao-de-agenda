@@ -122,8 +122,16 @@ async function challengeFor(verifier) {
 
 // ---------- configuração ----------
 
+// Segredo colado num painel costuma vir com um espaço ou uma quebra de linha
+// no fim, e o Google responde a isso com "The provided client secret is
+// invalid" — uma mensagem que não diz nada sobre espaço em branco, e que manda
+// a pessoa procurar um caractere que ela não consegue ver. Melhor tolerar.
+function limpo(valor) {
+  return typeof valor === 'string' ? valor.trim() : ''
+}
+
 export function isConfigured(env) {
-  return Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET && env.SESSION_SECRET)
+  return Boolean(limpo(env.GOOGLE_CLIENT_ID) && limpo(env.GOOGLE_CLIENT_SECRET) && limpo(env.SESSION_SECRET))
 }
 
 function redirectUri(request) {
@@ -131,8 +139,9 @@ function redirectUri(request) {
 }
 
 function allowedEmail(env, email) {
-  if (!env.ALLOWED_EMAIL) return true
-  return String(email || '').toLowerCase() === env.ALLOWED_EMAIL.toLowerCase()
+  const permitido = limpo(env.ALLOWED_EMAIL)
+  if (!permitido) return true
+  return String(email || '').trim().toLowerCase() === permitido.toLowerCase()
 }
 
 // ---------- rotas ----------
@@ -141,7 +150,7 @@ async function start(request, env) {
   const state = randomText()
   const verifier = randomText(48)
   const params = new URLSearchParams({
-    client_id: env.GOOGLE_CLIENT_ID,
+    client_id: limpo(env.GOOGLE_CLIENT_ID),
     redirect_uri: redirectUri(request),
     response_type: 'code',
     scope: SCOPES,
@@ -159,7 +168,7 @@ async function start(request, env) {
     status: 302,
     headers: {
       Location: `${AUTH_URL}?${params}`,
-      'Set-Cookie': setCookie(FLOW_COOKIE, await seal(env.SESSION_SECRET, { state, verifier }), FLOW_MAX_AGE),
+      'Set-Cookie': setCookie(FLOW_COOKIE, await seal(limpo(env.SESSION_SECRET), { state, verifier }), FLOW_MAX_AGE),
     },
   })
 }
@@ -203,15 +212,15 @@ async function callback(request, env) {
   const sealed = readCookie(request, FLOW_COOKIE)
   if (!code || !state || !sealed) return backHome(request, 'pedido_incompleto')
 
-  const flow = await unseal(env.SESSION_SECRET, sealed)
+  const flow = await unseal(limpo(env.SESSION_SECRET), sealed)
   if (!flow || flow.state !== state) return backHome(request, 'estado_invalido')
 
   let tokens
   try {
     tokens = await exchange(env, {
       code,
-      client_id: env.GOOGLE_CLIENT_ID,
-      client_secret: env.GOOGLE_CLIENT_SECRET,
+      client_id: limpo(env.GOOGLE_CLIENT_ID),
+      client_secret: limpo(env.GOOGLE_CLIENT_SECRET),
       redirect_uri: redirectUri(request),
       grant_type: 'authorization_code',
       code_verifier: flow.verifier,
@@ -229,7 +238,7 @@ async function callback(request, env) {
     .catch(() => null)
   if (!allowedEmail(env, who?.email)) return backHome(request, 'conta_nao_autorizada')
 
-  const cookie = await seal(env.SESSION_SECRET, {
+  const cookie = await seal(limpo(env.SESSION_SECRET), {
     refresh_token: tokens.refresh_token,
     email: who?.email || null,
   })
@@ -248,7 +257,7 @@ async function token(request, env) {
   const sealed = readCookie(request, SESSION_COOKIE)
   if (!sealed) return json({ error: 'sem_sessao' }, 401)
 
-  const session = await unseal(env.SESSION_SECRET, sealed)
+  const session = await unseal(limpo(env.SESSION_SECRET), sealed)
   if (!session?.refresh_token) {
     return json({ error: 'sessao_invalida' }, 401, { 'Set-Cookie': clearCookie(SESSION_COOKIE) })
   }
@@ -256,8 +265,8 @@ async function token(request, env) {
   let tokens
   try {
     tokens = await exchange(env, {
-      client_id: env.GOOGLE_CLIENT_ID,
-      client_secret: env.GOOGLE_CLIENT_SECRET,
+      client_id: limpo(env.GOOGLE_CLIENT_ID),
+      client_secret: limpo(env.GOOGLE_CLIENT_SECRET),
       refresh_token: session.refresh_token,
       grant_type: 'refresh_token',
     })
@@ -279,7 +288,7 @@ async function token(request, env) {
 
 async function logout(request, env) {
   const sealed = readCookie(request, SESSION_COOKIE)
-  const session = sealed ? await unseal(env.SESSION_SECRET, sealed) : null
+  const session = sealed ? await unseal(limpo(env.SESSION_SECRET), sealed) : null
   if (session?.refresh_token) {
     // Melhor esforço: se a revogação falhar, o cookie sai do mesmo jeito.
     await fetch(REVOKE_URL, {
