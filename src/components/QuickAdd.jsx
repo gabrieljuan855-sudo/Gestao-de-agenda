@@ -136,8 +136,12 @@ export default function QuickAdd({ calendars = [], taskLists = [], onCreateEvent
 
   return (
     <div>
+      {/* O painel só abre no clique, então o campo já chega com o cursor
+          dentro: abrir e ter que clicar de novo era um toque a mais em toda
+          tarefa criada. */}
       <input
         type="text"
+        autoFocus
         placeholder="Ex: Reunião de equipe terça 13h15 por 50min"
         value={text}
         onChange={(e) => handleChange(e.target.value)}

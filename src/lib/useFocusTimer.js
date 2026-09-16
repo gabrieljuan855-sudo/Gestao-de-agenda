@@ -1,6 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { createEvent } from './googleApi.js'
 
+const PHASE_LABEL = {
+  idle: 'Nenhum foco ativo',
+  focus: 'Em foco agora',
+  break: 'Pausa',
+  done: 'Ciclo concluído',
+}
+
 const FOCUS_MS = 25 * 60 * 1000
 const BREAK_MS = 5 * 60 * 1000
 
@@ -32,8 +39,16 @@ function playChime() {
   }
 }
 
+// `'Notification' in window` não basta: a propriedade pode existir e não ser
+// utilizável (extensão de privacidade, navegador embutido de app, contexto sem
+// HTTPS). Aí ler `.permission` lança, e a exceção subia de dentro de start() —
+// derrubando o pomodoro inteiro por causa de um aviso que é só um extra.
+function notificacoesDisponiveis() {
+  return typeof window !== 'undefined' && typeof window.Notification === 'function'
+}
+
 function notify(title, body) {
-  if (!('Notification' in window) || Notification.permission !== 'granted') return
+  if (!notificacoesDisponiveis() || Notification.permission !== 'granted') return
   try {
     new Notification(title, { body })
   } catch {
@@ -45,7 +60,10 @@ function notify(title, body) {
 // agora três lugares precisam dele ao mesmo tempo: o botão do trilho (que
 // mostra o tempo correndo), o painel que abre nele e a tela cheia.
 export default function useFocusTimer({ activeTask, onCycleComplete }) {
-  const [phase, setPhase] = useState('idle') // idle | focus | break
+  // 'done' é a pausa que acabou e ainda não virou nada: o ciclo fica
+  // esperando você decidir entre emendar outro bloco ou encerrar, em vez de
+  // sumir da tela sozinho. Era o que faltava para encadear pomodoros.
+  const [phase, setPhase] = useState('idle') // idle | focus | break | done
   const [endsAt, setEndsAt] = useState(null)
   const [pausedLeft, setPausedLeft] = useState(null)
   const [immersive, setImmersive] = useState(false)
@@ -55,7 +73,7 @@ export default function useFocusTimer({ activeTask, onCycleComplete }) {
   const eventCreatedRef = useRef(false)
   const firingRef = useRef(false)
 
-  const running = phase !== 'idle' && pausedLeft === null
+  const running = (phase === 'focus' || phase === 'break') && pausedLeft === null
   const remaining = pausedLeft !== null ? pausedLeft : endsAt ? endsAt - now : FOCUS_MS
 
   // O tempo vem do timestamp de término, não de um contador decrescente: assim
@@ -81,9 +99,11 @@ export default function useFocusTimer({ activeTask, onCycleComplete }) {
       } else {
         playChime()
         notify('Pausa terminada', 'Pronto para o próximo bloco.')
-        setPhase('idle')
+        // Não volta para 'idle' nem fecha a tela cheia: fica em 'done', com o
+        // próximo bloco a um toque. Fechar sozinho obrigava a caçar o botão do
+        // trilho para emendar.
+        setPhase('done')
         setEndsAt(null)
-        setImmersive(false)
         onCycleComplete && onCycleComplete()
       }
       firingRef.current = false
@@ -120,13 +140,20 @@ export default function useFocusTimer({ activeTask, onCycleComplete }) {
     }
   }
 
+  // Começa um bloco de foco do zero. Serve para o primeiro da sessão e para
+  // todo "de novo": depois da pausa, no lugar dela, ou por cima de um bloco
+  // em andamento.
   function start() {
     if (!activeTask) {
       alert('Escolha uma tarefa na lista antes de iniciar o foco.')
       return
     }
-    if ('Notification' in window && Notification.permission === 'default') {
-      Notification.requestPermission()
+    if (notificacoesDisponiveis() && Notification.permission === 'default') {
+      try {
+        Notification.requestPermission()
+      } catch {
+        // Sem permissão de notificar o ciclo roda igual; o som e a tela bastam.
+      }
     }
     startedAtRef.current = new Date()
     eventCreatedRef.current = false
@@ -135,6 +162,25 @@ export default function useFocusTimer({ activeTask, onCycleComplete }) {
     setEndsAt(Date.now() + FOCUS_MS)
     setPausedLeft(null)
     setImmersive(true)
+  }
+
+  // Recomeça a fase atual do zero, sem trocar de fase: 25 min viram 25 min de
+  // novo, uma pausa interrompida volta a 5. O bloco de foco já registrado na
+  // agenda não é mexido — o tempo gasto foi gasto.
+  function restart() {
+    if (phase === 'idle' || phase === 'done') {
+      start()
+      return
+    }
+    const duracao = phase === 'focus' ? FOCUS_MS : BREAK_MS
+    if (phase === 'focus') {
+      startedAtRef.current = new Date()
+      eventCreatedRef.current = false
+    }
+    firingRef.current = false
+    setEndsAt(Date.now() + duracao)
+    setPausedLeft(null)
+    setNow(Date.now())
   }
 
   function pause() {
@@ -156,10 +202,10 @@ export default function useFocusTimer({ activeTask, onCycleComplete }) {
   }
 
   function skipBreak() {
-    setPhase('idle')
+    setPhase('done')
     setEndsAt(null)
     setPausedLeft(null)
-    setImmersive(false)
+    firingRef.current = false
     onCycleComplete && onCycleComplete()
   }
 
@@ -170,9 +216,10 @@ export default function useFocusTimer({ activeTask, onCycleComplete }) {
     paused: pausedLeft !== null,
     immersive,
     activeTask,
-    phaseLabel: phase === 'idle' ? 'Nenhum foco ativo' : phase === 'focus' ? 'Em foco agora' : 'Pausa',
+    phaseLabel: PHASE_LABEL[phase],
     clock: formatClock(remaining),
     start,
+    restart,
     pause,
     resume,
     stop,
