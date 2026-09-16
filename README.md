@@ -64,6 +64,53 @@ Para ativar:
 Para publicar manualmente em vez disso, basta rodar `npm run build` e subir o
 conteúdo da pasta `dist/` onde preferir.
 
+### 3.5. Login que não expira (recomendado, obrigatório no atalho do celular)
+
+Por padrão o app usa o fluxo implícito do Google: um token de uma hora,
+renovado por um iframe invisível que depende do cookie de sessão do Google no
+navegador. **No atalho da tela de início do iOS esse cookie não existe** — o
+app instalado tem armazenamento separado do Safari —, então a renovação nunca
+funciona e o login volta a cada hora.
+
+Com os segredos abaixo configurados, quem faz o login é o Worker, pelo fluxo de
+authorization code. Ele recebe um *refresh token*, que não depende de cookie
+nenhum do Google, e o guarda cifrado num cookie `HttpOnly` do próprio domínio.
+O app passa a pedir um token novo em `/api/auth/token` — sem iframe, sem script
+de terceiro, e funcionando no atalho.
+
+Sem esses segredos o Worker responde `501` e o app volta sozinho para o fluxo
+antigo, então dá para configurar na ordem que quiser.
+
+**1. No Google Cloud Console**, na credencial OAuth (Aplicativo da Web):
+
+- Em **URIs de redirecionamento autorizados**, adicione exatamente:
+  `https://SEU-WORKER.workers.dev/api/auth/callback`
+- Anote o **ID do cliente** e o **Código secreto do cliente**.
+
+**2. Na Tela de consentimento OAuth**, mude a situação para **Em produção**.
+
+> Enquanto o app estiver **Em teste**, o Google apaga o refresh token depois de
+> **7 dias** — o login voltaria uma vez por semana em vez de uma vez por hora.
+> Publicar resolve. Como os escopos de Calendar e Tasks são sensíveis, a tela
+> de aviso de "app não verificado" continua aparecendo no primeiro login; é só
+> seguir em "Avançado > Acessar". Para uso pessoal isso basta.
+
+**3. No Cloudflare**, no Worker, em **Settings > Variables and Secrets**, crie
+como **Secret** (não como variável de build):
+
+| Nome | Valor |
+| --- | --- |
+| `GOOGLE_CLIENT_ID` | o ID do cliente do passo 1 |
+| `GOOGLE_CLIENT_SECRET` | o código secreto do passo 1 |
+| `SESSION_SECRET` | um texto aleatório longo, inventado por você — é a chave que cifra o cookie |
+| `ALLOWED_EMAIL` | seu e-mail do Google, para nenhuma outra conta conseguir criar sessão |
+
+Trocar o `SESSION_SECRET` invalida as sessões existentes: é assim que se
+desconecta tudo de uma vez, se precisar.
+
+Mantenha o `VITE_GOOGLE_CLIENT_ID` do passo 2 como está: ele é a rede de
+segurança para o caso de o login pelo servidor sair do ar.
+
 ### 4. Publicar no Cloudflare Workers (alternativa)
 
 O `wrangler.toml` na raiz já traz o necessário: ele roda `npm run build` e

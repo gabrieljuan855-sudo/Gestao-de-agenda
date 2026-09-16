@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { initGoogleAuth, signIn, signOut, retryAuth, isConfigured } from './lib/googleAuth.js'
+import { initGoogleAuth, signIn, signOut, retryAuth } from './lib/googleAuth.js'
 import {
   listAllEvents,
   createEvent,
@@ -188,14 +188,17 @@ export default function App() {
     await reload()
   }
 
-  if (!isConfigured()) {
+  // Quem sabe se há login possível é o próprio módulo de autenticação: ele
+  // pergunta ao Worker antes de olhar para a variável do build.
+  if (authStatus === 'unconfigured') {
     return (
       <div className="app-shell">
         <div className="card">
           <h2>Configuração necessária</h2>
           <p className="muted">
-            Defina a variável <code>VITE_GOOGLE_CLIENT_ID</code> (veja o README) para habilitar o
-            login com o Google e usar o Calendar/Tasks como base de dados.
+            Configure o login no Worker (<code>GOOGLE_CLIENT_ID</code>, <code>GOOGLE_CLIENT_SECRET</code> e{' '}
+            <code>SESSION_SECRET</code>) ou defina <code>VITE_GOOGLE_CLIENT_ID</code> no build. O README
+            explica os dois caminhos.
           </p>
         </div>
       </div>

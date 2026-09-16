@@ -16,6 +16,11 @@ const STORAGE_KEY = 'gestao-agenda:token'
 // consentimento continua valendo, e é ele que autoriza tentar entrar em
 // silêncio na próxima abertura. Só o botão "Sair" apaga esta marca.
 const CONNECTED_KEY = 'gestao-agenda:conectado'
+// Qual dos dois logins está em uso. Fica guardado para uma sondagem que falhe
+// por rede não rebaixar o app para o fluxo antigo sem necessidade.
+const MODE_KEY = 'gestao-agenda:modo'
+const SERVER = 'servidor'
+const GIS = 'gis'
 const GIS_SRC = 'https://accounts.google.com/gsi/client'
 // Renova um pouco antes de expirar para nenhuma chamada sair com token vencido.
 const EXPIRY_MARGIN_MS = 60 * 1000
@@ -44,10 +49,11 @@ let pendingRefresh = null
 let resolvePendingRefresh = null
 let renewTimer = null
 let gisReady = null
-let injected = false
+let gisAttempts = 0
 let watching = false
 let lateWatcher = null
 let lastUnauthorizedRefresh = 0
+let mode = null
 
 function persist() {
   try {
@@ -103,6 +109,9 @@ function whenGisReady() {
   if (gisLoaded()) return Promise.resolve(true)
   if (gisReady) return gisReady
 
+  // Agora é este módulo que pede o script, então pede já.
+  injectGis()
+
   gisReady = new Promise((resolve) => {
     let settled = false
     const finish = (ok) => {
@@ -132,8 +141,10 @@ function whenGisReady() {
 }
 
 function injectGis() {
-  if (injected) return
-  injected = true
+  // Duas tentativas: a primeira ao entrar no fluxo antigo, a segunda se em
+  // alguns segundos ela não tiver chegado (rede de celular derruba direto).
+  if (gisAttempts >= 2) return
+  gisAttempts += 1
   const script = document.createElement('script')
   script.src = GIS_SRC
   script.async = true
@@ -190,6 +201,63 @@ function createTokenClient() {
   })
 }
 
+// ---------- login pelo servidor (authorization code) ----------
+
+function readMode() {
+  try {
+    return localStorage.getItem(MODE_KEY)
+  } catch {
+    return null
+  }
+}
+
+function rememberMode(value) {
+  mode = value
+  try {
+    localStorage.setItem(MODE_KEY, value)
+  } catch {
+    // Sem armazenamento: o modo vale só nesta aba, e a sondagem se repete.
+  }
+}
+
+function adoptToken(data) {
+  currentToken = data.access_token
+  expiresAt = Date.now() + Number(data.expires_in || 3600) * 1000
+  persist()
+  scheduleRenewal()
+  onSessionChange(true)
+  return currentToken
+}
+
+// Pede um access token novo ao Worker, que o tira do refresh token guardado
+// no cookie. Não depende de script, de iframe nem do cookie de sessão do
+// Google — é por isso que funciona no atalho da tela de início, onde o fluxo
+// antigo nunca teve como renovar.
+//
+// O desfecho é explícito de propósito: só 'deslogado' derruba a sessão. Um
+// Worker instável ou um celular sem rede não são motivo para mandar ninguém
+// fazer login de novo.
+//   'entrou'          -> token novo já adotado
+//   'deslogado'       -> não há sessão no servidor (cookie ausente ou morto)
+//   'instavel'        -> servidor ou Google com problema passageiro
+//   'nao_configurado' -> este Worker não tem o login pelo servidor
+//   'indefinido'      -> não deu para falar com o servidor
+async function askServerForToken() {
+  let res
+  try {
+    res = await fetch('/api/auth/token', { method: 'POST' })
+  } catch {
+    return 'indefinido'
+  }
+  if (res.status === 501) return 'nao_configurado'
+  if (res.status === 401) return 'deslogado'
+  if (!res.ok) return 'instavel'
+  const data = await res.json().catch(() => null)
+  if (!data?.access_token) return 'instavel'
+  adoptToken(data)
+  return 'entrou'
+}
+
 // ---------- renovação ----------
 
 function settleRefresh(token) {
@@ -226,6 +294,13 @@ function forgetSession({ forgetConsent = false } = {}) {
 }
 
 async function renew() {
+  if (mode === SERVER) {
+    const outcome = await askServerForToken()
+    if (outcome === 'entrou') return currentToken
+    if (outcome === 'deslogado') forgetSession()
+    return null
+  }
+
   const token = await requestSilently()
   if (token) return token
   // Sem rede não dá para saber se a sessão caiu de verdade: manter o que está
@@ -270,7 +345,7 @@ function watchReturn() {
 export async function initGoogleAuth(onSession, onStatus = () => {}) {
   onSessionChange = onSession
   onStatusChange = onStatus
-  if (!CLIENT_ID) return
+  mode = readMode()
 
   // O token guardado vale por si só: restaura a sessão antes de depender do
   // script do Google. Era esta ordem invertida que jogava para a tela de login
@@ -283,6 +358,34 @@ export async function initGoogleAuth(onSession, onStatus = () => {}) {
   }
 
   onStatusChange('loading')
+
+  // O login pelo servidor vem primeiro: quando está configurado, não é
+  // preciso nem carregar o script do Google.
+  const outcome = await askServerForToken()
+  const naServidor =
+    outcome === 'entrou' ||
+    outcome === 'deslogado' ||
+    outcome === 'instavel' ||
+    // Não deu para perguntar (sem rede): se a última vez foi pelo servidor,
+    // continua nele em vez de rebaixar para o fluxo antigo.
+    (outcome === 'indefinido' && readMode() === SERVER)
+
+  if (naServidor) {
+    rememberMode(SERVER)
+    onStatusChange('ready')
+    watchReturn()
+    if (outcome === 'deslogado') forgetSession()
+    else if (currentToken) scheduleRenewal()
+    return
+  }
+
+  if (!CLIENT_ID) {
+    // Nem Worker configurado nem client id no build: não há login possível.
+    onStatusChange('unconfigured')
+    return
+  }
+  rememberMode(GIS)
+
   const ready = await whenGisReady()
   if (!ready) {
     onStatusChange('unavailable')
@@ -300,6 +403,13 @@ export async function initGoogleAuth(onSession, onStatus = () => {}) {
 }
 
 export async function signIn() {
+  if (mode === SERVER) {
+    // Navegação de topo, não pop-up: no atalho da tela de início o pop-up é
+    // bloqueado ou abre fora do app, e o usuário fica olhando para nada.
+    window.location.assign('/api/auth/start')
+    return
+  }
+
   if (!tokenClient) {
     if (await whenGisReady()) becomeReady()
   }
@@ -316,10 +426,9 @@ export async function signIn() {
 export async function retryAuth() {
   gisReady = null
   onStatusChange('loading')
-  // Aqui o usuário está esperando olhando para a tela: pede o script na hora,
-  // em vez de dar mais alguns segundos para o que já falhou.
-  injected = false
-  injectGis()
+  // Aqui o usuário está esperando olhando para a tela: zera as tentativas e
+  // pede de novo, em vez de dar mais alguns segundos para o que já falhou.
+  gisAttempts = 0
   if (await whenGisReady()) return becomeReady()
   onStatusChange('unavailable')
   watchLateGis()
@@ -327,6 +436,14 @@ export async function retryAuth() {
 }
 
 export function signOut() {
+  if (mode === SERVER) {
+    // Some com o cookie e revoga no Google; o erro não importa, a sessão
+    // local vai embora de qualquer jeito.
+    fetch('/api/auth/logout', { method: 'POST' }).catch(() => {})
+    forgetSession({ forgetConsent: true })
+    return
+  }
+
   if (currentToken && window.google) {
     window.google.accounts.oauth2.revoke(currentToken, () => {})
   }
@@ -349,6 +466,7 @@ export async function refreshAfterUnauthorized(staleToken) {
 
   currentToken = null
   expiresAt = 0
+  if (mode === SERVER) return renew()
   if (!tokenClient && (await whenGisReady())) createTokenClient()
   if (!tokenClient) return null
   return renew()
@@ -364,6 +482,8 @@ export async function ensureToken() {
   const valid = getToken()
   if (valid) return valid
 
+  if (mode === SERVER) return renew()
+
   if (!tokenClient) {
     const ready = await whenGisReady()
     if (ready) createTokenClient()
@@ -373,8 +493,4 @@ export async function ensureToken() {
   }
 
   return renew()
-}
-
-export function isConfigured() {
-  return Boolean(CLIENT_ID)
 }
