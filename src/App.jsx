@@ -283,7 +283,9 @@ export default function App() {
       label: 'Pomodoro',
       // O botão mostra o tempo correndo, então dá para acompanhar o ciclo sem
       // abrir nada — era o que o cartão fixo fazia, ocupando a página inteira.
-      icon: focus.phase === 'idle' ? '25m' : focus.clock,
+      // Em 'done' não há contagem correndo: mostra o rótulo de novo, mas segue
+      // destacado, porque há um ciclo esperando decisão.
+      icon: focus.phase === 'idle' || focus.phase === 'done' ? '25m' : focus.clock,
       highlight: focus.phase !== 'idle',
       render: () => <FocusPanel focus={focus} />,
     },
