@@ -1,11 +1,11 @@
 import { normalizePriority, priorityFromListTitle, DEFAULT_PRIORITY } from './priority.js'
-import { ensureToken } from './googleAuth.js'
+import { ensureToken, refreshAfterUnauthorized } from './googleAuth.js'
 import { toDateInput, addDays } from './dates.js'
 
 const CAL_BASE = 'https://www.googleapis.com/calendar/v3'
 const TASKS_BASE = 'https://www.googleapis.com/tasks/v1'
 
-async function request(url, options = {}) {
+async function request(url, options = {}, { retryOnAuth = true } = {}) {
   const token = await ensureToken()
   if (!token) throw new Error('Sem token de acesso. Faça login primeiro.')
 
@@ -17,6 +17,13 @@ async function request(url, options = {}) {
       ...(options.headers || {}),
     },
   })
+
+  // O Google recusou um token que o nosso relógio dava como bom. Renova e
+  // repete uma vez: sem isso a tela ficava vazia, sem erro nenhum à vista.
+  if (res.status === 401 && retryOnAuth) {
+    const fresh = await refreshAfterUnauthorized(token)
+    if (fresh) return request(url, options, { retryOnAuth: false })
+  }
 
   if (!res.ok) {
     const body = await res.text()
@@ -90,6 +97,32 @@ export async function listAllEvents({ timeMin, timeMax }) {
 const SEARCH_PAST_DAYS = 180
 const SEARCH_FUTURE_DAYS = 365
 
+// Uma reunião semanal vira dezenas de instâncias dentro do período buscado,
+// todas com o mesmo título. Numa busca isso é só ruído: guarda uma por série
+// e conta as outras. Como a lista já chega ordenada (futuro crescente, depois
+// passado decrescente), a primeira de cada série é exatamente a que interessa
+// — a próxima que ainda vai acontecer, ou a última que houve.
+function collapseRecurring(events) {
+  const bySeries = new Map()
+  const out = []
+  for (const event of events) {
+    const series = event.recurringEventId
+    if (!series) {
+      out.push(event)
+      continue
+    }
+    const kept = bySeries.get(series)
+    if (kept) {
+      kept.repeatCount += 1
+      continue
+    }
+    const entry = { ...event, repeatCount: 1 }
+    bySeries.set(series, entry)
+    out.push(entry)
+  }
+  return out
+}
+
 export async function searchEvents(query) {
   const trimmed = query.trim()
   if (!trimmed) return []
@@ -105,7 +138,7 @@ export async function searchEvents(query) {
   // Futuro primeiro (o mais próximo no topo, é o que costuma importar agora),
   // e só depois o passado (o mais recente no topo).
   const nowMs = now.getTime()
-  return events.sort((a, b) => {
+  const sorted = events.sort((a, b) => {
     const at = new Date(a.start?.dateTime || a.start?.date).getTime()
     const bt = new Date(b.start?.dateTime || b.start?.date).getTime()
     const aFuture = at >= nowMs
@@ -113,6 +146,7 @@ export async function searchEvents(query) {
     if (aFuture !== bFuture) return aFuture ? -1 : 1
     return aFuture ? at - bt : bt - at
   })
+  return collapseRecurring(sorted)
 }
 
 export async function createEvent({ title, start, end, description, calendarId = 'primary' }) {

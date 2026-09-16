@@ -14,8 +14,15 @@ function normalize(text) {
 function whenLabel(event) {
   const start = eventStart(event)
   const date = start.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })
-  return isAllDay(event) ? date : `${date} · ${formatTime(start)}`
+  const when = isAllDay(event) ? date : `${date} · ${formatTime(start)}`
+  // Série recorrente: a data mostrada é a próxima ocorrência, e o "repete"
+  // avisa que não é um compromisso solto.
+  return event.repeatCount > 1 ? `${when} · repete` : when
 }
+
+// Buscar um nome comum pode casar com dezenas de compromissos. Mostrar todos
+// vira uma lista que não se lê e um painel maior que a tela.
+const MAX_RESULTS = 25
 
 // `search` é injetável (por padrão, a busca de verdade na API do Google) pra
 // dar pra conferir o componente sozinho, sem precisar de login nem rede.
@@ -117,7 +124,7 @@ export default function SearchPanel({ tasks = [], onSelectEvent, onSelectTask, c
         <div style={{ marginTop: 10 }}>
           <div className="muted" style={{ fontSize: 11, marginBottom: 4 }}>Compromissos</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {events.map((event) => (
+            {events.slice(0, MAX_RESULTS).map((event) => (
               <button
                 key={event.id}
                 className="search-result"
@@ -132,6 +139,12 @@ export default function SearchPanel({ tasks = [], onSelectEvent, onSelectTask, c
               </button>
             ))}
           </div>
+        </div>
+      )}
+
+      {events.length > MAX_RESULTS && (
+        <div className="muted" style={{ marginTop: 6, fontSize: 11 }}>
+          Mostrando {MAX_RESULTS} de {events.length}. Escreva mais para afinar a busca.
         </div>
       )}
 

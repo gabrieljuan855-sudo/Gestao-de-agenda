@@ -88,6 +88,31 @@ function normalizeTimes(text) {
 // vem 14h"): ele casa só o dia. Se sobrou um horário solto no texto, ele vale.
 const LEFTOVER_CLOCK = /(?<!\p{L})às\s+([01]?\d|2[0-3]):([0-5]\d)(?!\p{L})/u
 
+// "dia 20" é a forma mais comum de marcar data no Brasil, e o chrono.pt não
+// reconhece: o trecho ficava no título e o compromisso ia parar noutro dia,
+// em silêncio — que é o pior jeito de errar numa agenda. Vira uma data que o
+// chrono lê, do mesmo jeito que normalizeTimes faz com "9h30".
+const DAY_OF_MONTH = /(?<!\p{L})dia\s+(\d{1,2})(?![\d/\-.h:])/giu
+
+function normalizeDayOfMonth(text, reference) {
+  return text.replace(DAY_OF_MONTH, (match, rawDay) => {
+    const day = Number(rawDay)
+    if (day < 1 || day > 31) return match
+    const month = reference.getMonth()
+    // "dia 3" escrito no dia 28 é o mês que vem; e um dia que não cabe no mês
+    // atual (31 em mês de 30) também empurra para o seguinte.
+    const inThisMonth = new Date(reference.getFullYear(), month, day)
+    const useNext = inThisMonth.getMonth() !== month || day < reference.getDate()
+    const target = new Date(reference.getFullYear(), month + (useNext ? 1 : 0), day)
+    // Data que não existe nem no mês seguinte: melhor deixar como o usuário
+    // escreveu do que inventar um dia.
+    if (target.getDate() !== day) return match
+    const dd = String(day).padStart(2, '0')
+    const mm = String(target.getMonth() + 1).padStart(2, '0')
+    return ` ${dd}/${mm}/${target.getFullYear()} `
+  })
+}
+
 function recoverTime(text, day) {
   const match = text.match(LEFTOVER_CLOCK)
   if (!match) return null
@@ -102,7 +127,7 @@ export function parseQuickAdd(rawText, referenceDate = new Date()) {
   const duration = detectDuration(rawText)
   // A duração sai do texto antes da data para "por 2 horas" não virar horário.
   const withoutDuration = duration ? rawText.replace(duration.text, ' ') : rawText
-  const text = normalizeTimes(withoutDuration)
+  const text = normalizeDayOfMonth(normalizeTimes(withoutDuration), referenceDate)
 
   const results = chrono.pt.parse(text, referenceDate, { forwardDate: true })
   const priority = detectPriority(rawText)

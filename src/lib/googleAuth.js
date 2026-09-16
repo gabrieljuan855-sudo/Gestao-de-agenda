@@ -11,6 +11,11 @@ const SCOPES = [
 
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID
 const STORAGE_KEY = 'gestao-agenda:token'
+// Marca durável de que esta conta já autorizou o app. Vive separada do
+// token de propósito: o token é descartável e some a cada falha, mas o
+// consentimento continua valendo, e é ele que autoriza tentar entrar em
+// silêncio na próxima abertura. Só o botão "Sair" apaga esta marca.
+const CONNECTED_KEY = 'gestao-agenda:conectado'
 const GIS_SRC = 'https://accounts.google.com/gsi/client'
 // Renova um pouco antes de expirar para nenhuma chamada sair com token vencido.
 const EXPIRY_MARGIN_MS = 60 * 1000
@@ -21,11 +26,19 @@ const RENEW_MARGIN_MS = 5 * 60 * 1000
 const GIS_TIMEOUT_MS = 12 * 1000
 // Em rede de celular o script cai com frequência; uma reinjeção resolve.
 const GIS_RETRY_MS = 3000
+// Renovar por causa de um 401 só resolve quando o token está mesmo velho.
+// Se o Google recusa um token recém-emitido (acesso revogado), insistir vira
+// laço: renova, tenta, toma 401, renova. Uma tentativa por vez, e não mais
+// que uma a cada 30s.
+const UNAUTHORIZED_COOLDOWN_MS = 30 * 1000
 
 let tokenClient = null
 let currentToken = null
 let expiresAt = 0
-let onTokenChange = () => {}
+// Recebe um booleano (conectado ou não), nunca o token: renovação é assunto
+// interno deste módulo, e avisar a tela a cada uma fazia a agenda recarregar
+// à toa — e, quando o Google recusava o token novo, virava um laço.
+let onSessionChange = () => {}
 let onStatusChange = () => {}
 let pendingRefresh = null
 let resolvePendingRefresh = null
@@ -34,10 +47,12 @@ let gisReady = null
 let injected = false
 let watching = false
 let lateWatcher = null
+let lastUnauthorizedRefresh = 0
 
 function persist() {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ token: currentToken, expiresAt }))
+    localStorage.setItem(CONNECTED_KEY, '1')
   } catch {
     // Sem permissão para guardar: a sessão continua valendo só nesta aba.
   }
@@ -57,15 +72,18 @@ function readPersisted() {
 
 function hadSession() {
   try {
-    return localStorage.getItem(STORAGE_KEY) !== null
+    // O STORAGE_KEY entra aqui só por causa de quem já usava o app antes de
+    // a marca existir: na primeira renovação bem-sucedida ela é gravada.
+    return localStorage.getItem(CONNECTED_KEY) !== null || localStorage.getItem(STORAGE_KEY) !== null
   } catch {
     return false
   }
 }
 
-function clearPersisted() {
+function clearPersisted({ forgetConsent = false } = {}) {
   try {
     localStorage.removeItem(STORAGE_KEY)
+    if (forgetConsent) localStorage.removeItem(CONNECTED_KEY)
   } catch {
     // Nada a fazer: o token em memória já foi descartado.
   }
@@ -158,7 +176,7 @@ function createTokenClient() {
         expiresAt = Date.now() + Number(response.expires_in || 3600) * 1000
         persist()
         scheduleRenewal()
-        onTokenChange(currentToken)
+        onSessionChange(true)
         settleRefresh(currentToken)
       } else {
         settleRefresh(null)
@@ -194,13 +212,17 @@ function requestSilently() {
   return pendingRefresh
 }
 
-function forgetSession() {
+// Descarta o token. Por padrão guarda o consentimento: uma renovação que
+// falhou não é o usuário pedindo para sair, e sem essa distinção bastava um
+// tropeço para o app parar de tentar entrar sozinho em todas as aberturas
+// seguintes — que é o "pede login toda hora".
+function forgetSession({ forgetConsent = false } = {}) {
   clearTimeout(renewTimer)
   renewTimer = null
   currentToken = null
   expiresAt = 0
-  clearPersisted()
-  onTokenChange(null)
+  clearPersisted({ forgetConsent })
+  onSessionChange(false)
 }
 
 async function renew() {
@@ -245,8 +267,8 @@ function watchReturn() {
 
 // ---------- API pública ----------
 
-export async function initGoogleAuth(callback, onStatus = () => {}) {
-  onTokenChange = callback
+export async function initGoogleAuth(onSession, onStatus = () => {}) {
+  onSessionChange = onSession
   onStatusChange = onStatus
   if (!CLIENT_ID) return
 
@@ -257,7 +279,7 @@ export async function initGoogleAuth(callback, onStatus = () => {}) {
   if (stored) {
     currentToken = stored.token
     expiresAt = stored.expiresAt
-    onTokenChange(currentToken)
+    onSessionChange(true)
   }
 
   onStatusChange('loading')
@@ -308,7 +330,28 @@ export function signOut() {
   if (currentToken && window.google) {
     window.google.accounts.oauth2.revoke(currentToken, () => {})
   }
-  forgetSession()
+  forgetSession({ forgetConsent: true })
+}
+
+// O Google recusou um token que o nosso relógio dava como válido (401): pode
+// ser acesso revogado, ou a hora do aparelho fora do lugar. Renova uma vez
+// para a chamada poder ser repetida, em vez de a tela simplesmente ficar
+// vazia sem explicação.
+export async function refreshAfterUnauthorized(staleToken) {
+  // Outra chamada em paralelo já renovou: aproveita o token novo.
+  if (staleToken && currentToken && staleToken !== currentToken) return getToken()
+  // Um recarregamento dispara várias chamadas ao mesmo tempo, então elas tomam
+  // 401 juntas. Quem chega depois espera a renovação que já está em curso, em
+  // vez de abrir outra — ou de esbarrar no intervalo abaixo e desistir à toa.
+  if (pendingRefresh) return pendingRefresh
+  if (Date.now() - lastUnauthorizedRefresh < UNAUTHORIZED_COOLDOWN_MS) return null
+  lastUnauthorizedRefresh = Date.now()
+
+  currentToken = null
+  expiresAt = 0
+  if (!tokenClient && (await whenGisReady())) createTokenClient()
+  if (!tokenClient) return null
+  return renew()
 }
 
 export function getToken() {
