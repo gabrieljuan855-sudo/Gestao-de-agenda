@@ -1,15 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
-import { searchEvents } from '../lib/googleApi.js'
+import { searchEvents, prefetchEventosDaBusca } from '../lib/googleApi.js'
 import { formatTime } from '../lib/dates.js'
 import { eventStart, isAllDay } from '../lib/events.js'
 import { PRIORITY_LABEL } from '../lib/priority.js'
-
-// Sem acento, sem caixa: "dienifer" acha "Dienifer", "audiência" acha
-// "audiencia" e vice-versa. Ninguém para pra lembrar do acento certo achando
-// uma coisa rápida.
-function normalize(text) {
-  return (text || '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase()
-}
+import { semAcento } from '../lib/texto.js'
 
 function whenLabel(event) {
   const start = eventStart(event)
@@ -35,13 +29,22 @@ export default function SearchPanel({ tasks = [], onSelectEvent, onSelectTask, c
   const trimmed = query.trim()
   const ready = trimmed.length >= 2
 
+  // Pede os compromissos do período assim que o painel abre: quando as duas
+  // primeiras letras terminam de ser digitadas, a lista normalmente já chegou,
+  // e a busca sai instantânea.
+  useEffect(() => {
+    prefetchEventosDaBusca().catch(() => {
+      // Falhou agora: a própria busca tenta de novo e aí sim mostra o erro.
+    })
+  }, [])
+
   // As tarefas já estão todas carregadas (Google Tasks não tem busca por
   // texto na API); filtrar na hora é instantâneo e não pede rede nenhuma.
   const matchingTasks = useMemo(() => {
     if (!ready) return []
-    const needle = normalize(trimmed)
+    const needle = semAcento(trimmed)
     return tasks.filter(
-      (t) => t.status !== 'completed' && (normalize(t.title).includes(needle) || normalize(t.notesClean).includes(needle))
+      (t) => t.status !== 'completed' && (semAcento(t.title).includes(needle) || semAcento(t.notesClean).includes(needle))
     )
   }, [tasks, trimmed, ready])
 
@@ -90,6 +93,7 @@ export default function SearchPanel({ tasks = [], onSelectEvent, onSelectTask, c
       {!trimmed && (
         <div className="muted" style={{ marginTop: 10, fontSize: 'var(--label-md)' }}>
           Busca nos compromissos dos últimos 6 meses e dos próximos 12, e nas suas tarefas.
+          Parte da palavra basta, e o acento não importa.
         </div>
       )}
       {trimmed && !ready && (

@@ -2,6 +2,7 @@ import { normalizePriority, priorityFromListTitle, DEFAULT_PRIORITY } from './pr
 import { ensureToken, refreshAfterUnauthorized } from './googleAuth.js'
 import { toDateInput, addDays } from './dates.js'
 import { PRESENCE_PROP, TO_RSVP } from './calendarPrefs.js'
+import { semAcento } from './texto.js'
 
 const CAL_BASE = 'https://www.googleapis.com/calendar/v3'
 const TASKS_BASE = 'https://www.googleapis.com/tasks/v1'
@@ -41,20 +42,36 @@ export async function listCalendars() {
   return (data.items || []).filter((cal) => cal.selected !== false)
 }
 
+// O Google devolve no máximo 250 por vez e indica a próxima página. Sem seguir
+// essa indicação, um período longo perdia eventos em silêncio — o que é pior
+// do que falhar, porque a lista parece completa.
+const MAX_PAGINAS = 12
+
 export async function listEvents({ timeMin, timeMax, calendarId = 'primary', q }) {
-  const params = new URLSearchParams({
-    timeMin: timeMin.toISOString(),
-    timeMax: timeMax.toISOString(),
-    singleEvents: 'true',
-    orderBy: 'startTime',
-    maxResults: '250',
-  })
-  // O Google já sabe procurar (título, descrição, local, convidados); "q" só
-  // entra quando tem texto, pra essa função continuar servindo o carregamento
-  // normal por período.
-  if (q) params.set('q', q)
-  const data = await request(`${CAL_BASE}/calendars/${encodeURIComponent(calendarId)}/events?${params}`)
-  return (data.items || []).map((event) => ({ ...event, calendarId }))
+  const eventos = []
+  let pageToken = null
+
+  for (let pagina = 0; pagina < MAX_PAGINAS; pagina += 1) {
+    const params = new URLSearchParams({
+      timeMin: timeMin.toISOString(),
+      timeMax: timeMax.toISOString(),
+      singleEvents: 'true',
+      orderBy: 'startTime',
+      maxResults: '250',
+    })
+    // O "q" do Google só entra quando tem texto, pra esta função continuar
+    // servindo o carregamento normal por período.
+    if (q) params.set('q', q)
+    if (pageToken) params.set('pageToken', pageToken)
+
+    const data = await request(`${CAL_BASE}/calendars/${encodeURIComponent(calendarId)}/events?${params}`)
+    for (const event of data.items || []) eventos.push({ ...event, calendarId })
+
+    pageToken = data.nextPageToken
+    if (!pageToken) break
+  }
+
+  return eventos
 }
 
 // Junta o resultado de várias agendas, decorando cada evento com a cor e o
@@ -124,22 +141,69 @@ function collapseRecurring(events) {
   return out
 }
 
+// Os compromissos do período de busca ficam guardados aqui entre uma digitação
+// e outra: buscar passa a filtrar essa lista em vez de perguntar ao Google a
+// cada tecla.
+let cacheDaBusca = null
+const VALIDADE_DO_CACHE_MS = 10 * 60 * 1000
+
+function periodoDaBusca() {
+  const agora = new Date()
+  return { timeMin: addDays(agora, -SEARCH_PAST_DAYS), timeMax: addDays(agora, SEARCH_FUTURE_DAYS) }
+}
+
+// Carrega (e guarda) os compromissos do período. Exportada para o painel pedir
+// assim que abre: quando o usuário termina de digitar as duas primeiras
+// letras, a lista normalmente já chegou.
+export async function prefetchEventosDaBusca() {
+  if (cacheDaBusca && Date.now() - cacheDaBusca.carregadoEm < VALIDADE_DO_CACHE_MS) {
+    return cacheDaBusca.eventos
+  }
+  if (cacheDaBusca?.carregando) return cacheDaBusca.carregando
+
+  const carregando = (async () => {
+    const calendars = await listCalendars()
+    const eventos = await listAcrossCalendars(calendars, periodoDaBusca())
+    cacheDaBusca = { carregadoEm: Date.now(), eventos }
+    return eventos
+  })()
+
+  cacheDaBusca = { ...(cacheDaBusca || {}), carregando }
+  try {
+    return await carregando
+  } catch (err) {
+    cacheDaBusca = null
+    throw err
+  }
+}
+
+function combina(event, alvo) {
+  return (
+    semAcento(event.summary).includes(alvo) ||
+    semAcento(event.description).includes(alvo) ||
+    semAcento(event.location).includes(alvo)
+  )
+}
+
+// A busca de compromissos é feita aqui, e não pelo parâmetro "q" do Google.
+//
+// O "q" casa palavra inteira e diferencia acento: "Audiência" achava oito
+// compromissos, "Audiencia" não achava nenhum, e "Audi" também não. Quem
+// procura no celular não quer digitar o acento certo nem a palavra inteira.
+// Filtrando aqui, "audi" acha "Audiência" — e o resultado sai instantâneo,
+// sem uma ida ao Google por tecla digitada.
 export async function searchEvents(query) {
   const trimmed = query.trim()
   if (!trimmed) return []
 
-  const calendars = await listCalendars()
-  const now = new Date()
-  const events = await listAcrossCalendars(calendars, {
-    timeMin: addDays(now, -SEARCH_PAST_DAYS),
-    timeMax: addDays(now, SEARCH_FUTURE_DAYS),
-    q: trimmed,
-  })
+  const eventos = await prefetchEventosDaBusca()
+  const alvo = semAcento(trimmed)
+  const achados = eventos.filter((event) => combina(event, alvo))
 
   // Futuro primeiro (o mais próximo no topo, é o que costuma importar agora),
   // e só depois o passado (o mais recente no topo).
-  const nowMs = now.getTime()
-  const sorted = events.sort((a, b) => {
+  const nowMs = Date.now()
+  const ordenados = achados.sort((a, b) => {
     const at = new Date(a.start?.dateTime || a.start?.date).getTime()
     const bt = new Date(b.start?.dateTime || b.start?.date).getTime()
     const aFuture = at >= nowMs
@@ -147,7 +211,7 @@ export async function searchEvents(query) {
     if (aFuture !== bFuture) return aFuture ? -1 : 1
     return aFuture ? at - bt : bt - at
   })
-  return collapseRecurring(sorted)
+  return collapseRecurring(ordenados)
 }
 
 export async function createEvent({ title, start, end, description, calendarId = 'primary' }) {
