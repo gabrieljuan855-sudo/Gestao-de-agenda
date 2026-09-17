@@ -52,6 +52,12 @@ export default function EventEditor({ event, onSave, onDelete, onClose }) {
   return (
     <>
       <Modal title="Editar compromisso" onClose={onClose}>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault()
+            handleSave()
+          }}
+        >
         <label className="field">
           <span>Título</span>
           <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} />
@@ -96,13 +102,14 @@ export default function EventEditor({ event, onSave, onDelete, onClose }) {
         {error && <div className="form-error">{error}</div>}
 
         <div className="modal-actions">
-          <button onClick={() => setConfirmingDelete(true)} disabled={saving} className="danger">Excluir</button>
+          <button type="button" onClick={() => setConfirmingDelete(true)} disabled={saving} className="danger">Excluir</button>
           <div style={{ flex: 1 }} />
-          <button onClick={onClose} disabled={saving}>Cancelar</button>
-          <button className="primary" onClick={handleSave} disabled={saving || !title.trim()}>
+          <button type="button" onClick={onClose} disabled={saving}>Cancelar</button>
+          <button type="submit" className="primary" disabled={saving || !title.trim()}>
             {saving ? 'Salvando...' : 'Salvar'}
           </button>
         </div>
+        </form>
       </Modal>
 
       {confirmingDelete && (
