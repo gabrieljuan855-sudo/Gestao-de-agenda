@@ -303,8 +303,13 @@ textarea:focus-visible,
 
 .modal-card {
   background: var(--surface-1);
-  border-radius: var(--shape-md);
-  padding: 16px;
+  /* O MD3 reserva o raio grande (28px) para diálogo: é o que faz o cartão
+     "flutuar" de verdade sobre o resto, em vez de parecer só mais um card
+     com véu escuro atrás. A elevação 3 reforça a mesma ideia à luz do dia,
+     quando o véu sozinho já separa menos. */
+  border-radius: var(--shape-xl);
+  box-shadow: var(--elevation-3);
+  padding: 20px;
   width: 100%;
   max-width: 420px;
   max-height: 90vh;
@@ -352,6 +357,29 @@ button.danger:hover { background: var(--urgent-bg); }
   padding: 8px 10px;
   font-size: var(--label-md);
 }
+
+/* Banner: ícone + texto + no máximo uma ação. Ao contrário do .form-error
+   (texto curto colado num campo de formulário), é para um aviso de página
+   inteira que precisa ser notado — erro ao carregar a agenda, presença que
+   não gravou no Google, tarefa que falta escolher antes do foco. */
+.banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  border-radius: var(--shape-md);
+  padding: 10px 12px;
+  margin-top: 12px;
+  font-size: var(--body-sm);
+}
+.banner-icon { line-height: 1.3; flex-shrink: 0; }
+.banner-text { flex: 1; }
+.banner button {
+  background: transparent;
+  border-color: currentColor;
+  color: inherit;
+}
+.banner--error { background: var(--urgent-bg); color: var(--urgent); }
+.banner--warning { background: var(--important-bg); color: var(--important); }
 
 /* Uma linha de resultado de busca: ícone/pílula, título que trunca, e a
    informação de quando (ou nada, pra tarefa) alinhada à direita. */
@@ -568,41 +596,42 @@ button.danger:hover { background: var(--urgent-bg); }
 */
 .workspace {
   display: grid;
-  grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr) 46px;
+  grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr) 48px;
   gap: 16px;
   align-items: start;
 }
 
 /* Semana e mês precisam da largura inteira para o título do evento caber, então
    a agenda ocupa a linha toda e a lista de tarefas desce para baixo dela. */
-.workspace--wide { grid-template-columns: minmax(0, 1fr) 46px; }
+.workspace--wide { grid-template-columns: minmax(0, 1fr) 48px; }
 .workspace--wide .workspace-main { grid-column: 1 / -1; }
 
 /* ---------- trilho lateral ---------- */
 
-/* Largura travada em 46px (o diâmetro do botão fechado), pelo mesmo motivo
+/* Largura travada em 48px (o diâmetro do botão fechado), pelo mesmo motivo
    da coluna acima: sem isso um flex column sem largura própria se ajusta ao
    maior filho, e o filho mais largo muda toda vez que um botão expande. */
-.rail-wrap { position: relative; width: 46px; }
+.rail-wrap { position: relative; width: 48px; }
 
 .rail {
   position: sticky;
   top: 16px;
-  width: 46px;
+  width: 48px;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
   gap: 10px;
 }
 
-/* O botão é uma pílula de 46px que cresce para a esquerda quando abre: o ícone
-   fica ancorado à direita e o rótulo aparece no espaço que surge. */
+/* O botão é uma pílula de 48px que cresce para a esquerda quando abre: o ícone
+   fica ancorado à direita e o rótulo aparece no espaço que surge. 48px é o
+   alvo de toque mínimo do MD3 — os 44px de antes ficavam um pouco aquém. */
 .rail-btn {
   display: flex;
   flex-direction: row-reverse;
   align-items: center;
-  height: 46px;
-  min-height: 46px;
+  height: 48px;
+  min-height: 48px;
   padding: 0;
   border-radius: var(--shape-full);
   border: 1px solid var(--border-strong);
@@ -611,10 +640,19 @@ button.danger:hover { background: var(--urgent-bg); }
   cursor: pointer;
 }
 
+/* Destaque de "Nova tarefa": a ação de criar merece o mesmo peso do FAB do
+   MD3, diferente das ferramentas secundárias (buscar, pomodoro parado,
+   anotações), que ficam neutras até você abrir uma. */
+.rail-btn.is-primary {
+  background: var(--accent-bg);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .rail-btn-icon {
-  width: 44px;
-  flex: 0 0 44px;
-  height: 44px;
+  width: 48px;
+  flex: 0 0 48px;
+  height: 48px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -972,10 +1010,10 @@ button.danger:hover { background: var(--urgent-bg); }
   .workspace,
   .workspace--wide { grid-template-columns: 1fr; }
 
-  /* Sem hover no toque, o trilho vira uma barra fixa embaixo, no alcance do
-     polegar, e o painel sobe dela como uma gaveta. A largura travada de 46px
-     (que existe só para o hover não empurrar as tarefas) não faz sentido
-     aqui: o trilho vira uma barra a largura toda. */
+  /* Sem hover no toque, o trilho vira a barra de navegação inferior do MD3:
+     quatro segmentos do mesmo tamanho, ícone com rótulo sempre visível
+     embaixo, e uma pílula marcando qual está aberto — em vez de círculos
+     soltos e mudos flutuando sobre a barra, que é como ela ficava antes. */
   .rail-wrap { position: static; width: auto; }
   .rail {
     position: fixed;
@@ -985,16 +1023,76 @@ button.danger:hover { background: var(--urgent-bg); }
     top: auto;
     width: auto;
     flex-direction: row;
-    justify-content: center;
-    gap: 14px;
-    padding: 8px 12px calc(8px + env(safe-area-inset-bottom, 0px));
+    align-items: stretch;
+    justify-content: stretch;
+    gap: 0;
+    padding: 8px 4px calc(8px + env(safe-area-inset-bottom, 0px));
     background: var(--surface-1);
-    border-top: 1px solid var(--border);
+    box-shadow: var(--elevation-2);
+    border-top: none;
     z-index: 30;
   }
 
-  /* O rótulo abriria por cima dos vizinhos numa barra horizontal. */
-  .rail-btn-label { display: none; }
+  /* Cada aba ocupa a mesma fração da barra, ícone em cima do rótulo — o
+     layout de "Navigation Bar" do MD3, diferente da pílula horizontal do
+     trilho de mesa (que continua como está fora deste breakpoint). */
+  .rail-btn {
+    flex: 1 1 0;
+    flex-direction: column;
+    height: auto;
+    min-height: 48px;
+    gap: 2px;
+    padding: 4px 2px 2px;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    overflow: visible;
+  }
+
+  /* O ícone mora numa pílula própria, que só ganha cor quando a aba está
+     aberta ou (no caso do pomodoro) rodando — é o indicador de seleção. */
+  .rail-btn-icon {
+    width: auto;
+    height: 32px;
+    min-width: 56px;
+    flex: 0 0 auto;
+    border-radius: var(--shape-full);
+    transition: background var(--dur-short) var(--ease-standard), color var(--dur-short) var(--ease-standard);
+  }
+
+  .rail-btn.is-open .rail-btn-icon,
+  .rail-btn.is-live .rail-btn-icon {
+    background: var(--accent-bg);
+    color: var(--accent);
+  }
+
+  /* O rótulo volta a aparecer — escondê-lo foi o que deixou a barra "pobre",
+     com ícones soltos e sem dizer o que cada um é. */
+  .rail-btn-label {
+    display: block;
+    max-width: none;
+    opacity: 1;
+    padding-left: 0;
+    font-size: var(--label-xs);
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+    transition: color var(--dur-short) var(--ease-standard);
+  }
+
+  .rail-btn.is-open .rail-btn-label,
+  .rail-btn.is-live .rail-btn-label {
+    color: var(--accent);
+    font-weight: 600;
+  }
+
+  /* O destaque de "Nova tarefa" (ver trilho de mesa) não se aplica aqui: com
+     os quatro itens numa barra de abas, dar realce permanente a um deles
+     confundiria com o indicador de "esta é a aba aberta agora". */
+  .rail-btn.is-primary { background: transparent; color: inherit; }
+  .rail-btn.is-primary .rail-btn-icon { background: transparent; color: inherit; }
 
   /* Em tela estreita o painel é tela cheia, não uma gaveta flutuando acima da
      barra. Foi a saída depois de duas tentativas de acertar a posição por

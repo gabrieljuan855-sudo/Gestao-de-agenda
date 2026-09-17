@@ -69,6 +69,10 @@ export default function useFocusTimer({ activeTask, onCycleComplete }) {
   const [pausedLeft, setPausedLeft] = useState(null)
   const [immersive, setImmersive] = useState(false)
   const [now, setNow] = useState(() => Date.now())
+  // Aviso de "escolha uma tarefa primeiro", mostrado onde o painel já está —
+  // em vez do alert() nativo, que quebra o visual do app com a caixa do
+  // sistema operacional para um recado tão pequeno.
+  const [notice, setNotice] = useState(null)
 
   const startedAtRef = useRef(null)
   const eventCreatedRef = useRef(false)
@@ -123,6 +127,13 @@ export default function useFocusTimer({ activeTask, onCycleComplete }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [running, remaining, phase])
 
+  // O aviso de "escolha uma tarefa" perde a razão de existir assim que uma é
+  // escolhida — sem isso ele ficava preso na tela até o usuário reparar e
+  // fechar à mão.
+  useEffect(() => {
+    if (activeTask) setNotice(null)
+  }, [activeTask])
+
   useEffect(() => {
     if (!immersive) return
     const onKey = (e) => e.key === 'Escape' && setImmersive(false)
@@ -161,9 +172,10 @@ export default function useFocusTimer({ activeTask, onCycleComplete }) {
   function start(taskOverride) {
     const task = taskOverride || activeTask
     if (!task) {
-      alert('Escolha uma tarefa na lista antes de iniciar o foco.')
+      setNotice('Escolha uma tarefa na lista antes de iniciar o foco.')
       return
     }
+    setNotice(null)
     if (notificacoesDisponiveis() && Notification.permission === 'default') {
       try {
         Notification.requestPermission()
@@ -233,6 +245,8 @@ export default function useFocusTimer({ activeTask, onCycleComplete }) {
     paused: pausedLeft !== null,
     immersive,
     activeTask,
+    notice,
+    dismissNotice: () => setNotice(null),
     phaseLabel: PHASE_LABEL[phase],
     clock: formatClock(remaining),
     start,

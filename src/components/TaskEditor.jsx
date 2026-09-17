@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import Modal from './Modal.jsx'
+import ConfirmDialog from './ConfirmDialog.jsx'
 import { toDateInput, fromInputs } from '../lib/dates.js'
 import { PRIORITIES, DEFAULT_PRIORITY } from '../lib/priority.js'
 
@@ -11,6 +12,7 @@ export default function TaskEditor({ task, onSave, onDelete, onReopen, onComplet
   const [notes, setNotes] = useState(task.notesClean || '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
 
   const done = task.status === 'completed'
 
@@ -39,64 +41,79 @@ export default function TaskEditor({ task, onSave, onDelete, onReopen, onComplet
   }
 
   function handleDelete() {
-    if (!window.confirm(`Excluir a tarefa "${task.title}"?`)) return
     run(onDelete)
   }
 
   return (
-    <Modal title="Editar tarefa" onClose={onClose}>
-      <label className="field">
-        <span>Título</span>
-        <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} />
-      </label>
+    <>
+      <Modal title="Editar tarefa" onClose={onClose}>
+        <label className="field">
+          <span>Título</span>
+          <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} />
+        </label>
 
-      <label className="field">
-        <span>Prazo</span>
-        <input type="date" value={due} onChange={(e) => setDue(e.target.value)} />
-      </label>
+        <label className="field">
+          <span>Prazo</span>
+          <input type="date" value={due} onChange={(e) => setDue(e.target.value)} />
+        </label>
 
-      <div className="field">
-        <span>Prioridade</span>
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          {PRIORITIES.map((p) => (
-            <button
-              key={p.id}
-              onClick={() => setPriority(p.id)}
-              className={`pill ${p.id}`}
-              style={{
-                border: priority === p.id ? '2px solid var(--text-primary)' : '1px solid transparent',
-                cursor: 'pointer',
-              }}
-            >
-              {p.label}
-            </button>
-          ))}
+        <div className="field">
+          <span>Prioridade</span>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {PRIORITIES.map((p) => (
+              <button
+                key={p.id}
+                onClick={() => setPriority(p.id)}
+                className={`pill ${p.id}`}
+                style={{
+                  border: priority === p.id ? '2px solid var(--text-primary)' : '1px solid transparent',
+                  cursor: 'pointer',
+                }}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
 
-      <label className="field">
-        <span>Anotações</span>
-        <textarea rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} />
-      </label>
+        <label className="field">
+          <span>Anotações</span>
+          <textarea rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} />
+        </label>
 
-      {task.tasklistTitle && (
-        <div className="muted" style={{ fontSize: 'var(--label-sm)' }}>Lista: {task.tasklistTitle}</div>
-      )}
-
-      {error && <div className="form-error">{error}</div>}
-
-      <div className="modal-actions">
-        <button onClick={handleDelete} disabled={saving} className="danger">Excluir</button>
-        <div style={{ flex: 1 }} />
-        {done ? (
-          <button onClick={() => run(onReopen)} disabled={saving}>Reabrir</button>
-        ) : (
-          <button onClick={() => run(onComplete)} disabled={saving}>Concluir</button>
+        {task.tasklistTitle && (
+          <div className="muted" style={{ fontSize: 'var(--label-sm)' }}>Lista: {task.tasklistTitle}</div>
         )}
-        <button className="primary" onClick={handleSave} disabled={saving || !title.trim()}>
-          {saving ? 'Salvando...' : 'Salvar'}
-        </button>
-      </div>
-    </Modal>
+
+        {error && <div className="form-error">{error}</div>}
+
+        <div className="modal-actions">
+          <button onClick={() => setConfirmingDelete(true)} disabled={saving} className="danger">Excluir</button>
+          <div style={{ flex: 1 }} />
+          {done ? (
+            <button onClick={() => run(onReopen)} disabled={saving}>Reabrir</button>
+          ) : (
+            <button onClick={() => run(onComplete)} disabled={saving}>Concluir</button>
+          )}
+          <button className="primary" onClick={handleSave} disabled={saving || !title.trim()}>
+            {saving ? 'Salvando...' : 'Salvar'}
+          </button>
+        </div>
+      </Modal>
+
+      {confirmingDelete && (
+        <ConfirmDialog
+          title="Excluir tarefa"
+          message={`Excluir a tarefa "${task.title}"?`}
+          confirmLabel="Excluir"
+          danger
+          onConfirm={() => {
+            setConfirmingDelete(false)
+            handleDelete()
+          }}
+          onCancel={() => setConfirmingDelete(false)}
+        />
+      )}
+    </>
   )
 }

@@ -50,7 +50,7 @@ export default function Rail({ tools }) {
           <button
             key={tool.id}
             type="button"
-            className={`rail-btn${openId === tool.id ? ' is-open' : ''}${tool.highlight ? ' is-live' : ''}`}
+            className={`rail-btn${openId === tool.id ? ' is-open' : ''}${tool.highlight ? ' is-live' : ''}${tool.primary ? ' is-primary' : ''}`}
             onClick={() => handleClick(tool.id)}
             aria-expanded={openId === tool.id}
             aria-label={tool.label}
