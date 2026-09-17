@@ -30,6 +30,7 @@ import AgentPanel from './components/AgentPanel.jsx'
 import useAgent from './lib/useAgent.js'
 import ShortcutsOverlay from './components/ShortcutsOverlay.jsx'
 import useAtalhos from './lib/useAtalhos.js'
+import { montarEventoDeConclusao } from './lib/taskDoneEvent.js'
 import useBriefing from './lib/useBriefing.js'
 import BriefingCard from './components/BriefingCard.jsx'
 import BriefingOverlay from './components/BriefingOverlay.jsx'
@@ -112,6 +113,7 @@ export default function App() {
   const [loadError, setLoadError] = useState(null)
   const [loginError] = useState(motivoDoLogin)
   const [presenceError, setPresenceError] = useState(null)
+  const [registroError, setRegistroError] = useState(null)
 
   useEffect(() => {
     initGoogleAuth(setSignedIn, setAuthStatus)
@@ -347,8 +349,20 @@ export default function App() {
     switchActiveTask(task, { thenStart: true })
   }
 
+  // Todos os caminhos de concluir (lista, editor, tela de foco, agente) passam
+  // por aqui, então é aqui que o registro na agenda entra — uma vez só.
   async function handleCompleteTask(task) {
     await completeTask(task.id, task.tasklistId)
+    // A tarefa já está concluída: se o registro falhar, isso não pode desfazer
+    // nem travar nada. Mas também não pode sumir calado, senão a pessoa acha
+    // que tem um histórico que não existe.
+    try {
+      await createEvent(montarEventoDeConclusao(task))
+      setRegistroError(null)
+    } catch (err) {
+      console.error('Não foi possível registrar a conclusão na agenda:', err)
+      setRegistroError(`"${task.title}" foi concluída, mas não deu para registrar na agenda.`)
+    }
     if (activeTask?.id === task.id) {
       // Também fecha um ciclo em 'done': concluir a tarefa ali mesmo (pelo
       // atalho da tela de foco) deve voltar para o repouso, não deixar a tela
@@ -651,6 +665,12 @@ export default function App() {
       {presenceError && (
         <Banner tone="warning" actionLabel="Entendi" onAction={() => setPresenceError(null)}>
           {presenceError}
+        </Banner>
+      )}
+
+      {registroError && (
+        <Banner tone="warning" actionLabel="Entendi" onAction={() => setRegistroError(null)}>
+          {registroError}
         </Banner>
       )}
 
