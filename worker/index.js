@@ -1,10 +1,10 @@
 // Worker do Gestão de Agenda.
 //
 // Ele continua servindo o site estático como antes; as rotas próprias usam
-// o Gemini para interpretar texto em português: POST /api/parse (compromisso
-// rápido, só criação), POST /api/command (comandos mais amplos — editar,
-// excluir, confirmar presença), POST /api/briefing (resumo automático do
-// dia/semana) e POST /api/analyze-note (sugestões a partir de uma anotação).
+// o Gemini para interpretar texto em português: POST /api/agent (o agente
+// que conversa e propõe ações sobre a agenda, as tarefas e as anotações),
+// POST /api/briefing (resumo automático do dia/semana) e POST
+// /api/analyze-note (sugestões a partir de uma anotação).
 // A chave do Gemini fica como segredo do Cloudflare e nunca chega ao
 // navegador — é justamente por isso que essa parte roda no servidor.
 
@@ -38,45 +38,6 @@ async function verifyCaller(request, env) {
   if (!info.email) return null
   if (env.ALLOWED_EMAIL && info.email.toLowerCase() !== env.ALLOWED_EMAIL.toLowerCase()) return null
   return info
-}
-
-function buildPrompt({ text, today, weekday, calendars }) {
-  const lista = (calendars || [])
-    .map((c) => `- ${c.name}${c.id ? ` (id: ${c.id})` : ''}`)
-    .join('\n')
-
-  return `Você interpreta anotações rápidas de agenda escritas em português do Brasil e devolve dados estruturados.
-
-Hoje é ${weekday}, ${today}. Fuso: America/Sao_Paulo.
-
-Agendas disponíveis:
-${lista || '- (nenhuma informada)'}
-
-Texto do usuário:
-"""
-${text}
-"""
-
-Responda SOMENTE com JSON, sem comentários, neste formato:
-{
-  "type": "event" | "task",
-  "title": "título limpo, sem a data e sem a hora",
-  "date": "AAAA-MM-DD ou null",
-  "time": "HH:MM em 24h, ou null se não houver hora",
-  "durationMinutes": número de minutos ou null,
-  "calendarId": "id da agenda mais provável, ou null",
-  "priority": "alta" | "media" | "baixa" | null
-}
-
-Regras:
-- "event" quando houver hora marcada; "task" quando for algo a fazer sem hora.
-- Mantenha o título como a pessoa escreveu, inclusive nomes próprios e preposições ("Reunião de equipe" continua "Reunião de equipe").
-- Nunca deixe a data ou a hora dentro do título.
-- Horas em português como "13h15", "14h", "8h30" equivalem a 13:15, 14:00 e 08:30.
-- Um dia da semana sem data significa a próxima ocorrência a partir de hoje.
-- Só sugira calendarId se o texto indicar claramente a qual agenda pertence; na dúvida, null.
-- Se não houver duração explícita, devolva null em durationMinutes.
-- Só devolva priority quando o texto indicar urgência ou prazo; caso contrário, null.`
 }
 
 async function callGemini(env, prompt) {
@@ -113,118 +74,194 @@ async function callGemini(env, prompt) {
 
 const PRIORITIES = new Set(['alta', 'media', 'baixa'])
 
-// A resposta vem de um modelo: nada aqui é confiável por definição, então cada
-// campo é validado antes de virar um compromisso na agenda de alguém.
-export function normalize(parsed) {
-  const type = parsed?.type === 'event' ? 'event' : 'task'
-  const title = typeof parsed?.title === 'string' ? parsed.title.trim().slice(0, 300) : ''
-  const date = /^\d{4}-\d{2}-\d{2}$/.test(parsed?.date || '') ? parsed.date : null
-  const time = /^([01]\d|2[0-3]):[0-5]\d$/.test(parsed?.time || '') ? parsed.time : null
+// Só duas opções — é o mesmo vocabulário binário que o app já usa para
+// presença (ver TO_RSVP em calendarPrefs.js): não existe "talvez" por aqui.
+const PRESENCES = new Set(['vou', 'nao'])
 
-  const minutes = Number(parsed?.durationMinutes)
-  const durationMinutes = Number.isFinite(minutes) && minutes > 0 && minutes <= 12 * 60
-    ? Math.round(minutes)
-    : null
-
-  return {
-    type: time ? 'event' : type,
-    title,
-    date,
-    time,
-    durationMinutes,
-    calendarId: typeof parsed?.calendarId === 'string' ? parsed.calendarId : null,
-    // null quando o texto não indica urgência: o formulário é que escolhe o
-    // padrão, em vez de o app inventar uma prioridade.
-    priority: PRIORITIES.has(parsed?.priority) ? parsed.priority : null,
-  }
-}
-
-const COMMAND_ACTIONS = new Set([
+// O agente: diferente de /api/command, ele enxerga a agenda, as tarefas e as
+// anotações antes de decidir, conversa em várias rodadas e pode propor mais de
+// uma ação de uma vez. Nada do que ele propõe é executado aqui — quem executa
+// é o cliente, e só depois de a pessoa aprovar.
+const AGENT_ACTIONS = new Set([
   'criar_evento',
   'criar_tarefa',
   'editar_evento',
   'excluir_evento',
   'editar_tarefa',
   'excluir_tarefa',
+  'concluir_tarefa',
   'confirmar_presenca',
 ])
-// Só duas opções — é o mesmo vocabulário binário que o app já usa para
-// presença (ver TO_RSVP em calendarPrefs.js): não existe "talvez" por aqui.
-const PRESENCES = new Set(['vou', 'nao'])
 
-function buildCommandPrompt({ text, today, weekday, calendars }) {
-  const lista = (calendars || [])
+// Quais ações mexem num item que já existe (e portanto exigem uma referência
+// válida), e de que tipo tem que ser essa referência. Sem esta tabela, um
+// "editar_tarefa" apontando para uma referência de evento passaria batido e o
+// cliente tentaria gravar um patch de tarefa num compromisso.
+const AGENT_REF_KIND = {
+  editar_evento: 'e',
+  excluir_evento: 'e',
+  confirmar_presenca: 'e',
+  editar_tarefa: 't',
+  excluir_tarefa: 't',
+  concluir_tarefa: 't',
+}
+
+const MAX_ACOES = 8
+
+function linhasDoContexto(context) {
+  const eventos = (context?.eventos || [])
+    .map((e) => `${e.ref}: ${e.titulo} — ${e.dia}${e.hora ? ` ${e.hora}` : ' (dia inteiro)'}${e.agenda ? ` [${e.agenda}]` : ''}`)
+    .join('\n')
+  const tarefas = (context?.tarefas || [])
+    .map((t) => `${t.ref}: ${t.titulo}${t.prazo ? ` — prazo ${t.prazo}` : ''}${t.prioridade ? ` (${t.prioridade})` : ''}`)
+    .join('\n')
+  const notas = (context?.notas || [])
+    .map((n) => `${n.ref}: ${n.titulo}${n.trecho ? ` — ${n.trecho}` : ''}`)
+    .join('\n')
+  return { eventos, tarefas, notas }
+}
+
+function buildAgentPrompt({ text, today, weekday, history, context }) {
+  const { eventos, tarefas, notas } = linhasDoContexto(context)
+  const agendas = (context?.calendars || [])
     .map((c) => `- ${c.name}${c.id ? ` (id: ${c.id})` : ''}`)
     .join('\n')
+  const conversa = (history || [])
+    .map((m) => `${m.role === 'user' ? 'Pessoa' : 'Você'}: ${m.text}`)
+    .join('\n')
 
-  return `Você interpreta comandos rápidos, em português do Brasil, sobre a agenda e as tarefas de alguém que trabalha com atendimento social/administrativo.
+  return `Você é o assistente de agenda de alguém que trabalha com atendimento social/administrativo, em português do Brasil. Você conversa e propõe ações sobre a agenda e as tarefas dela.
 
 Hoje é ${weekday}, ${today}. Fuso: America/Sao_Paulo.
 
 Agendas disponíveis:
-${lista || '- (nenhuma informada)'}
+${agendas || '- (nenhuma informada)'}
 
-Comando do usuário:
+COMPROMISSOS (use a referência à esquerda para se referir a eles):
+${eventos || '(nenhum no período que você enxerga)'}
+
+TAREFAS PENDENTES:
+${tarefas || '(nenhuma)'}
+
+ANOTAÇÕES (somente leitura — você pode usar como contexto, mas não pode criar nem editar anotação):
+${notas || '(nenhuma)'}
+${conversa ? `\nConversa até agora:\n${conversa}\n` : ''}
+Mensagem nova da pessoa:
 """
 ${text}
 """
 
 Responda SOMENTE com JSON, sem comentários, neste formato:
 {
-  "action": "criar_evento" | "criar_tarefa" | "editar_evento" | "excluir_evento" | "editar_tarefa" | "excluir_tarefa" | "confirmar_presenca" | "desconhecido",
-  "searchText": "palavras para achar o compromisso/tarefa que já existe (trecho do título) — só quando a ação não for criar; senão null",
-  "title": "título do evento/tarefa (para criar, ou o novo título ao renomear; senão null)",
-  "date": "AAAA-MM-DD ou null",
-  "time": "HH:MM em 24h, ou null",
-  "durationMinutes": número de minutos ou null,
-  "calendarId": "id da agenda mais provável, ou null",
-  "priority": "alta" | "media" | "baixa" | null,
-  "presence": "vou" | "nao" | null,
-  "summary": "uma frase curta (até 15 palavras) confirmando o que vai acontecer, para mostrar para a pessoa antes de executar"
+  "reply": "sua resposta em conversa, até 60 palavras",
+  "actions": [
+    {
+      "action": "criar_evento" | "criar_tarefa" | "editar_evento" | "excluir_evento" | "editar_tarefa" | "excluir_tarefa" | "concluir_tarefa" | "confirmar_presenca",
+      "ref": "a referência (e1, t2...) do item que já existe — obrigatória em tudo que não for criar; null ao criar",
+      "title": "título (ao criar, ou o novo título ao renomear; senão null)",
+      "date": "AAAA-MM-DD ou null",
+      "time": "HH:MM em 24h, ou null",
+      "durationMinutes": número de minutos ou null,
+      "calendarId": "id da agenda, ou null",
+      "priority": "alta" | "media" | "baixa" | null,
+      "presence": "vou" | "nao" | null,
+      "resumo": "frase curta (até 12 palavras) do que essa ação faz, para a pessoa ler antes de aprovar"
+    }
+  ]
 }
 
 Regras:
-- "criar_evento"/"criar_tarefa": pedir para agendar algo novo — "title" vem preenchido, "searchText" fica null. "criar_evento" quando houver hora marcada; "criar_tarefa" quando for algo a fazer sem hora.
-- "editar_evento"/"editar_tarefa": mudar data, hora, duração ou título de algo que já existe ("mudar a reunião de terça para 15h", "renomear a tarefa X para Y") — "searchText" descreve o que já existe; só os campos que mudam vêm preenchidos, os outros ficam null.
-- "excluir_evento"/"excluir_tarefa": "desmarcar", "cancelar" ou "excluir" algo que já existe — "searchText" descreve o que procurar.
-- "confirmar_presenca": a pessoa diz que vai ou não vai a um compromisso já existente, sem querer excluí-lo ("não vou conseguir ir à reunião de amanhã" é presença "nao", não exclusão) — "searchText" descreve o compromisso, "presence" traz a resposta. Não existe "talvez" — só "vou" ou "nao".
-- "desconhecido": o texto não dá para entender como nenhuma dessas ações — preencha "summary" explicando o que faltou entender.
-- Um dia da semana sem data significa a próxima ocorrência a partir de hoje.
-- Horas em português como "13h15", "14h" equivalem a 13:15, 14:00.
+- "actions" pode vir vazio: quando a pessoa só faz uma pergunta ("o que tenho amanhã?"), responda em "reply" e não proponha ação nenhuma.
+- NUNCA invente uma referência. Só use referências que aparecem nas listas acima. Se a pessoa pedir algo sobre um item que você não encontra nas listas, diga isso em "reply" e não proponha a ação.
+- Você enxerga um período limitado. Se o que ela pede pode estar fora dele, diga isso em vez de chutar.
+- Ao criar, "ref" é null e "title" vem preenchido. "criar_evento" quando houver hora; "criar_tarefa" quando não houver.
+- Ao editar, preencha só os campos que mudam; o resto fica null.
+- "concluir_tarefa": a pessoa diz que já fez algo ("terminei o relatório").
+- "confirmar_presenca": ela diz que vai ou não vai a um compromisso, sem querer excluí-lo. Só "vou" ou "nao".
 - Nunca deixe data ou hora dentro do título.
-- Não invente um searchText genérico demais ("reunião" sozinho) quando o texto não especificar qual compromisso — use o pouco que tiver: a pessoa confirma antes de qualquer mudança acontecer de verdade.`
+- Horas em português como "13h15", "14h" equivalem a 13:15, 14:00.
+- No máximo ${MAX_ACOES} ações. Se o pedido exigir mais, faça as mais importantes e diga em "reply" o que ficou de fora.`
 }
 
-// Nada aqui é confiável por vir de um modelo — cada comando é validado, e a
-// resolução de qual compromisso/tarefa de verdade corresponde ao searchText
-// acontece no cliente, sobre os dados já carregados, nunca aqui.
-export function normalizeCommand(parsed) {
-  const action = COMMAND_ACTIONS.has(parsed?.action) ? parsed.action : 'desconhecido'
-  const title = typeof parsed?.title === 'string' ? parsed.title.trim().slice(0, 300) : ''
-  const searchText = typeof parsed?.searchText === 'string' ? parsed.searchText.trim().slice(0, 200) : ''
-  const date = /^\d{4}-\d{2}-\d{2}$/.test(parsed?.date || '') ? parsed.date : null
-  const time = /^([01]\d|2[0-3]):[0-5]\d$/.test(parsed?.time || '') ? parsed.time : null
+// Nada aqui é confiável por vir de um modelo. Além de validar campo a campo
+// como as outras rotas, esta confere cada referência contra o conjunto que o
+// próprio prompt ofereceu: uma ação apontando para um item que não foi
+// mostrado é descartada, porque executá-la significaria mexer num compromisso
+// que ninguém escolheu.
+export function normalizeAgent(parsed, { refs = [] } = {}) {
+  const conhecidas = new Set(refs)
+  const reply = typeof parsed?.reply === 'string' ? parsed.reply.trim().slice(0, 400) : ''
+  const brutas = Array.isArray(parsed?.actions) ? parsed.actions.slice(0, MAX_ACOES) : []
 
-  const minutes = Number(parsed?.durationMinutes)
-  const durationMinutes = Number.isFinite(minutes) && minutes > 0 && minutes <= 12 * 60
-    ? Math.round(minutes)
-    : null
+  let descartadas = 0
+  const actions = []
+  for (const bruta of brutas) {
+    const action = AGENT_ACTIONS.has(bruta?.action) ? bruta.action : null
+    if (!action) {
+      descartadas++
+      continue
+    }
 
+    const title = typeof bruta?.title === 'string' ? bruta.title.trim().slice(0, 300) : ''
+    const criar = action === 'criar_evento' || action === 'criar_tarefa'
+    if (criar && !title) {
+      descartadas++
+      continue
+    }
+
+    const ref = typeof bruta?.ref === 'string' ? bruta.ref.trim() : ''
+    if (!criar) {
+      const esperado = AGENT_REF_KIND[action]
+      if (!ref || !conhecidas.has(ref) || !ref.startsWith(esperado)) {
+        descartadas++
+        continue
+      }
+    }
+
+    const minutes = Number(bruta?.durationMinutes)
+    const durationMinutes = Number.isFinite(minutes) && minutes > 0 && minutes <= 12 * 60
+      ? Math.round(minutes)
+      : null
+
+    actions.push({
+      // O id é do servidor, nunca do modelo: é por ele que o cliente aprova
+      // uma ação específica, e um id repetido pelo modelo aprovaria a errada.
+      id: `a${actions.length + 1}`,
+      action,
+      ref: criar ? null : ref,
+      title,
+      date: /^\d{4}-\d{2}-\d{2}$/.test(bruta?.date || '') ? bruta.date : null,
+      time: /^([01]\d|2[0-3]):[0-5]\d$/.test(bruta?.time || '') ? bruta.time : null,
+      durationMinutes,
+      calendarId: typeof bruta?.calendarId === 'string' ? bruta.calendarId : null,
+      priority: PRIORITIES.has(bruta?.priority) ? bruta.priority : null,
+      presence: PRESENCES.has(bruta?.presence) ? bruta.presence : null,
+      resumo: typeof bruta?.resumo === 'string' ? bruta.resumo.trim().slice(0, 200) : '',
+    })
+  }
+
+  return { reply, actions, descartadas }
+}
+
+// As referências que o prompt realmente ofereceu. É contra esta lista que
+// normalizeAgent confere o que o modelo devolveu.
+function refsDoContexto(context) {
+  return [
+    ...(context?.eventos || []).map((e) => e?.ref),
+    ...(context?.tarefas || []).map((t) => t?.ref),
+  ].filter((r) => typeof r === 'string' && r)
+}
+
+function recortarContexto(context) {
   return {
-    action,
-    searchText,
-    title,
-    date,
-    time,
-    durationMinutes,
-    calendarId: typeof parsed?.calendarId === 'string' ? parsed.calendarId : null,
-    priority: PRIORITIES.has(parsed?.priority) ? parsed.priority : null,
-    presence: PRESENCES.has(parsed?.presence) ? parsed.presence : null,
-    summary: typeof parsed?.summary === 'string' ? parsed.summary.trim().slice(0, 200) : '',
+    calendars: Array.isArray(context?.calendars) ? context.calendars.slice(0, 20) : [],
+    eventos: Array.isArray(context?.eventos) ? context.eventos.slice(0, 60) : [],
+    tarefas: Array.isArray(context?.tarefas) ? context.tarefas.slice(0, 60) : [],
+    notas: Array.isArray(context?.notas) ? context.notas.slice(0, 30) : [],
   }
 }
 
-async function handleCommand(request, env) {
+async function handleAgent(request, env) {
   const caller = await verifyCaller(request, env)
   if (!caller) return json({ error: 'Não autorizado.' }, 401)
 
@@ -240,20 +277,20 @@ async function handleCommand(request, env) {
   }
 
   const text = typeof body?.text === 'string' ? body.text.trim() : ''
-  if (!text) return json({ error: 'Envie o comando.' }, 400)
+  if (!text) return json({ error: 'Envie a mensagem.' }, 400)
   if (text.length > 500) return json({ error: 'Texto longo demais.' }, 400)
+
+  const context = recortarContexto(body?.context)
+  const history = (Array.isArray(body?.history) ? body.history.slice(-12) : [])
+    .filter((m) => m && typeof m.text === 'string')
+    .map((m) => ({ role: m.role === 'user' ? 'user' : 'assistant', text: m.text.slice(0, 500) }))
 
   try {
     const parsed = await callGemini(
       env,
-      buildCommandPrompt({
-        text,
-        today: body.today,
-        weekday: body.weekday,
-        calendars: Array.isArray(body.calendars) ? body.calendars.slice(0, 20) : [],
-      })
+      buildAgentPrompt({ text, today: body.today, weekday: body.weekday, history, context })
     )
-    return json(normalizeCommand(parsed))
+    return json(normalizeAgent(parsed, { refs: refsDoContexto(context) }))
   } catch (err) {
     return json({ error: err.message }, 502)
   }
@@ -420,43 +457,6 @@ async function handleAnalyzeNote(request, env) {
   }
 }
 
-async function handleParse(request, env) {
-  // Autenticação antes de tudo: quem não é dono não descobre nem como o
-  // Worker está configurado.
-  const caller = await verifyCaller(request, env)
-  if (!caller) return json({ error: 'Não autorizado.' }, 401)
-
-  if (!env.GEMINI_API_KEY) {
-    return json({ error: 'GEMINI_API_KEY não está configurada neste Worker.' }, 503)
-  }
-
-  let body
-  try {
-    body = await request.json()
-  } catch {
-    return json({ error: 'Corpo inválido.' }, 400)
-  }
-
-  const text = typeof body?.text === 'string' ? body.text.trim() : ''
-  if (!text) return json({ error: 'Envie o texto a interpretar.' }, 400)
-  if (text.length > 500) return json({ error: 'Texto longo demais.' }, 400)
-
-  try {
-    const parsed = await callGemini(
-      env,
-      buildPrompt({
-        text,
-        today: body.today,
-        weekday: body.weekday,
-        calendars: Array.isArray(body.calendars) ? body.calendars.slice(0, 20) : [],
-      })
-    )
-    return json(normalize(parsed))
-  } catch (err) {
-    return json({ error: err.message }, 502)
-  }
-}
-
 export default {
   async fetch(request, env) {
     const url = new URL(request.url)
@@ -465,14 +465,9 @@ export default {
       return handleAuth(request, env, url.pathname)
     }
 
-    if (url.pathname === '/api/parse') {
+    if (url.pathname === '/api/agent') {
       if (request.method !== 'POST') return json({ error: 'Use POST.' }, 405)
-      return handleParse(request, env)
-    }
-
-    if (url.pathname === '/api/command') {
-      if (request.method !== 'POST') return json({ error: 'Use POST.' }, 405)
-      return handleCommand(request, env)
+      return handleAgent(request, env)
     }
 
     if (url.pathname === '/api/briefing') {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { normalizeAnalysis, normalizeCommand, normalizeBriefing } from './index.js'
+import { normalizeAnalysis, normalizeBriefing, normalizeAgent } from './index.js'
 
 describe('normalizeAnalysis', () => {
   it('mantém sugestões válidas e usa o texto como título quando a IA não sugere um', () => {
@@ -58,47 +58,6 @@ describe('normalizeAnalysis', () => {
   })
 })
 
-describe('normalizeCommand', () => {
-  it('mantém um comando de exclusão válido', () => {
-    const result = normalizeCommand({
-      action: 'excluir_evento',
-      searchText: 'reunião com a família Silva',
-      summary: 'Excluir a reunião com a família Silva.',
-    })
-    expect(result).toMatchObject({
-      action: 'excluir_evento',
-      searchText: 'reunião com a família Silva',
-      title: '',
-      date: null,
-      time: null,
-      presence: null,
-    })
-  })
-
-  it('mantém um comando de confirmar presença, com a resposta certa', () => {
-    const result = normalizeCommand({
-      action: 'confirmar_presenca',
-      searchText: 'reunião de amanhã',
-      presence: 'nao',
-    })
-    expect(result.action).toBe('confirmar_presenca')
-    expect(result.presence).toBe('nao')
-  })
-
-  it('descarta action e presence fora do vocabulário esperado', () => {
-    const result = normalizeCommand({ action: 'formatar_disco', presence: 'inventado' })
-    expect(result.action).toBe('desconhecido')
-    expect(result.presence).toBeNull()
-  })
-
-  it('nunca quebra com uma resposta vazia ou malformada', () => {
-    const vazio = normalizeCommand({})
-    expect(vazio.action).toBe('desconhecido')
-    expect(vazio.searchText).toBe('')
-    expect(normalizeCommand(null).action).toBe('desconhecido')
-  })
-})
-
 describe('normalizeBriefing', () => {
   it('mantém o texto e corta um texto absurdamente longo', () => {
     expect(normalizeBriefing({ text: 'Dia tranquilo, só duas reuniões.' })).toEqual({
@@ -111,5 +70,95 @@ describe('normalizeBriefing', () => {
     expect(normalizeBriefing({})).toEqual({ text: '' })
     expect(normalizeBriefing(null)).toEqual({ text: '' })
     expect(normalizeBriefing({ text: 123 })).toEqual({ text: '' })
+  })
+})
+
+describe('normalizeAgent', () => {
+  const refs = ['e1', 'e2', 't1']
+
+  it('aceita as ações bem formadas e numera os ids no servidor', () => {
+    const r = normalizeAgent(
+      {
+        reply: 'Posso fazer isso.',
+        actions: [
+          { id: 'inventado', action: 'excluir_evento', ref: 'e1', resumo: 'Cancela a reunião' },
+          { action: 'criar_tarefa', title: 'Ligar para a Ana', date: '2026-03-12', priority: 'alta' },
+        ],
+      },
+      { refs }
+    )
+    expect(r.reply).toBe('Posso fazer isso.')
+    expect(r.actions.map((a) => a.id)).toEqual(['a1', 'a2'])
+    expect(r.actions[0].ref).toBe('e1')
+    expect(r.actions[1].ref).toBe(null)
+    expect(r.actions[1].priority).toBe('alta')
+    expect(r.descartadas).toBe(0)
+  })
+
+  it('descarta ação que aponta para uma referência que nunca foi mostrada', () => {
+    // O caso que importa: o modelo inventou um alvo. Executar isso significaria
+    // mexer num compromisso que ninguém escolheu.
+    const r = normalizeAgent({ actions: [{ action: 'excluir_evento', ref: 'e99' }] }, { refs })
+    expect(r.actions).toEqual([])
+    expect(r.descartadas).toBe(1)
+  })
+
+  it('descarta ação de tarefa que veio com referência de evento', () => {
+    const r = normalizeAgent({ actions: [{ action: 'editar_tarefa', ref: 'e1', title: 'x' }] }, { refs })
+    expect(r.actions).toEqual([])
+    expect(r.descartadas).toBe(1)
+  })
+
+  it('exige referência em tudo que não for criar', () => {
+    const r = normalizeAgent({ actions: [{ action: 'concluir_tarefa' }] }, { refs })
+    expect(r.actions).toEqual([])
+    expect(r.descartadas).toBe(1)
+  })
+
+  it('descarta ação de nome desconhecido e criação sem título', () => {
+    const r = normalizeAgent(
+      { actions: [{ action: 'formatar_disco' }, { action: 'criar_evento', title: '  ' }] },
+      { refs }
+    )
+    expect(r.actions).toEqual([])
+    expect(r.descartadas).toBe(2)
+  })
+
+  it('valida os campos dentro de cada ação, como as outras rotas', () => {
+    const r = normalizeAgent(
+      {
+        actions: [
+          {
+            action: 'editar_evento',
+            ref: 'e2',
+            date: '12/03/2026',
+            time: '25:00',
+            durationMinutes: 20 * 60,
+            priority: 'urgentíssima',
+            presence: 'talvez',
+          },
+        ],
+      },
+      { refs }
+    )
+    const a = r.actions[0]
+    expect(a.date).toBe(null)
+    expect(a.time).toBe(null)
+    expect(a.durationMinutes).toBe(null)
+    expect(a.priority).toBe(null)
+    expect(a.presence).toBe(null)
+  })
+
+  it('corta em 8 ações', () => {
+    const actions = Array.from({ length: 12 }, () => ({ action: 'criar_tarefa', title: 'x' }))
+    expect(normalizeAgent({ actions }, { refs }).actions.length).toBe(8)
+  })
+
+  it('nunca quebra com uma resposta vazia ou malformada', () => {
+    expect(normalizeAgent({}, { refs })).toEqual({ reply: '', actions: [], descartadas: 0 })
+    expect(normalizeAgent(null, { refs })).toEqual({ reply: '', actions: [], descartadas: 0 })
+    expect(normalizeAgent({ actions: 'não é lista' }, { refs }).actions).toEqual([])
+    // Sem contexto nenhum, nada que mexa em item existente pode passar.
+    expect(normalizeAgent({ actions: [{ action: 'excluir_evento', ref: 'e1' }] }).actions).toEqual([])
   })
 })

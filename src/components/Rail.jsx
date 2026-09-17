@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 
 // O trilho: três botões redondos na lateral que viram um painel com a
 // ferramenta inteira. Ganha espaço na tela — adicionar, cronometrar e anotar
@@ -11,9 +11,12 @@ import { useEffect, useRef, useState } from 'react'
 // a cada vez que o cursor cruzava aquele canto da tela. O hover agora só
 // expande o rótulo da pílula (efeito puramente em CSS, via :hover), que é
 // a prévia que ele deveria ser desde o início.
-export default function Rail({ tools }) {
-  const [openId, setOpenId] = useState(null)
+// `openId`/`onOpenChange` vêm de fora (App.jsx) porque os atalhos de teclado
+// também abrem e fecham estes painéis — com o estado preso aqui dentro, não
+// havia como um atalho alcançá-lo.
+export default function Rail({ tools, openId, onOpenChange }) {
   const wrapRef = useRef(null)
+  const setOpenId = onOpenChange
 
   useEffect(() => {
     if (!openId) return
@@ -36,7 +39,7 @@ export default function Rail({ tools }) {
   }
 
   function handleClick(id) {
-    setOpenId((current) => (current === id ? null : id))
+    setOpenId(openId === id ? null : id)
   }
 
   const open = tools.find((t) => t.id === openId) || null
@@ -54,7 +57,10 @@ export default function Rail({ tools }) {
             onClick={() => handleClick(tool.id)}
             aria-expanded={openId === tool.id}
             aria-label={tool.label}
-            title={tool.label}
+            // A tecla no title é metade da descoberta dos atalhos (a outra
+            // metade é a lista no "?"): atalho que ninguém vê é atalho que
+            // ninguém usa.
+            title={tool.tecla ? `${tool.label} (${tool.tecla.toUpperCase()})` : tool.label}
           >
             <span className="rail-btn-label">{tool.label}</span>
             <span className="rail-btn-icon">{tool.icon}</span>
