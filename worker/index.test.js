@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { normalizeAnalysis, normalizeCommand } from './index.js'
+import { normalizeAnalysis, normalizeCommand, normalizeBriefing } from './index.js'
 
 describe('normalizeAnalysis', () => {
   it('mantém sugestões válidas e usa o texto como título quando a IA não sugere um', () => {
@@ -96,5 +96,20 @@ describe('normalizeCommand', () => {
     expect(vazio.action).toBe('desconhecido')
     expect(vazio.searchText).toBe('')
     expect(normalizeCommand(null).action).toBe('desconhecido')
+  })
+})
+
+describe('normalizeBriefing', () => {
+  it('mantém o texto e corta um texto absurdamente longo', () => {
+    expect(normalizeBriefing({ text: 'Dia tranquilo, só duas reuniões.' })).toEqual({
+      text: 'Dia tranquilo, só duas reuniões.',
+    })
+    expect(normalizeBriefing({ text: 'x'.repeat(1000) }).text.length).toBe(600)
+  })
+
+  it('nunca quebra com uma resposta vazia ou malformada', () => {
+    expect(normalizeBriefing({})).toEqual({ text: '' })
+    expect(normalizeBriefing(null)).toEqual({ text: '' })
+    expect(normalizeBriefing({ text: 123 })).toEqual({ text: '' })
   })
 })
