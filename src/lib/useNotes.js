@@ -123,12 +123,9 @@ export default function useNotes({ signedIn }) {
   // mesclagem saber o que sumiu de propósito. Um ref basta, e evita um
   // re-render por exclusão.
   const deletedRef = useRef(readCache().deleted)
-  // Abas abertas: as anotações que a pessoa já tocou nesta sessão, na ordem
-  // em que foram abertas. `selectedId` é qual delas está em primeiro plano —
-  // pode ser `null` com abas abertas (voltou para a lista sem fechar nada).
-  // Não persiste entre sessões, do mesmo jeito que `selectedId` nunca
-  // persistiu: reabrir o app começa da lista, com a tela limpa.
-  const [openIds, setOpenIds] = useState([])
+  // Toda anotação é uma aba, sempre — não há mais lista separada. `selectedId`
+  // é qual delas está em primeiro plano. Não persiste entre sessões: reabrir
+  // o app volta a escolher (ver o efeito abaixo).
   const [selectedId, setSelectedId] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -152,6 +149,16 @@ export default function useNotes({ signedIn }) {
   useEffect(() => {
     selectedIdRef.current = selectedId
   }, [selectedId])
+
+  // Sem lista para "voltar", sempre precisa haver uma aba em primeiro plano
+  // quando existe pelo menos uma anotação — inclusive assim que o Drive traz
+  // notas que ainda não existiam no cache local. Se a seleção atual não
+  // aponta para nada (começo de sessão, ou a nota selecionada sumiu por outro
+  // caminho), a primeira da lista assume.
+  useEffect(() => {
+    if (selectedId && notes.some((n) => n.id === selectedId)) return
+    if (notes.length > 0) setSelectedId(notes[0].id)
+  }, [notes, selectedId])
 
   // Carrega do Drive uma vez por sessão, assim que loga. Enquanto isso não
   // chega, o que já estava no cache local continua na tela.
@@ -310,34 +317,10 @@ export default function useNotes({ signedIn }) {
     setError(descreverFalha(err, 'A última alteração ficou salva só neste aparelho'))
   }
 
-  // Abrir uma anotação é sempre abrir (ou focar) a aba dela — nunca duas
-  // abas para a mesma anotação.
-  function openNote(id) {
-    setOpenIds((current) => (current.includes(id) ? current : [...current, id]))
-    setSelectedId(id)
-  }
-
-  // Fecha só a aba: a anotação continua existindo, só sai da barra. Se era a
-  // aba em primeiro plano, quem assume é a vizinha (a anterior, ou a próxima
-  // se era a primeira) — nunca joga de volta para a lista sozinho, que seria
-  // perder o lugar à toa por ter fechado uma aba ao lado.
-  function closeTab(id) {
-    setOpenIds((current) => {
-      const i = current.indexOf(id)
-      const restante = current.filter((x) => x !== id)
-      setSelectedId((atual) => {
-        if (atual !== id) return atual
-        if (restante.length === 0) return null
-        return restante[Math.min(i, restante.length - 1)]
-      })
-      return restante
-    })
-  }
-
   function createNote() {
     const note = newNote()
     persist([note, ...notes])
-    openNote(note.id)
+    setSelectedId(note.id)
     return note
   }
 
@@ -354,13 +337,24 @@ export default function useNotes({ signedIn }) {
   // A exclusão precisa deixar rastro: é só por ele que o outro aparelho
   // distingue "esta anotação foi apagada" de "esta anotação ainda não subiu"
   // — sem isso, a mesclagem devolveria para a tela tudo que foi apagado.
+  //
+  // Fechar a aba É excluir agora (a confirmação mora no componente): se era a
+  // aba em primeiro plano, quem assume é a vizinha (a anterior, ou a próxima
+  // se era a primeira) — nunca aparece uma tela vazia por ter fechado a aba
+  // ativa enquanto sobram outras.
   function deleteNote(id) {
     deletedRef.current = mesclarApagadas(
       [...deletedRef.current.filter((d) => d.id !== id), { id, at: new Date().toISOString() }],
       []
     )
-    persist(notes.filter((n) => n.id !== id))
-    closeTab(id)
+    const i = notes.findIndex((n) => n.id === id)
+    const restante = notes.filter((n) => n.id !== id)
+    persist(restante)
+    setSelectedId((atual) => {
+      if (atual !== id) return atual
+      if (restante.length === 0) return null
+      return restante[Math.min(i, restante.length - 1)].id
+    })
   }
 
   // Chamada com o texto atual em mãos (não lido de volta do estado), porque
@@ -393,11 +387,8 @@ export default function useNotes({ signedIn }) {
 
   return {
     notes,
-    openIds,
     selectedId,
     setSelectedId,
-    openNote,
-    closeTab,
     loading,
     syncStatus,
     error,
