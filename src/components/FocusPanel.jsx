@@ -2,7 +2,7 @@ import FocusRing from './FocusRing.jsx'
 
 // O pomodoro como ele aparece dentro do painel do trilho: compacto, com o
 // relógio grande e os controles da fase atual. A tela cheia é outro componente.
-export default function FocusPanel({ focus }) {
+export default function FocusPanel({ focus, onCompleteTask }) {
   const { phase, clock, paused, phaseLabel, activeTask, progress } = focus
 
   return (
@@ -22,9 +22,16 @@ export default function FocusPanel({ focus }) {
 
       <div className="panel-actions">
         {(phase === 'idle' || phase === 'done') && (
-          <button className="primary" onClick={focus.start} disabled={!activeTask}>
+          <button className="primary" onClick={() => focus.start()} disabled={!activeTask}>
             {phase === 'done' ? 'Novo bloco de 25 min' : 'Iniciar 25 min'}
           </button>
+        )}
+
+        {/* Atalho, não automatismo: o pomodoro continua sem concluir tarefa
+            sozinho. A tela já está olhando para a tarefa quando o ciclo
+            termina, então oferece o botão em vez de fazer você caçá-lo. */}
+        {phase === 'done' && activeTask && onCompleteTask && (
+          <button onClick={() => onCompleteTask(activeTask)}>Marcar tarefa como concluída</button>
         )}
 
         {(phase === 'focus' || phase === 'break') && (

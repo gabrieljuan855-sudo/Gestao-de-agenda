@@ -1,4 +1,6 @@
 import { PRIORITY_LABEL, PRIORITY_ORDER, priorityFromListTitle } from '../lib/priority.js'
+import { focusStatsFor } from '../lib/focusStats.js'
+import { formatDuration } from '../lib/dates.js'
 
 function daysSince(dateString) {
   if (!dateString) return null
@@ -7,7 +9,17 @@ function daysSince(dateString) {
   return Math.floor(diff / (1000 * 60 * 60 * 24))
 }
 
-export default function Backlog({ tasks, activeTaskId, onSelect, onComplete, onEdit, showCompleted, onToggleShowCompleted }) {
+export default function Backlog({
+  tasks,
+  activeTaskId,
+  focusingTaskId,
+  onSelect,
+  onFocus,
+  onComplete,
+  onEdit,
+  showCompleted,
+  onToggleShowCompleted,
+}) {
   const pending = tasks.filter((t) => t.status !== 'completed')
   const completed = tasks.filter((t) => t.status === 'completed')
   const sorted = [...pending].sort(
@@ -17,6 +29,8 @@ export default function Backlog({ tasks, activeTaskId, onSelect, onComplete, onE
   function renderTask(task, { done = false } = {}) {
     const age = daysSince(task.updated)
     const isActive = task.id === activeTaskId
+    const emFoco = task.id === focusingTaskId
+    const stats = !done ? focusStatsFor(task.id) : null
     return (
       <div
         key={task.id}
@@ -43,12 +57,25 @@ export default function Backlog({ tasks, activeTaskId, onSelect, onComplete, onE
           {task.tasklistTitle && !priorityFromListTitle(task.tasklistTitle) && (
             <span className="muted" style={{ marginLeft: 8, fontSize: 'var(--label-sm)' }}>{task.tasklistTitle}</span>
           )}
+          {emFoco && <span className="muted" style={{ marginLeft: 8 }}>🍅 em foco agora</span>}
+          {/* Contador de blocos já feitos nesta tarefa, guardado neste
+              aparelho — é só um progresso visível, não um registro oficial. */}
+          {stats && stats.sessions > 0 && (
+            <span className="muted" style={{ marginLeft: 8, fontSize: 'var(--label-sm)' }}>
+              🍅×{stats.sessions} · {formatDuration(stats.minutes)}
+            </span>
+          )}
           {!done && age !== null && age >= 3 && (
             <span className="muted" style={{ marginLeft: 8 }}>parado há {age} dias</span>
           )}
         </div>
         <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
           <button onClick={(e) => { e.stopPropagation(); onEdit(task) }}>Editar</button>
+          {!done && onFocus && (
+            <button onClick={(e) => { e.stopPropagation(); onFocus(task) }}>
+              {emFoco ? 'Ver foco' : 'Focar'}
+            </button>
+          )}
           {!done && <button onClick={(e) => { e.stopPropagation(); onComplete(task) }}>Concluir</button>}
         </div>
       </div>
