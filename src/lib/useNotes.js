@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { loadNotes, saveNotes, faltaPermissaoDoDrive } from './driveNotes.js'
+import { permissaoDoDriveConcedida } from './googleAuth.js'
 import { mesclarAnotacoes, mesclarApagadas, precisaSubir } from './notesMerge.js'
 import { analyzeNoteWithAI } from './aiAnalyzeNote.js'
 
@@ -7,7 +8,17 @@ import { analyzeNoteWithAI } from './aiAnalyzeNote.js'
 // "não deu agora" manda a pessoa esperar por algo que nunca vai acontecer
 // sozinho. O caminho de saída precisa estar na própria mensagem.
 const MSG_SEM_PERMISSAO =
-  'Esta sessão foi aberta antes da sincronização existir, e por isso o Drive recusa as anotações. Toque em "Sair" e entre de novo para autorizar — o que está neste aparelho não se perde.'
+  'Esta sessão não tem a permissão do Drive (ela chegou depois, e a autorização antiga não a inclui). Toque em "Sair" e entre de novo, marcando a permissão do Google Drive na tela do Google — o que está neste aparelho não se perde.'
+
+// Falhar sem dizer por quê foi o que fez este problema demorar a ser
+// entendido: a tela dizia "não deu agora" tanto para rede instável quanto
+// para uma permissão que nunca ia chegar sozinha. O motivo real entra na
+// mensagem, curto, para o próximo diagnóstico não depender de adivinhação.
+function descreverFalha(err, prefixo) {
+  if (faltaPermissaoDoDrive(err) || permissaoDoDriveConcedida() === false) return MSG_SEM_PERMISSAO
+  const status = err?.status ? ` (erro ${err.status})` : ''
+  return `${prefixo} — não deu para sincronizar agora${status}.`
+}
 
 // Cache local: o que garante que a tela mostra algo na hora, antes do Drive
 // responder, e que continua mostrando algo se a rede cair no meio do
@@ -115,6 +126,13 @@ export default function useNotes({ signedIn }) {
   useEffect(() => {
     if (!signedIn || loadedOnce.current) return
     loadedOnce.current = true
+    // O Google já disse que esta sessão não tem a permissão do Drive: bater
+    // nele para tomar 403 só atrasa o aviso que a pessoa precisa ler. As
+    // anotações do aparelho continuam na tela normalmente.
+    if (permissaoDoDriveConcedida() === false) {
+      setError(MSG_SEM_PERMISSAO)
+      return
+    }
     setLoading(true)
     loadNotes()
       .then((doDrive) => {
@@ -145,11 +163,7 @@ export default function useNotes({ signedIn }) {
       })
       .catch((err) => {
         console.error('Não foi possível carregar as anotações do Drive:', err)
-        setError(
-          faltaPermissaoDoDrive(err)
-            ? MSG_SEM_PERMISSAO
-            : 'Não deu para buscar suas anotações mais recentes — mostrando a última versão salva neste aparelho.'
-        )
+        setError(descreverFalha(err, 'Mostrando a última versão salva neste aparelho'))
       })
       .finally(() => {
         setLoading(false)
@@ -225,11 +239,7 @@ export default function useNotes({ signedIn }) {
 
   function relatarFalhaAoSincronizar(err) {
     console.error('Não foi possível sincronizar as anotações com o Drive:', err)
-    setError(
-      faltaPermissaoDoDrive(err)
-        ? MSG_SEM_PERMISSAO
-        : 'A última alteração ficou salva só neste aparelho — não deu para sincronizar agora.'
-    )
+    setError(descreverFalha(err, 'A última alteração ficou salva só neste aparelho'))
   }
 
   function createNote() {

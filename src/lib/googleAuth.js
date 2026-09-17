@@ -58,10 +58,13 @@ let watching = false
 let lateWatcher = null
 let lastUnauthorizedRefresh = 0
 let mode = null
+// Os escopos que o Google respondeu ter concedido nesta sessão — não os que
+// foram pedidos. Ver permissaoDoDriveConcedida().
+let grantedScopes = ''
 
 function persist() {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ token: currentToken, expiresAt }))
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ token: currentToken, expiresAt, scope: grantedScopes }))
     localStorage.setItem(CONNECTED_KEY, '1')
   } catch {
     // Sem permissão para guardar: a sessão continua valendo só nesta aba.
@@ -78,6 +81,28 @@ function readPersisted() {
   } catch {
     return null
   }
+}
+
+// O escopo do Drive é o único que pode faltar numa sessão que, no resto,
+// funciona: ele chegou depois, e tanto a tela de consentimento (que tem
+// caixinha por permissão) quanto um refresh token antigo (que congela os
+// escopos do dia em que foi autorizado) podem deixá-lo de fora. Saber disso
+// de antemão é o que permite dizer "entre de novo" em vez de deixar a
+// gravação falhar sem explicação.
+const DRIVE_APPDATA = 'https://www.googleapis.com/auth/drive.appdata'
+
+// true = concedido, false = o Google disse que não veio, null = não dá para
+// saber (sessão guardada antes de este campo existir). O null importa: sem
+// informação, acusar falta de permissão seria um palpite mostrado como fato —
+// e mandar a pessoa refazer o login à toa é o pior desfecho possível para
+// quem já está tentando entender por que a sincronização não anda.
+export function incluiEscopoDoDrive(escopos) {
+  if (!escopos || typeof escopos !== 'string') return null
+  return escopos.trim().split(/\s+/).includes(DRIVE_APPDATA)
+}
+
+export function permissaoDoDriveConcedida() {
+  return incluiEscopoDoDrive(grantedScopes)
 }
 
 function hadSession() {
@@ -189,6 +214,7 @@ function createTokenClient() {
       if (response && response.access_token) {
         currentToken = response.access_token
         expiresAt = Date.now() + Number(response.expires_in || 3600) * 1000
+        grantedScopes = response.scope || ''
         persist()
         scheduleRenewal()
         onSessionChange(true)
@@ -227,6 +253,7 @@ function rememberMode(value) {
 function adoptToken(data) {
   currentToken = data.access_token
   expiresAt = Date.now() + Number(data.expires_in || 3600) * 1000
+  grantedScopes = data.scope || ''
   persist()
   scheduleRenewal()
   onSessionChange(true)
@@ -293,6 +320,7 @@ function forgetSession({ forgetConsent = false } = {}) {
   renewTimer = null
   currentToken = null
   expiresAt = 0
+  grantedScopes = ''
   clearPersisted({ forgetConsent })
   onSessionChange(false)
 }
@@ -358,6 +386,7 @@ export async function initGoogleAuth(onSession, onStatus = () => {}) {
   if (stored) {
     currentToken = stored.token
     expiresAt = stored.expiresAt
+    grantedScopes = stored.scope || ''
     onSessionChange(true)
   }
 
