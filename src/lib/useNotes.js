@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { loadNotes, saveNotes, faltaPermissaoDoDrive } from './driveNotes.js'
+import { loadNotes, saveNotes, faltaPermissaoDoDrive, driveApiDesativada, motivoDoGoogle } from './driveNotes.js'
 import { permissaoDoDriveConcedida } from './googleAuth.js'
 import { mesclarAnotacoes, mesclarApagadas, precisaSubir } from './notesMerge.js'
 import { analyzeNoteWithAI } from './aiAnalyzeNote.js'
@@ -10,14 +10,20 @@ import { analyzeNoteWithAI } from './aiAnalyzeNote.js'
 const MSG_SEM_PERMISSAO =
   'Esta sessão não tem a permissão do Drive (ela chegou depois, e a autorização antiga não a inclui). Toque em "Sair" e entre de novo, marcando a permissão do Google Drive na tela do Google — o que está neste aparelho não se perde.'
 
+const MSG_API_DESATIVADA =
+  'A API do Google Drive não está ativada no projeto do Google Cloud deste app. Ative "Google Drive API" no console (console.cloud.google.com → APIs e serviços → Ativar APIs) — Calendar e Tasks funcionarem não ativa o Drive junto, e nenhum login novo resolve isto.'
+
 // Falhar sem dizer por quê foi o que fez este problema demorar a ser
 // entendido: a tela dizia "não deu agora" tanto para rede instável quanto
-// para uma permissão que nunca ia chegar sozinha. O motivo real entra na
-// mensagem, curto, para o próximo diagnóstico não depender de adivinhação.
+// para causas que nunca iam se resolver sozinhas. O motivo real entra na
+// mensagem — e quando não houver um motivo conhecido, entra o que o próprio
+// Google escreveu, para o próximo diagnóstico não recomeçar do zero.
 function descreverFalha(err, prefixo) {
+  if (driveApiDesativada(err)) return MSG_API_DESATIVADA
   if (faltaPermissaoDoDrive(err) || permissaoDoDriveConcedida() === false) return MSG_SEM_PERMISSAO
-  const status = err?.status ? ` (erro ${err.status})` : ''
-  return `${prefixo} — não deu para sincronizar agora${status}.`
+  const motivo = motivoDoGoogle(err)
+  const detalhe = err?.status ? ` (erro ${err.status}${motivo ? `: ${motivo.slice(0, 120)}` : ''})` : ''
+  return `${prefixo} — não deu para sincronizar agora${detalhe}.`
 }
 
 // Cache local: o que garante que a tela mostra algo na hora, antes do Drive

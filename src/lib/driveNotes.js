@@ -56,6 +56,30 @@ export function faltaPermissaoDoDrive(err) {
   return /insufficient|ACCESS_TOKEN_SCOPE/i.test(String(err.body || err.message || ''))
 }
 
+// O outro 403 possível, e que não tem nada a ver com login: a API do Drive
+// não está ativada no projeto do Google Cloud. O escopo pode estar concedido
+// e o token perfeito — a chamada é recusada antes de chegar aos dados, porque
+// o projeto nunca habilitou essa API. Calendar e Tasks funcionarem não diz
+// nada sobre o Drive: cada API é ativada separadamente, e esta é a primeira
+// vez que o app chama o Drive. Nenhum login novo resolve; só o console.
+export function driveApiDesativada(err) {
+  if (err?.status !== 403) return false
+  return /accessNotConfigured|SERVICE_DISABLED|has not been used in project|is disabled/i.test(
+    String(err.body || err.message || '')
+  )
+}
+
+// A frase que o próprio Google escreveu para o erro. Sem ela, "erro 403" vira
+// um beco sem saída: o código sozinho não distingue API desligada de cota
+// estourada, e foi justamente essa ambiguidade que arrastou o diagnóstico.
+export function motivoDoGoogle(err) {
+  try {
+    return JSON.parse(err?.body || '')?.error?.message || ''
+  } catch {
+    return ''
+  }
+}
+
 // Devolve `null` quando não há estado utilizável no Drive — o arquivo ainda
 // não existe (ninguém gravou nada ainda) ou veio ilegível. Isso é diferente
 // de uma lista vazia, que é o arquivo existindo e estando vazio de verdade,
