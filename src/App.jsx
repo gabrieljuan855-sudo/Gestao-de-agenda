@@ -32,6 +32,8 @@ import MonthView from './components/MonthView.jsx'
 import EventEditor from './components/EventEditor.jsx'
 import TaskEditor from './components/TaskEditor.jsx'
 import CalendarSettings from './components/CalendarSettings.jsx'
+import Banner from './components/Banner.jsx'
+import ConfirmDialog from './components/ConfirmDialog.jsx'
 import {
   loadCalendarPrefs,
   saveCalendarPrefs,
@@ -206,16 +208,24 @@ export default function App() {
     return focus.phase === 'focus' || focus.phase === 'break'
   }
 
-  function switchActiveTask(task) {
-    if (activeTask && task.id !== activeTask.id && focoEmAndamento()) {
-      const trocar = window.confirm(
-        'Trocar de tarefa agora encerra o foco em andamento (o bloco em curso não é gravado). Trocar mesmo assim?'
-      )
-      if (!trocar) return false
-      focus.stop()
-    }
+  // A confirmação de trocar de tarefa com o foco rodando fica pendente aqui
+  // em vez de usar window.confirm: o diálogo nativo aparece com a cara do
+  // sistema operacional, sem o tema do app — o ConfirmDialog renderizado lá
+  // embaixo é que decide, chamando applySwitch quando o usuário confirma.
+  const [pendingSwitch, setPendingSwitch] = useState(null)
+
+  function applySwitch(task, thenStart) {
+    if (activeTask && task.id !== activeTask.id && focoEmAndamento()) focus.stop()
     setActiveTask(task)
-    return true
+    if (thenStart) focus.start(task)
+  }
+
+  function switchActiveTask(task, { thenStart = false } = {}) {
+    if (activeTask && task.id !== activeTask.id && focoEmAndamento()) {
+      setPendingSwitch({ task, thenStart })
+      return
+    }
+    applySwitch(task, thenStart)
   }
 
   function handleSelectTask(task) {
@@ -230,7 +240,7 @@ export default function App() {
       focus.openImmersive()
       return
     }
-    if (switchActiveTask(task)) focus.start(task)
+    switchActiveTask(task, { thenStart: true })
   }
 
   async function handleCompleteTask(task) {
@@ -299,11 +309,11 @@ export default function App() {
           <h2 style={{ marginTop: 12 }}>Gestão de agenda</h2>
           <p className="muted">Conecte sua conta Google para ver sua agenda e tarefas.</p>
           {loginError && (
-            <div className="form-error" style={{ marginBottom: 12, textAlign: 'left' }}>
+            <Banner tone="error">
               <strong>O login não foi concluído.</strong>
               <div style={{ marginTop: 4 }}>{loginError.texto}</div>
               <div className="muted" style={{ marginTop: 6, fontSize: 11 }}>código: {loginError.codigo}</div>
-            </div>
+            </Banner>
           )}
           {/* O botão só libera quando o script do Google está de pé: no celular
               ele chega depois da tela, e clicar antes não abria login nenhum. */}
@@ -328,6 +338,12 @@ export default function App() {
       id: 'add',
       label: 'Nova tarefa',
       icon: '+',
+      // No trilho de mesa, criar é a ação de maior destaque (o equivalente ao
+      // FAB do MD3) — ganha a cor de primária mesmo parada, diferente das
+      // outras ferramentas. Na barra inferior do celular esse realce não
+      // entra (ver CSS): ali os quatro itens formam uma barra de abas, e dar
+      // destaque fixo a um deles confundiria com o indicador de selecionado.
+      primary: true,
       render: (close) => (
         <QuickAdd
           calendars={calendars}
@@ -456,17 +472,15 @@ export default function App() {
       <FocusOverlay focus={focus} onCompleteTask={handleCompleteTask} />
 
       {presenceError && (
-        <div className="form-error" style={{ marginTop: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
-          <span>{presenceError}</span>
-          <button onClick={() => setPresenceError(null)} style={{ flexShrink: 0 }}>Entendi</button>
-        </div>
+        <Banner tone="warning" actionLabel="Entendi" onAction={() => setPresenceError(null)}>
+          {presenceError}
+        </Banner>
       )}
 
       {loadError && (
-        <div className="form-error" style={{ marginTop: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
-          <span>Não deu para carregar a agenda: {loadError}</span>
-          <button onClick={reload} style={{ flexShrink: 0 }}>Tentar de novo</button>
-        </div>
+        <Banner tone="error" actionLabel="Tentar de novo" onAction={reload}>
+          Não deu para carregar a agenda: {loadError}
+        </Banner>
       )}
 
       {loading && <p className="muted">Atualizando...</p>}
@@ -497,6 +511,21 @@ export default function App() {
           onReopen={handleReopenTask}
           onComplete={() => handleCompleteTask(editingTask)}
           onClose={() => setEditingTask(null)}
+        />
+      )}
+
+      {pendingSwitch && (
+        <ConfirmDialog
+          title="Trocar de tarefa?"
+          message="Trocar de tarefa agora encerra o foco em andamento (o bloco em curso não é gravado)."
+          confirmLabel="Trocar mesmo assim"
+          danger
+          onConfirm={() => {
+            const pending = pendingSwitch
+            setPendingSwitch(null)
+            applySwitch(pending.task, pending.thenStart)
+          }}
+          onCancel={() => setPendingSwitch(null)}
         />
       )}
     </div>
