@@ -3,6 +3,7 @@ import { loadNotes, saveNotes, faltaPermissaoDoDrive, driveApiDesativada, motivo
 import { permissaoDoDriveConcedida } from './googleAuth.js'
 import { mesclarAnotacoes, mesclarApagadas, precisaSubir } from './notesMerge.js'
 import { analyzeNoteWithAI } from './aiAnalyzeNote.js'
+import { iaEmPausa } from './aiCooldown.js'
 
 // Falta de permissão não é falha de rede: insistir não resolve, e dizer
 // "não deu agora" manda a pessoa esperar por algo que nunca vai acontecer
@@ -43,6 +44,9 @@ export const AI_MIN_LENGTH = 10
 // se algum desses horários já passou desde a última vez que rodou.
 const SWEEP_HOURS = [8, 10, 13, 15]
 const SWEEP_KEY = 'gestao-agenda:anotacoes-sweep-ultima'
+// Teto de anotações analisadas por varredura. O que passar disso espera o
+// próximo horário — são 4 por dia, então a fila anda.
+const MAX_POR_VARREDURA = 5
 
 // O horário do próprio dia que já passou, mais recente — ou, antes das 8h,
 // o último horário de ontem. É contra esse instante que se decide se a
@@ -194,19 +198,30 @@ export default function useNotes({ signedIn }) {
     if (!signedIn) return
 
     async function sweep() {
-      const pendentes = notesRef.current.filter((n) => {
-        if (n.id === selectedIdRef.current) return false
-        if ((n.body || '').trim().length < AI_MIN_LENGTH) return false
-        if (!n.lastAnalyzedAt) return true
-        return new Date(n.updatedAt) > new Date(n.lastAnalyzedAt)
-      })
+      const pendentes = notesRef.current
+        .filter((n) => {
+          if (n.id === selectedIdRef.current) return false
+          if ((n.body || '').trim().length < AI_MIN_LENGTH) return false
+          if (!n.lastAnalyzedAt) return true
+          return new Date(n.updatedAt) > new Date(n.lastAnalyzedAt)
+        })
+        // Antes ia a lista inteira de uma vez. Com muitas anotações pendentes
+        // isso vira uma rajada de dezenas de chamadas em segundos — o jeito
+        // mais rápido de estourar o limite por minuto do Gemini. O que sobrar
+        // pega a próxima varredura.
+        .slice(0, MAX_POR_VARREDURA)
+
       for (const nota of pendentes) {
+        // Reconfere a cada volta: se a primeira nota já bateu no limite, não
+        // adianta insistir com as outras.
+        if (iaEmPausa()) return
         await analyzeNote(nota.id, nota.body)
       }
     }
 
     function checkSweep() {
       if (document.visibilityState !== 'visible') return
+      if (iaEmPausa()) return
       const agora = new Date()
       const alvo = ultimoHorarioDaVarredura(agora)
       let ultima = null

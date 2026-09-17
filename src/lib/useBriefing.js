@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { listAllEvents, listAllTasks, prefetchFocusEvents } from './googleApi.js'
 import { fetchBriefingFromAI } from './aiBriefing.js'
+import { iaEmPausa } from './aiCooldown.js'
 import { isWorkday } from './schedule.js'
 import { occupiesTime, isDeclined } from './calendarPrefs.js'
 import { eventStart, eventEnd, tasksDueOn } from './events.js'
@@ -198,6 +199,9 @@ export default function useBriefing({ signedIn, calendarPrefs, presence }) {
 
     async function checkSlot(slot) {
       if (emAndamentoRef.current.has(slot.id) || lerFeitos().includes(slot.id)) return
+      // Insistir enquanto a cota está estourada só queima mais cota e mantém
+      // o limite estourado — era o app comendo a própria cota sozinho.
+      if (iaEmPausa()) return
 
       const now = new Date()
       const alvo = new Date(now)

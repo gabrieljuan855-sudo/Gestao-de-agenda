@@ -1,4 +1,5 @@
 import { ensureToken } from './googleAuth.js'
+import { pausarIA } from './aiCooldown.js'
 
 // Manda um resumo já enxuto dos dados (nunca a lista completa e crua de
 // eventos/tarefas) para o Worker escrever o texto do briefing com o Gemini.
@@ -28,6 +29,7 @@ export async function fetchBriefingFromAI(kind, context) {
     // enquanto a janela do horário não fecha. Quem trata o erro usa isto para
     // não alarmar à toa (ver useBriefing.js).
     err.transiente = data.transiente === true
+    pausarIA(data.motivo)
     throw err
   }
 

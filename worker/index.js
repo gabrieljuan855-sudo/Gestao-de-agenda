@@ -60,12 +60,17 @@ async function callGemini(env, prompt) {
     // decidir se vale tentar de novo em silêncio em vez de alarmar a
     // pessoa com um erro que se resolve sozinho.
     if (res.status === 503 || res.status === 429) {
+      const limite = res.status === 429
       const err = new Error(
-        res.status === 429
+        limite
           ? 'A IA do Google atingiu o limite de uso por agora.'
           : 'A IA do Google está sobrecarregada agora.'
       )
       err.transiente = true
+      // Os dois são passageiros, mas em escalas bem diferentes: sobrecarga
+      // passa em segundos, cota estourada leva o resto da janela de cobrança.
+      // Insistir num limite de cota só queima mais cota.
+      err.motivo = limite ? 'limite' : 'sobrecarga'
       throw err
     }
     throw new Error(`Gemini respondeu ${res.status}: ${detail.slice(0, 300)}`)
@@ -89,7 +94,10 @@ async function callGemini(env, prompt) {
 // distinguir "tenta de novo daqui a pouco que passa" de "isso não vai se
 // resolver sozinho" — sem essa marca, os dois viram o mesmo aviso vermelho.
 function erroDeIA(err) {
-  return json({ error: err.message, transiente: err.transiente === true }, 502)
+  return json(
+    { error: err.message, transiente: err.transiente === true, motivo: err.motivo || '' },
+    502
+  )
 }
 
 const PRIORITIES = new Set(['alta', 'media', 'baixa'])
