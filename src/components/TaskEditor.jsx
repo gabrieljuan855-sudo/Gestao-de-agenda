@@ -49,6 +49,12 @@ export default function TaskEditor({ task, onSave, onDelete, onReopen, onComplet
   return (
     <>
       <Modal title="Editar tarefa" onClose={onClose}>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault()
+            handleSave()
+          }}
+        >
         <label className="field">
           <span>Título</span>
           <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} />
@@ -65,6 +71,7 @@ export default function TaskEditor({ task, onSave, onDelete, onReopen, onComplet
             {PRIORITIES.map((p) => (
               <button
                 key={p.id}
+                type="button"
                 onClick={() => setPriority(p.id)}
                 className={`pill ${p.id}`}
                 style={{
@@ -90,17 +97,18 @@ export default function TaskEditor({ task, onSave, onDelete, onReopen, onComplet
         {error && <div className="form-error">{error}</div>}
 
         <div className="modal-actions">
-          <button onClick={() => setConfirmingDelete(true)} disabled={saving} className="danger">Excluir</button>
+          <button type="button" onClick={() => setConfirmingDelete(true)} disabled={saving} className="danger">Excluir</button>
           <div style={{ flex: 1 }} />
           {done ? (
-            <button onClick={() => run(onReopen)} disabled={saving}>Reabrir</button>
+            <button type="button" onClick={() => run(onReopen)} disabled={saving}>Reabrir</button>
           ) : (
-            <button onClick={() => run(onComplete)} disabled={saving}>Concluir</button>
+            <button type="button" onClick={() => run(onComplete)} disabled={saving}>Concluir</button>
           )}
-          <button className="primary" onClick={handleSave} disabled={saving || !title.trim()}>
+          <button type="submit" className="primary" disabled={saving || !title.trim()}>
             {saving ? 'Salvando...' : 'Salvar'}
           </button>
         </div>
+        </form>
       </Modal>
 
       {confirmingDelete && (

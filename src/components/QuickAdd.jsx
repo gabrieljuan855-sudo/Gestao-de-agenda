@@ -169,7 +169,12 @@ export default function QuickAdd({ calendars = [], taskLists = [], onCreateEvent
   }
 
   return (
-    <div>
+    <form
+      onSubmit={(e) => {
+        e.preventDefault()
+        handleConfirm()
+      }}
+    >
       {/* O painel só abre no clique, então o campo já chega com o cursor
           dentro: abrir e ter que clicar de novo era um toque a mais em toda
           tarefa criada. */}
@@ -253,6 +258,7 @@ export default function QuickAdd({ calendars = [], taskLists = [], onCreateEvent
                     {PRIORITIES.map((p) => (
                       <button
                         key={p.id}
+                        type="button"
                         onClick={() => setPriority(p.id)}
                         className={`pill ${p.id}`}
                         style={{
@@ -283,15 +289,15 @@ export default function QuickAdd({ calendars = [], taskLists = [], onCreateEvent
           {error && <div className="form-error" style={{ marginTop: 8 }}>{error}</div>}
 
           <button
+            type="submit"
             className="primary"
             style={{ marginTop: 10 }}
-            onClick={handleConfirm}
             disabled={saving || needsCalendar || needsList}
           >
             {saving ? 'Salvando...' : isEvent ? 'Criar compromisso' : 'Criar tarefa'}
           </button>
         </div>
       )}
-    </div>
+    </form>
   )
 }
