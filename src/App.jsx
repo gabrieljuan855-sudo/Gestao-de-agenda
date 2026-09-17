@@ -23,7 +23,8 @@ import FocusPanel from './components/FocusPanel.jsx'
 import FocusOverlay from './components/FocusOverlay.jsx'
 import useFocusTimer from './lib/useFocusTimer.js'
 import Backlog from './components/Backlog.jsx'
-import Scratchpad from './components/Scratchpad.jsx'
+import Notes from './components/Notes.jsx'
+import useNotes from './lib/useNotes.js'
 import SearchPanel from './components/SearchPanel.jsx'
 import PeriodBar from './components/PeriodBar.jsx'
 import DayView from './components/DayView.jsx'
@@ -206,6 +207,7 @@ export default function App() {
   }
 
   const focus = useFocusTimer({ activeTask, onCycleComplete: reload })
+  const notesState = useNotes({ signedIn })
 
   const occupies = (event) => occupiesTime(event, calendarPrefs, presence)
   const declined = (event) => isDeclined(event, presence)
@@ -419,7 +421,7 @@ export default function App() {
       id: 'notes',
       label: 'Anotações',
       icon: '≡',
-      render: () => <Scratchpad />,
+      render: () => <Notes notesState={notesState} />,
     },
   ]
 

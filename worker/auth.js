@@ -22,6 +22,9 @@ const SCOPES = [
   'https://www.googleapis.com/auth/calendar',
   'https://www.googleapis.com/auth/tasks',
   'https://www.googleapis.com/auth/userinfo.email',
+  // Pasta privada do Drive só deste app — onde as anotações passam a viver,
+  // para sincronizar entre aparelhos.
+  'https://www.googleapis.com/auth/drive.appdata',
 ].join(' ')
 
 const SESSION_COOKIE = 'ga_sessao'
