@@ -86,6 +86,7 @@ async function listAcrossCalendars(calendars, params) {
             ...event,
             calendarSummary: cal.summaryOverride || cal.summary,
             calendarColor: cal.backgroundColor,
+            calendarIsPrimary: Boolean(cal.primary),
           }))
         )
         .catch((err) => {

@@ -3,6 +3,48 @@ import { formatTime, formatDuration, isToday } from '../lib/dates.js'
 import { eventsOfDay, isAllDay, eventStart, eventEnd, findFreeGaps, nextEvent, currentEvent } from '../lib/events.js'
 import { workBlocksFor, isWorkday } from '../lib/schedule.js'
 
+// Sessões de foco seguidas da mesma tarefa (pomodoro com pausa no meio) viram
+// um cartão só, em vez de repetir o mesmo título várias vezes na lista.
+const INTERVALO_MESMO_FOCO_MIN = 20
+
+function isFocusEvent(event) {
+  return Boolean(event.summary?.startsWith('Foco:'))
+}
+
+function groupFocusSessions(events) {
+  const grupos = []
+  let i = 0
+  while (i < events.length) {
+    const atual = events[i]
+    if (!isFocusEvent(atual)) {
+      grupos.push({ kind: 'event', event: atual })
+      i += 1
+      continue
+    }
+    const sessoes = [atual]
+    let j = i + 1
+    while (j < events.length) {
+      const proxima = events[j]
+      const ultima = sessoes[sessoes.length - 1]
+      const intervalo = (eventStart(proxima) - eventEnd(ultima)) / 60000
+      if (proxima.summary === atual.summary && intervalo <= INTERVALO_MESMO_FOCO_MIN) {
+        sessoes.push(proxima)
+        j += 1
+      } else break
+    }
+    grupos.push(sessoes.length > 1 ? { kind: 'focus-group', sessions: sessoes } : { kind: 'event', event: atual })
+    i = j
+  }
+  return grupos
+}
+
+function periodOf(date) {
+  const hora = date.getHours()
+  if (hora < 12) return 'Manhã'
+  if (hora < 18) return 'Tarde'
+  return 'Noite'
+}
+
 function NextUp({ events }) {
   const [now, setNow] = useState(() => new Date())
 
@@ -44,17 +86,49 @@ export default function DayView({
   declined = () => false,
   onSetPresence,
 }) {
+  const [now, setNow] = useState(() => new Date())
+  const showNow = isToday(date)
+
+  useEffect(() => {
+    if (!showNow) return
+    const id = setInterval(() => setNow(new Date()), 60000)
+    return () => clearInterval(id)
+  }, [showNow])
+
   const dayEvents = eventsOfDay(events, date)
   const allDay = dayEvents.filter(isAllDay)
   const timed = dayEvents.filter((e) => !isAllDay(e))
   const gaps = findFreeGaps(events, date, workBlocksFor(date), { occupies })
-  const showNow = isToday(date)
   const folga = !isWorkday(date)
 
   const timeline = [
-    ...timed.map((event) => ({ kind: 'event', at: eventStart(event), event })),
-    ...gaps.map((gap) => ({ kind: 'gap', at: gap.start, gap })),
+    ...groupFocusSessions(timed).map((item) => ({
+      ...item,
+      at: eventStart(item.kind === 'focus-group' ? item.sessions[0] : item.event),
+      end: eventEnd(item.kind === 'focus-group' ? item.sessions[item.sessions.length - 1] : item.event),
+    })),
+    ...gaps.map((gap) => ({ kind: 'gap', at: gap.start, end: gap.end, gap })),
   ].sort((a, b) => a.at - b.at)
+
+  // Cabeçalhos de período só valem a pena quando o dia realmente se espalha
+  // por mais de um; num dia leve, com tudo de manhã, eles só atrapalhariam.
+  const temMaisDeUmPeriodo = new Set(timeline.map((item) => periodOf(item.at))).size > 1
+
+  const rendered = []
+  let ultimoPeriodo = null
+  let dividerFeito = false
+  for (const item of timeline) {
+    const periodo = periodOf(item.at)
+    if (temMaisDeUmPeriodo && periodo !== ultimoPeriodo) {
+      rendered.push({ kind: 'period', label: periodo, key: `periodo-${periodo}-${item.at.getTime()}` })
+      ultimoPeriodo = periodo
+    }
+    if (showNow && !dividerFeito && item.end > now) {
+      rendered.push({ kind: 'now-divider', key: 'agora' })
+      dividerFeito = true
+    }
+    rendered.push(item)
+  }
 
   return (
     <div className="card">
@@ -91,23 +165,67 @@ export default function DayView({
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {timeline.length === 0 && <div className="muted">Nenhum compromisso neste dia.</div>}
 
-        {timeline.map((item, index) => {
+        {rendered.map((item) => {
+          if (item.kind === 'period') {
+            return (
+              <div key={item.key} className="day-period-header">
+                {item.label}
+              </div>
+            )
+          }
+
+          if (item.kind === 'now-divider') {
+            return (
+              <div key={item.key} className="now-divider">
+                <span>agora · {formatTime(now)}</span>
+              </div>
+            )
+          }
+
+          const passou = showNow && item.end <= now
+
           if (item.kind === 'gap') {
             const minutes = (item.gap.end - item.gap.start) / 60000
             return (
-              <div key={`gap-${index}`} className="free-slot">
+              <div key={`gap-${item.gap.start.getTime()}`} className={passou ? 'free-slot free-slot--passou' : 'free-slot'}>
                 livre {formatTime(item.gap.start)}–{formatTime(item.gap.end)} · {formatDuration(minutes)}
               </div>
             )
           }
 
+          if (item.kind === 'focus-group') {
+            const primeira = item.sessions[0]
+            const ultima = item.sessions[item.sessions.length - 1]
+            const totalMin = Math.round(
+              item.sessions.reduce((soma, sessao) => soma + (eventEnd(sessao) - eventStart(sessao)) / 60000, 0)
+            )
+            return (
+              <div
+                key={`foco-${primeira.id}`}
+                className="day-event"
+                style={{
+                  borderLeft: '3px solid var(--accent)',
+                  background: 'var(--accent-bg)',
+                  opacity: passou ? 0.55 : 1,
+                }}
+              >
+                <div className="muted" style={{ fontSize: 'var(--label-sm)' }}>
+                  {formatTime(eventStart(primeira))}–{formatTime(eventEnd(ultima))} · {item.sessions.length} sessões ·{' '}
+                  {formatDuration(totalMin)} de foco
+                </div>
+                <div style={{ fontSize: 'var(--body-md)', fontWeight: 500 }}>{primeira.summary}</div>
+              </div>
+            )
+          }
+
           const event = item.event
-          const isFocus = event.summary?.startsWith('Foco:')
+          const isFocus = isFocusEvent(event)
           const borderColor = event.calendarColor || (isFocus ? 'var(--accent)' : 'var(--border-strong)')
           const info = isInfo(event)
           const recusado = declined(event)
           const pedePresenca = asksPresence(event)
           const presenca = presenceOf(event)
+          const mostrarAgenda = event.calendarSummary && !event.calendarIsPrimary
 
           return (
             <div
@@ -118,11 +236,12 @@ export default function DayView({
                 borderLeft: `3px solid ${borderColor}`,
                 background: isFocus ? 'var(--accent-bg)' : 'var(--surface-2)',
                 cursor: onSelectEvent ? 'pointer' : 'default',
+                opacity: passou && !info && !recusado ? 0.55 : undefined,
               }}
             >
               <div className="muted" style={{ fontSize: 'var(--label-sm)', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                 <span>{formatTime(eventStart(event))}–{formatTime(eventEnd(event))}</span>
-                {event.calendarSummary && <span>· {event.calendarSummary}</span>}
+                {mostrarAgenda && <span>· {event.calendarSummary}</span>}
                 {info && <span>· informativo</span>}
               </div>
 
@@ -134,7 +253,7 @@ export default function DayView({
                 {event.summary}
               </div>
 
-              {pedePresenca && (
+              {pedePresenca && !passou && (
                 <div className="presence-row" onClick={(e) => e.stopPropagation()}>
                   <button
                     className={presenca === 'vou' ? 'presence-on' : ''}
@@ -149,6 +268,12 @@ export default function DayView({
                     Não vou
                   </button>
                   {!presenca && <span className="muted" style={{ fontSize: 'var(--label-sm)' }}>não conta no seu tempo até confirmar</span>}
+                </div>
+              )}
+
+              {pedePresenca && passou && presenca && (
+                <div className="muted" style={{ fontSize: 'var(--label-sm)', marginTop: 4 }}>
+                  {presenca === 'vou' ? 'Você foi' : 'Você não foi'}
                 </div>
               )}
             </div>

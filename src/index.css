@@ -923,11 +923,42 @@ button.danger:hover { background: var(--urgent-bg); }
 .calendar-toggle { display: flex; align-items: center; gap: 4px; font-size: var(--label-md); cursor: pointer; }
 
 .free-slot {
-  border: 1px dashed var(--border-strong);
+  border: 1px dashed var(--border);
   border-radius: var(--shape-xs);
-  padding: 5px 10px;
-  font-size: var(--label-md);
+  padding: 3px 10px;
+  font-size: var(--label-sm);
   color: var(--text-muted);
+  opacity: 0.75;
+}
+
+.free-slot--passou { opacity: 0.4; }
+
+.day-period-header {
+  font-size: var(--label-sm);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin: 10px 0 -2px;
+}
+.day-period-header:first-child { margin-top: 0; }
+
+.now-divider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--accent);
+  font-size: var(--label-sm);
+  font-weight: 600;
+  margin: 2px 0;
+}
+.now-divider::before,
+.now-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--accent);
+  opacity: 0.4;
 }
 
 .pill.alta { background: var(--urgent-bg); color: var(--urgent); }
