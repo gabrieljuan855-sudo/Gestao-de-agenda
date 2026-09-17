@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { loadNotes, saveNotes } from './driveNotes.js'
+import { loadNotes, saveNotes, faltaPermissaoDoDrive } from './driveNotes.js'
 import { analyzeNoteWithAI } from './aiAnalyzeNote.js'
+
+// Falta de permissão não é falha de rede: insistir não resolve, e dizer
+// "não deu agora" manda a pessoa esperar por algo que nunca vai acontecer
+// sozinho. O caminho de saída precisa estar na própria mensagem.
+const MSG_SEM_PERMISSAO =
+  'Esta sessão foi aberta antes da sincronização existir, e por isso o Drive recusa as anotações. Toque em "Sair" e entre de novo para autorizar — o que está neste aparelho não se perde.'
 
 // Cache local: o que garante que a tela mostra algo na hora, antes do Drive
 // responder, e que continua mostrando algo se a rede cair no meio do
@@ -100,13 +106,27 @@ export default function useNotes({ signedIn }) {
     setLoading(true)
     loadNotes()
       .then((fromDrive) => {
+        setError(null)
+        // `null` é o Drive ainda não ter arquivo nenhum (ou ter vindo
+        // ilegível). O que está neste aparelho é a única cópia que existe:
+        // ela sobe, e não é substituída por uma lista vazia. Tratar esse
+        // caso como "o Drive diz que não há nada" apagaria de vez as
+        // anotações de quem escreveu antes de a sincronização funcionar.
+        if (fromDrive === null) {
+          const locais = notesRef.current
+          if (locais.length > 0) saveNotes(locais).catch(relatarFalhaAoSincronizar)
+          return
+        }
         setNotes(fromDrive)
         writeCache(fromDrive)
-        setError(null)
       })
       .catch((err) => {
         console.error('Não foi possível carregar as anotações do Drive:', err)
-        setError('Não deu para buscar suas anotações mais recentes — mostrando a última versão salva neste aparelho.')
+        setError(
+          faltaPermissaoDoDrive(err)
+            ? MSG_SEM_PERMISSAO
+            : 'Não deu para buscar suas anotações mais recentes — mostrando a última versão salva neste aparelho.'
+        )
       })
       .finally(() => {
         setLoading(false)
@@ -176,11 +196,17 @@ export default function useNotes({ signedIn }) {
     // toda letra digitada viraria uma chamada ao Drive.
     clearTimeout(saveTimer.current)
     saveTimer.current = setTimeout(() => {
-      saveNotes(next).catch((err) => {
-        console.error('Não foi possível sincronizar as anotações com o Drive:', err)
-        setError('A última alteração ficou salva só neste aparelho — não deu para sincronizar agora.')
-      })
+      saveNotes(next).catch(relatarFalhaAoSincronizar)
     }, SAVE_DEBOUNCE_MS)
+  }
+
+  function relatarFalhaAoSincronizar(err) {
+    console.error('Não foi possível sincronizar as anotações com o Drive:', err)
+    setError(
+      faltaPermissaoDoDrive(err)
+        ? MSG_SEM_PERMISSAO
+        : 'A última alteração ficou salva só neste aparelho — não deu para sincronizar agora.'
+    )
   }
 
   function createNote() {
