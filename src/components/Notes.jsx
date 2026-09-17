@@ -159,32 +159,43 @@ function NoteEditor({ note, onChange, onBack, onDelete, onAnalyze, analyzing, ca
 // A barra de abas: uma aba por anotação aberta nesta sessão (ver useNotes.js
 // — openIds), clicável para trocar de aba e com um ✕ próprio para fechar só
 // aquela aba, sem apagar a anotação. Some quando não há nenhuma aberta.
+// As abas seguem o padrão de *primary tabs* do MD3: rótulo, e o indicador
+// ativo — a barra arredondada colada embaixo da aba selecionada. É ela que
+// amarra visualmente a aba ao conteúdo, que é justamente o que faz isso parecer
+// aba de navegador.
+//
+// Antes eram pílulas. Pílula no MD3 é chip, e chip serve para filtro e entrada,
+// não para navegar entre coisas abertas — daí a sensação de estranheza: o
+// componente dizia "filtro" enquanto o trabalho dele era "aba".
 function TabBar({ notes, openIds, selectedId, onSelect, onClose }) {
   if (openIds.length === 0) return null
   return (
-    <div className="notes-tabs">
+    <div className="notes-tabs" role="tablist">
       {openIds.map((id) => {
         const note = notes.find((n) => n.id === id)
         if (!note) return null
+        const ativa = id === selectedId
         return (
-          <button
-            key={id}
-            className={`notes-tab${id === selectedId ? ' is-active' : ''}`}
-            onClick={() => onSelect(id)}
-          >
-            <span className="notes-tab-label">{snippetOf(note)}</span>
-            <span
+          <div key={id} className={`notes-tab${ativa ? ' is-active' : ''}`}>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={ativa}
+              className="notes-tab-btn"
+              onClick={() => onSelect(id)}
+            >
+              <span className="notes-tab-label">{snippetOf(note)}</span>
+            </button>
+            <button
+              type="button"
               className="notes-tab-close"
-              role="button"
-              aria-label="Fechar aba"
-              onClick={(e) => {
-                e.stopPropagation()
-                onClose(id)
-              }}
+              aria-label={`Fechar ${snippetOf(note)}`}
+              onClick={() => onClose(id)}
             >
               ✕
-            </span>
-          </button>
+            </button>
+            <span className="notes-tab-indicador" aria-hidden="true" />
+          </div>
         )
       })}
     </div>

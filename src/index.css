@@ -755,53 +755,88 @@ button.danger:hover { background: var(--urgent-bg); }
   justify-content: flex-end;
 }
 
-/* Barra de abas das anotações: uma por nota aberta na sessão (useNotes.js —
-   openIds), rolável na horizontal quando não cabem todas. */
+/* Abas das anotações — *primary tabs* do MD3.
+   O que faz isto parecer aba de navegador não é a forma do botão, é o
+   indicador: a barra de 3px colada embaixo da aba ativa, amarrando-a ao
+   conteúdo. A linha divisória por baixo de toda a barra é o outro metade do
+   efeito — ela "abre" só sob a aba ativa. */
 .notes-tabs {
   display: flex;
-  gap: 6px;
+  align-items: stretch;
+  gap: 2px;
   overflow-x: auto;
-  margin-bottom: 10px;
-  padding-bottom: 2px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--outline-variant);
+  scrollbar-width: none;
 }
+.notes-tabs::-webkit-scrollbar { display: none; }
+
 .notes-tab {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-  max-width: 160px;
-  padding: 6px 8px 6px 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--shape-full);
-  background: var(--surface-2);
-  color: var(--text-secondary);
-  font-size: var(--label-sm);
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 200px;
+  padding-right: 4px;
+  border-radius: var(--shape-sm) var(--shape-sm) 0 0;
+  color: var(--on-surface-variant);
+}
+.notes-tab:hover { background: var(--surface-variant); }
+.notes-tab.is-active { color: var(--primary); }
+
+.notes-tab-btn {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 48px;
+  padding: 0 4px 0 12px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-size: var(--label-md);
+  font-weight: 500;
+  text-align: left;
   cursor: pointer;
 }
-.notes-tab.is-active {
-  background: var(--accent-bg);
-  color: var(--accent);
-  border-color: var(--accent);
-}
 .notes-tab-label {
+  display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
 .notes-tab-close {
+  flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
   border-radius: var(--shape-full);
-  opacity: 0.7;
-  flex-shrink: 0;
+  background: transparent;
+  color: inherit;
+  font-size: var(--label-sm);
+  opacity: 0.6;
+  cursor: pointer;
 }
 .notes-tab-close:hover {
   opacity: 1;
-  background: rgba(0, 0, 0, 0.08);
+  background: var(--surface-container);
 }
+
+/* O indicador ativo do MD3: 3px, arredondado no topo, na largura da aba. */
+.notes-tab-indicador {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: -1px;
+  height: 3px;
+  border-radius: 3px 3px 0 0;
+  background: transparent;
+}
+.notes-tab.is-active .notes-tab-indicador { background: var(--primary); }
 
 /* ---------- barra de período ---------- */
 
@@ -1010,6 +1045,10 @@ button.danger:hover { background: var(--urgent-bg); }
   top: 0;
   right: 58px;
   width: 360px;
+  /* 360px serve para busca e pomodoro, que são listas curtas. Texto longo (uma
+     anotação de caso, com registros e horários) fica ilegível nessa largura:
+     no MD3 isso é um side sheet largo, não o painel de uma ferramenta rápida.
+     O teto de viewport é para não encostar no trilho em tela pequena. */
   z-index: 40;
   box-shadow: 0 10px 30px var(--shadow);
   animation: rail-panel-in 0.22s cubic-bezier(0.2, 0, 0.2, 1);
@@ -1017,6 +1056,10 @@ button.danger:hover { background: var(--urgent-bg); }
      O limite valia só no celular; no computador ele crescia sem parar. */
   max-height: calc(100vh - 140px);
   overflow-y: auto;
+}
+
+.rail-panel.is-wide {
+  width: min(760px, calc(100vw - 140px));
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1388,7 +1431,10 @@ button.danger:hover { background: var(--urgent-bg); }
      cálculo: num web app instalado no iOS, um elemento fixo no rodapé com o
      teclado aberto não tem conta que feche. Tela cheia não depende de conta
      nenhuma — e é o que o Material Design 3 faz em tela estreita. */
-  .rail-panel {
+  /* `.rail-panel.is-wide` tem especificidade maior que `.rail-panel`, então
+     sem este par o painel largo venceria aqui e quebraria a tela cheia. */
+  .rail-panel,
+  .rail-panel.is-wide {
     position: fixed;
     inset: 0;
     width: auto;

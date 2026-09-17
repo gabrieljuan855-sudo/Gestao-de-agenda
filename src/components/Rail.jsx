@@ -71,7 +71,7 @@ export default function Rail({ tools, openId, onOpenChange }) {
       </div>
 
       {open && (
-        <div className="rail-panel card">
+        <div className={`rail-panel card${open.wide ? ' is-wide' : ''}`}>
           <div className="rail-panel-head">
             <strong>{open.label}</strong>
             <button type="button" className="rail-close" onClick={close} aria-label="Fechar">×</button>

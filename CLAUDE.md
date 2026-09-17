@@ -53,6 +53,27 @@ uma pilha de branches que só atrapalha.
 - Testes ficam ao lado do que testam (`src/lib/x.test.js`), em vitest. A regra
   na prática: lógica pura tem teste; componente React, não.
 
+## Design: Material Design 3 é o ponto de partida
+
+Toda decisão de interface começa perguntando **qual componente do MD3 resolve
+isso**, antes de inventar qualquer coisa. Usar o componente errado é o erro mais
+caro, porque ele comunica a coisa errada mesmo bem pintado:
+
+- **Abas** (navegar entre itens abertos, estilo navegador) → *primary tabs*:
+  rótulo, altura de 48dp, e o **indicador ativo** — uma barra arredondada de 3dp
+  colada embaixo da aba ativa, que é o que amarra a aba ao conteúdo. Nunca pílula.
+- **Chips** → filtro, entrada e sugestão. Não servem para navegar; foi
+  exatamente esse engano que fez a barra de abas parecer estranha.
+- **Botões** → FAB para a ação principal da tela, *filled* para confirmar,
+  *text* para a saída secundária.
+- **Superfícies** → o conteúdo longo pede largura de verdade (*side sheet* larga
+  ou diálogo de tela cheia), não o painel estreito de uma ferramenta rápida.
+- **Estados** → hover, foco e pressionado existem no MD3 e não são enfeite; é
+  por eles que se sabe que algo é clicável.
+
+Os papéis de cor e as formas já estão em `src/index.css` como tokens. Usar os
+tokens, nunca valores soltos.
+
 ## Convenções
 
 - **Tudo em português**: nomes, comentários, mensagens de commit, texto de tela.
