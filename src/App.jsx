@@ -26,6 +26,10 @@ import useFocusTimer from './lib/useFocusTimer.js'
 import Backlog from './components/Backlog.jsx'
 import Notes from './components/Notes.jsx'
 import useNotes from './lib/useNotes.js'
+import AgentPanel from './components/AgentPanel.jsx'
+import useAgent from './lib/useAgent.js'
+import ShortcutsOverlay from './components/ShortcutsOverlay.jsx'
+import useAtalhos from './lib/useAtalhos.js'
 import useBriefing from './lib/useBriefing.js'
 import BriefingCard from './components/BriefingCard.jsx'
 import BriefingOverlay from './components/BriefingOverlay.jsx'
@@ -236,6 +240,48 @@ export default function App() {
   })
   const notesState = useNotes({ signedIn })
   const briefingState = useBriefing({ signedIn, calendarPrefs, presence })
+  // Qual painel do trilho está aberto. Mora aqui, e não dentro do Rail, porque
+  // os atalhos de teclado também precisam abrir e fechar esses painéis.
+  const [railAberto, setRailAberto] = useState(null)
+  const [mostrandoAtalhos, setMostrandoAtalhos] = useState(false)
+
+  function abrirOuFechar(id) {
+    setRailAberto((atual) => (atual === id ? null : id))
+  }
+
+  useAtalhos({
+    criar: () => abrirOuFechar('add'),
+    agente: () => abrirOuFechar('agente'),
+    notas: () => abrirOuFechar('notes'),
+    buscar: () => abrirOuFechar('search'),
+    pomodoro: () => abrirOuFechar('focus'),
+    'vista-dia': () => setView('day'),
+    'vista-semana': () => setView('week'),
+    'vista-mes': () => setView('month'),
+    hoje: () => setReference(new Date()),
+    anterior: () => setReference((r) => shiftReference(view, r, -1)),
+    proximo: () => setReference((r) => shiftReference(view, r, 1)),
+    ajuda: () => setMostrandoAtalhos((atual) => !atual),
+  })
+  // Os handlers abaixo são declarações de função, então já existem aqui. O
+  // agente executa por eles em vez de falar com a API direto: assim ele passa
+  // exatamente pelos mesmos caminhos (e recarregamentos) do resto da tela.
+  const agentState = useAgent({
+    calendars,
+    taskLists,
+    tasks,
+    notes: notesState.notes,
+    handlers: {
+      onCreateEvent: handleCreateEvent,
+      onCreateTask: handleCreateTask,
+      onUpdateEvent: handleCommandUpdateEvent,
+      onDeleteEvent: handleCommandDeleteEvent,
+      onUpdateTask: handleCommandUpdateTask,
+      onDeleteTask: handleCommandDeleteTask,
+      onCompleteTask: handleCompleteTask,
+      onSetPresence: handleSetPresence,
+    },
+  })
 
   const occupies = (event) => occupiesTime(event, calendarPrefs, presence)
   const declined = (event) => isDeclined(event, presence)
@@ -422,8 +468,9 @@ export default function App() {
   const tools = [
     {
       id: 'add',
-      label: 'Comando',
+      label: 'Criar',
       icon: '+',
+      tecla: 'c',
       // No trilho de mesa, criar é a ação de maior destaque (o equivalente ao
       // FAB do MD3) — ganha a cor de primária mesmo parada, diferente das
       // outras ferramentas. Na barra inferior do celular esse realce não
@@ -434,21 +481,25 @@ export default function App() {
         <QuickAdd
           calendars={calendars}
           taskLists={taskLists}
-          tasks={tasks}
           onCreateEvent={handleCreateEvent}
           onCreateTask={handleCreateTask}
-          onUpdateEvent={handleCommandUpdateEvent}
-          onDeleteEvent={handleCommandDeleteEvent}
-          onUpdateTask={handleCommandUpdateTask}
-          onDeleteTask={handleCommandDeleteTask}
-          onSetPresence={handleSetPresence}
           onDone={close}
         />
       ),
     },
     {
+      id: 'agente',
+      label: 'Agente',
+      icon: '✦',
+      tecla: 'a',
+      // Sem onDone: a conversa não se fecha sozinha depois de aplicar uma
+      // ação — quase sempre vem outra frase logo em seguida.
+      render: () => <AgentPanel agentState={agentState} />,
+    },
+    {
       id: 'search',
       label: 'Buscar',
+      tecla: 'b',
       icon: (
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
           <circle cx="10.5" cy="10.5" r="6.5" />
@@ -467,6 +518,7 @@ export default function App() {
     {
       id: 'focus',
       label: 'Pomodoro',
+      tecla: 'p',
       // O botão mostra o tempo correndo, então dá para acompanhar o ciclo sem
       // abrir nada — era o que o cartão fixo fazia, ocupando a página inteira.
       // Em 'done' não há contagem correndo: mostra o rótulo de novo, mas segue
@@ -479,6 +531,7 @@ export default function App() {
       id: 'notes',
       label: 'Anotações',
       icon: '≡',
+      tecla: 'n',
       render: () => (
         <Notes
           notesState={notesState}
@@ -572,7 +625,7 @@ export default function App() {
           onToggleShowCompleted={setShowCompleted}
         />
 
-        <Rail tools={tools} />
+        <Rail tools={tools} openId={railAberto} onOpenChange={setRailAberto} />
       </div>
 
       <FocusOverlay focus={focus} onCompleteTask={handleCompleteTask} />
@@ -648,6 +701,8 @@ export default function App() {
       {briefingState.overlayOpen && (
         <BriefingOverlay briefing={briefingState.briefing} onClose={briefingState.closeOverlay} />
       )}
+
+      {mostrandoAtalhos && <ShortcutsOverlay onClose={() => setMostrandoAtalhos(false)} />}
     </div>
   )
 }
