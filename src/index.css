@@ -350,6 +350,30 @@ textarea:focus-visible,
 button.danger { color: var(--urgent); border-color: var(--urgent-bg); }
 button.danger:hover { background: var(--urgent-bg); }
 
+/* Botão só ícone das linhas de lista (editar/focar/concluir tarefa): 40px,
+   o tamanho pequeno de "icon button" do MD3 — três desses lado a lado ainda
+   cabem sem empurrar o título da tarefa para várias linhas, o que os botões
+   de texto faziam no celular. */
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border-radius: var(--shape-full);
+  border: 1px solid var(--outline-variant);
+  background: transparent;
+  color: var(--on-surface-variant);
+  flex-shrink: 0;
+}
+
+.icon-btn--live {
+  background: var(--accent-bg);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .form-error {
   background: var(--urgent-bg);
   color: var(--urgent);
