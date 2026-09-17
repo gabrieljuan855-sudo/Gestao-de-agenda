@@ -27,7 +27,11 @@ export async function analyzeNoteWithAI(text) {
     // A varredura das anotações analisa uma nota por chamada: sem este freio,
     // uma cota estourada vira uma rajada de N falhas seguidas, 4x por dia.
     pausarIA(data.motivo)
-    throw new Error(data.error || `Falha ao analisar (${res.status}).`)
+    const err = new Error(data.error || `Falha ao analisar (${res.status}).`)
+    // Para quem chama (useNotes.js) escolher a mensagem certa: sobrecarga ou
+    // cota se resolve sozinha, e não é a mesma coisa que "isto está quebrado".
+    err.transiente = data.transiente === true
+    throw err
   }
 
   return {

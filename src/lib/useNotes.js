@@ -134,6 +134,12 @@ export default function useNotes({ signedIn }) {
   // Ids em análise agora — mais de uma nota pode estar sendo analisada ao
   // mesmo tempo (a digitação numa e a varredura programada, por exemplo).
   const [analyzingIds, setAnalyzingIds] = useState(() => new Set())
+  // Falha ao pedir sugestões da IA para uma anotação. Separado do `error` de
+  // sincronização de propósito — são causas diferentes, e um cobrindo o outro
+  // faria a pessoa não saber qual dos dois está acontecendo. Antes disto a
+  // falha só ia pro console: o spinner de "analisando" sumia sem sugestão
+  // nenhuma, indistinguível de "a IA não achou nada a dizer sobre isto".
+  const [aiError, setAiError] = useState(null)
   const saveTimer = useRef(null)
   const loadedOnce = useRef(false)
   // "Última versão conhecida" para a varredura programada usar sem precisar
@@ -374,8 +380,14 @@ export default function useNotes({ signedIn }) {
       updateNote(id, patch, { touch: false })
     } catch (err) {
       // A nota continua normal, só sem sugestões novas — uma anotação não
-      // pode travar por causa da IA estar fora do ar.
+      // pode travar por causa da IA estar fora do ar. Mas a pessoa precisa
+      // saber que foi isso, e não que não havia nada a sugerir.
       console.error('Não foi possível analisar a anotação:', err)
+      setAiError(
+        err.transiente
+          ? 'A IA está sobrecarregada ou sem cota por agora — as sugestões voltam sozinhas mais tarde.'
+          : `Não deu para revisar essa anotação com a IA agora (${err.message}).`
+      )
     } finally {
       setAnalyzingIds((prev) => {
         const next = new Set(prev)
@@ -393,6 +405,8 @@ export default function useNotes({ signedIn }) {
     syncStatus,
     error,
     dismissError: () => setError(null),
+    aiError,
+    dismissAiError: () => setAiError(null),
     createNote,
     updateNote,
     deleteNote,
