@@ -36,6 +36,21 @@ export function rotuloDaAcao(acao) {
   return VERBO[acao?.action] || 'Ação'
 }
 
+// Ordenada por prazo antes de qualquer corte — do mesmo jeito que os eventos
+// já eram, só que aqui faltava. Sem isso, com mais de MAX_TAREFAS pendentes a
+// que o usuário está perguntando (a mais próxima do vencimento, em geral)
+// podia ficar de fora só por causa da ordem em que a API do Google devolveu,
+// e o agente respondia "não encontrei" para algo que existe. Sem prazo vai
+// para o fim: não tem uma data para competir por espaço no corte.
+export function ordenarTarefasPorPrazo(tasks) {
+  return tasks.slice().sort((a, b) => {
+    if (!a.due && !b.due) return 0
+    if (!a.due) return 1
+    if (!b.due) return -1
+    return new Date(a.due) - new Date(b.due)
+  })
+}
+
 // Só o que o modelo precisa para decidir — nunca o objeto cru do Google, que
 // traz participantes, descrição e links que não ajudam em nada e custam caro.
 // Mesmo espírito de coletarContexto em useBriefing.js.
@@ -54,7 +69,7 @@ async function montarContexto({ calendars, taskLists, tasks, notes }) {
     .sort((a, b) => eventStart(a) - eventStart(b))
     .slice(0, MAX_EVENTOS)
 
-  const tarefasVisiveis = tasks.filter((t) => t.status !== 'completed').slice(0, MAX_TAREFAS)
+  const tarefasVisiveis = ordenarTarefasPorPrazo(tasks.filter((t) => t.status !== 'completed')).slice(0, MAX_TAREFAS)
   const notasVisiveis = notes.slice(0, MAX_NOTAS)
 
   const nomeDaAgenda = (id) => {
