@@ -3,8 +3,16 @@ import { pausarIA } from './aiCooldown.js'
 
 // Manda o texto de uma anotação para o Worker analisar com o Gemini e sugerir
 // um título curto e ações (agendar, criar tarefa, falar com alguém, evoluir
-// um caso, ou só o aviso de que aquilo merece virar um documento).
-export async function analyzeNoteWithAI(text) {
+// um caso, ou só o aviso de que aquilo merece virar um documento) — e, se
+// houver forte relação, apontar qual outra anotação já existente é sobre o
+// mesmo assunto.
+//
+// `notas` são as outras anotações (nunca a nota inteira, só título e um
+// trecho curto — mesmo espírito do contexto que o agente manda). A ordem
+// importa: "notaRelacionadaRef" que volta do Worker ("n1", "n2"...) é o
+// índice dentro desta mesma lista, e é assim que useNotes.js resolve de
+// volta para o id real.
+export async function analyzeNoteWithAI(text, { notas = [] } = {}) {
   const token = await ensureToken()
   if (!token) throw new Error('Faça login primeiro.')
 
@@ -19,6 +27,7 @@ export async function analyzeNoteWithAI(text) {
       text,
       today: now.toLocaleDateString('pt-BR'),
       weekday: now.toLocaleDateString('pt-BR', { weekday: 'long' }),
+      notas: notas.map((n) => ({ titulo: n.title || '', trecho: (n.body || '').trim().slice(0, 200) })),
     }),
   })
 
@@ -37,5 +46,6 @@ export async function analyzeNoteWithAI(text) {
   return {
     title: data.title || '',
     suggestions: Array.isArray(data.suggestions) ? data.suggestions : [],
+    notaRelacionadaRef: typeof data.notaRelacionadaRef === 'string' ? data.notaRelacionadaRef : null,
   }
 }

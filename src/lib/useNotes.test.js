@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ultimoHorarioDaVarredura, descreverSincronizacao } from './useNotes.js'
+import { ultimoHorarioDaVarredura, descreverSincronizacao, resolverNotaRelacionada } from './useNotes.js'
 
 function em(dataHora) {
   return new Date(`2026-09-17T${dataHora}`)
@@ -35,5 +35,27 @@ describe('descreverSincronizacao', () => {
     // ter subido. Vazio aqui é a correção: sem informação, não se inventa.
     expect(descreverSincronizacao('ocioso')).toBe('')
     expect(descreverSincronizacao(undefined)).toBe('')
+  })
+})
+
+describe('resolverNotaRelacionada', () => {
+  const outras = [
+    { id: 'nota-a', title: 'Caso Fulano' },
+    { id: 'nota-b', title: 'Caso Beltrano' },
+  ]
+
+  it('resolve a referência para a nota real na mesma posição', () => {
+    expect(resolverNotaRelacionada('n1', outras)).toEqual({ id: 'nota-a', title: 'Caso Fulano' })
+    expect(resolverNotaRelacionada('n2', outras)).toEqual({ id: 'nota-b', title: 'Caso Beltrano' })
+  })
+
+  it('devolve null para referência fora da lista, vazia ou de outro tipo', () => {
+    // O caso que importa: a lista mudou entre o pedido e a resposta (a pessoa
+    // editou outra aba no meio do caminho) — a referência antiga não pode
+    // apontar para a nota errada.
+    expect(resolverNotaRelacionada('n5', outras)).toBe(null)
+    expect(resolverNotaRelacionada(null, outras)).toBe(null)
+    expect(resolverNotaRelacionada('e1', outras)).toBe(null)
+    expect(resolverNotaRelacionada('n1', [])).toBe(null)
   })
 })

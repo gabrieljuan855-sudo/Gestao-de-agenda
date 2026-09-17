@@ -784,6 +784,46 @@ button.danger:hover { background: var(--urgent-bg); }
   .notes-status-sync.is-salvando svg { animation: none; opacity: 0.7; }
 }
 
+/* Busca por pergunta sobre o conjunto de anotações — fica acima das abas
+   porque a pergunta é sobre todas elas, não sobre a que está aberta. */
+.notes-search {
+  margin-bottom: 12px;
+}
+.notes-search-form {
+  display: flex;
+  gap: 8px;
+}
+.notes-search-form input {
+  flex: 1;
+}
+.notes-search-result {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: var(--shape-sm);
+  background: var(--surface-variant);
+  border: 1px solid var(--outline-variant);
+}
+.notes-search-hits {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+}
+/* Botão de lista, não chip: clicar navega para a anotação, e chip no MD3 é
+   para filtro/entrada/sugestão — não para navegar. */
+.notes-search-hit {
+  text-align: left;
+  padding: 6px 8px;
+  border: none;
+  border-radius: var(--shape-xs);
+  background: transparent;
+  color: var(--primary);
+  font-size: var(--body-sm);
+}
+.notes-search-hit:hover {
+  background: var(--surface-container);
+}
+
 /* Abas das anotações — *primary tabs* do MD3. Toda anotação é uma aba, sempre
    (não há lista por trás): o "+" no fim da barra é o único outro jeito de
    entrar aqui, no mesmo espírito do "nova aba" de um navegador.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { normalizeAnalysis, normalizeBriefing, normalizeAgent } from './index.js'
+import { normalizeAnalysis, normalizeBriefing, normalizeAgent, normalizeSearch } from './index.js'
 
 describe('normalizeAnalysis', () => {
   it('mantém sugestões válidas e usa o texto como título quando a IA não sugere um', () => {
@@ -52,9 +52,79 @@ describe('normalizeAnalysis', () => {
   })
 
   it('nunca quebra com uma resposta vazia ou malformada', () => {
-    expect(normalizeAnalysis({})).toEqual({ title: '', suggestions: [] })
-    expect(normalizeAnalysis(null)).toEqual({ title: '', suggestions: [] })
-    expect(normalizeAnalysis({ suggestions: 'não é uma lista' })).toEqual({ title: '', suggestions: [] })
+    expect(normalizeAnalysis({})).toEqual({ title: '', suggestions: [], notaRelacionadaRef: null })
+    expect(normalizeAnalysis(null)).toEqual({ title: '', suggestions: [], notaRelacionadaRef: null })
+    expect(normalizeAnalysis({ suggestions: 'não é uma lista' })).toEqual({
+      title: '',
+      suggestions: [],
+      notaRelacionadaRef: null,
+    })
+  })
+
+  it('extrai telefone e e-mail do texto original da nota, só para sugestão de contato', () => {
+    const result = normalizeAnalysis(
+      { suggestions: [{ type: 'contato', text: 'Falar com a Ana' }] },
+      { text: 'Ligar para a Ana no (11) 91234-5678 ou ana@exemplo.com quando puder.' }
+    )
+    expect(result.suggestions[0]).toMatchObject({ phone: '(11) 91234-5678', email: 'ana@exemplo.com' })
+  })
+
+  it('não inventa telefone/e-mail quando o texto não traz nenhum, e não extrai para outros tipos', () => {
+    const semContato = normalizeAnalysis(
+      { suggestions: [{ type: 'contato', text: 'Falar com a Ana' }] },
+      { text: 'Falar com a Ana sobre o caso.' }
+    )
+    expect(semContato.suggestions[0]).toMatchObject({ phone: null, email: null })
+
+    const outroTipo = normalizeAnalysis(
+      { suggestions: [{ type: 'tarefa', text: 'Ligar depois' }] },
+      { text: 'Ligar depois para (11) 91234-5678.' }
+    )
+    expect(outroTipo.suggestions[0].phone).toBeUndefined()
+  })
+
+  it('aceita nota relacionada só quando a referência está dentro da lista oferecida', () => {
+    const valida = normalizeAnalysis({ notaRelacionadaRef: 'n2' }, { notasCount: 3 })
+    expect(valida.notaRelacionadaRef).toBe('n2')
+
+    // O caso que importa: o modelo apontou uma referência fora da lista que
+    // foi realmente oferecida no prompt — igual ao que normalizeAgent faz
+    // para referências de evento/tarefa.
+    const foraDoIntervalo = normalizeAnalysis({ notaRelacionadaRef: 'n5' }, { notasCount: 3 })
+    expect(foraDoIntervalo.notaRelacionadaRef).toBe(null)
+
+    const semLista = normalizeAnalysis({ notaRelacionadaRef: 'n1' })
+    expect(semLista.notaRelacionadaRef).toBe(null)
+
+    const formatoInvalido = normalizeAnalysis({ notaRelacionadaRef: 'evento-3' }, { notasCount: 5 })
+    expect(formatoInvalido.notaRelacionadaRef).toBe(null)
+  })
+})
+
+describe('normalizeSearch', () => {
+  it('mantém a resposta e as referências que estão dentro da lista oferecida', () => {
+    const result = normalizeSearch({ answer: 'Você anotou isso na nota do caso Fulano.', refs: ['n1', 'n3'] }, { notasCount: 4 })
+    expect(result).toEqual({ answer: 'Você anotou isso na nota do caso Fulano.', refs: ['n1', 'n3'] })
+  })
+
+  it('descarta referência fora da lista, repetida ou de formato errado', () => {
+    // O caso que importa: o modelo citou uma nota que nunca foi oferecida no
+    // prompt — aceitar isso levaria a pessoa para o lugar errado ao clicar.
+    const result = normalizeSearch({ answer: 'x', refs: ['n1', 'n1', 'n9', 'evento-1', 42] }, { notasCount: 2 })
+    expect(result.refs).toEqual(['n1'])
+  })
+
+  it('limita a 8 referências e corta uma resposta absurdamente longa', () => {
+    const refs = Array.from({ length: 12 }, (_, i) => `n${i + 1}`)
+    const result = normalizeSearch({ answer: 'x'.repeat(1000), refs }, { notasCount: 12 })
+    expect(result.refs).toHaveLength(8)
+    expect(result.answer.length).toBe(600)
+  })
+
+  it('nunca quebra com uma resposta vazia ou malformada', () => {
+    expect(normalizeSearch({})).toEqual({ answer: '', refs: [] })
+    expect(normalizeSearch(null)).toEqual({ answer: '', refs: [] })
+    expect(normalizeSearch({ refs: 'não é uma lista' })).toEqual({ answer: '', refs: [] })
   })
 })
 

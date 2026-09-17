@@ -21,7 +21,7 @@ function snippetOf(note) {
 // sempre: gravar a cada tecla gastaria uma chamada ao Drive por letra. A IA
 // tem seu próprio timer, bem mais longo (ver AI_IDLE_MS): a ideia é analisar
 // quando a anotação estiver "pronta", não a cada pausa curta de digitação.
-function NoteEditor({ note, onChange, onAnalyze, analyzing, syncStatus, calendars, taskLists, onCreateEvent, onCreateTask }) {
+function NoteEditor({ note, onChange, onAnalyze, analyzing, syncStatus, calendars, taskLists, onCreateEvent, onCreateTask, onSelectRelated }) {
   const [title, setTitle] = useState(note.title)
   const [body, setBody] = useState(note.body)
   const firstRender = useRef(true)
@@ -30,6 +30,13 @@ function NoteEditor({ note, onChange, onAnalyze, analyzing, syncStatus, calendar
   // O que já foi mandado para a IA nesta nota, para não repetir a mesma
   // análise sem nada ter mudado desde a última vez.
   const analyzedBodyRef = useRef(note.body)
+  // O último título vindo de fora (não da digitação aqui dentro). É contra
+  // ele que se decide se um note.title novo é a IA preenchendo um título
+  // vazio (sincroniza o campo) ou o eco da própria gravação que este editor
+  // acabou de mandar (ignora — repetir a gravação só gastaria outra chamada
+  // ao Drive à toa).
+  const lastKnownTitleRef = useRef(note.title)
+  const syncingTitleRef = useRef(false)
 
   // Trocar de nota reseta os campos para o conteúdo dela, sem disparar
   // gravação nem análise — é troca de tela, não edição.
@@ -37,10 +44,29 @@ function NoteEditor({ note, onChange, onAnalyze, analyzing, syncStatus, calendar
     setTitle(note.title)
     setBody(note.body)
     analyzedBodyRef.current = note.body
+    lastKnownTitleRef.current = note.title
     firstRender.current = true
     clearTimeout(saveTimer.current)
     clearTimeout(aiTimer.current)
   }, [note.id])
+
+  // A IA pode preencher o título enquanto esta mesma nota continua aberta: a
+  // análise roda 45s depois de parar de digitar, e a pessoa nem sempre troca
+  // de aba nesse meio tempo. Sem isto, o campo ficava em branco na tela mesmo
+  // com o título já gravado por baixo, porque o efeito acima só reage a troca
+  // de nota, nunca ao próprio campo mudar por fora.
+  useEffect(() => {
+    if (note.title === lastKnownTitleRef.current) return
+    // Só assume o valor de fora se a pessoa não tiver digitado o próprio
+    // título desde a última vez que os dois bateram — senão a sugestão da IA
+    // atropelaria o que ela acabou de escrever.
+    if (title === lastKnownTitleRef.current) {
+      syncingTitleRef.current = true
+      setTitle(note.title)
+    }
+    lastKnownTitleRef.current = note.title
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [note.title])
 
   function maybeAnalyze(currentBody) {
     if (currentBody.trim().length < AI_MIN_LENGTH) return
@@ -52,6 +78,10 @@ function NoteEditor({ note, onChange, onAnalyze, analyzing, syncStatus, calendar
   useEffect(() => {
     if (firstRender.current) {
       firstRender.current = false
+      return
+    }
+    if (syncingTitleRef.current) {
+      syncingTitleRef.current = false
       return
     }
     clearTimeout(saveTimer.current)
@@ -91,6 +121,12 @@ function NoteEditor({ note, onChange, onAnalyze, analyzing, syncStatus, calendar
         <StatusDoDrive status={syncStatus} />
         {analyzing && <span>· revisando com a IA...</span>}
       </div>
+
+      {note.relatedNote && (
+        <Banner tone="info" actionLabel="Abrir" onAction={() => onSelectRelated(note.relatedNote.id)}>
+          A IA notou que isto parece relacionado a "{note.relatedNote.title || '(sem título)'}".
+        </Banner>
+      )}
 
       {suggestions.length > 0 && (
         <div style={{ marginTop: 10 }}>
@@ -181,6 +217,59 @@ function TabBar({ notes, selectedId, onSelect, onRequestDelete, onCreate }) {
   )
 }
 
+// Pergunta em linguagem natural sobre o conjunto de anotações, não sobre a
+// aba aberta — por isso mora acima das abas, e não dentro do editor. Os
+// resultados aparecem como botões de lista, não chips: clicar num deles
+// navega para a anotação, e chip no MD3 é para filtro/entrada/sugestão, não
+// para navegar (o mesmo motivo por trás das abas de Notes.jsx serem abas).
+function NoteSearch({ onSearch, searching, result, error, onDismiss, onOpenNote }) {
+  const [query, setQuery] = useState('')
+
+  function submit(e) {
+    e.preventDefault()
+    const q = query.trim()
+    if (!q || searching) return
+    onSearch(q)
+  }
+
+  return (
+    <div className="notes-search">
+      <form onSubmit={submit} className="notes-search-form">
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Perguntar sobre as anotações..."
+        />
+        <button type="submit" disabled={searching || !query.trim()}>
+          {searching ? 'Buscando...' : 'Perguntar'}
+        </button>
+      </form>
+
+      {error && (
+        <Banner tone="warning" actionLabel="✕" onAction={onDismiss}>
+          {error}
+        </Banner>
+      )}
+
+      {result && (
+        <div className="notes-search-result">
+          <div style={{ fontSize: 'var(--body-sm)' }}>{result.answer}</div>
+          {result.notas.length > 0 && (
+            <div className="notes-search-hits">
+              {result.notas.map((n) => (
+                <button key={n.id} type="button" className="notes-search-hit" onClick={() => onOpenNote(n.id)}>
+                  {n.title?.trim() || '(sem título)'}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // O estado de verdade (as anotações, qual está selecionada, a sincronização
 // com o Drive, a análise por IA) mora em useNotes — este componente só existe
 // enquanto o painel do trilho está aberto.
@@ -200,6 +289,11 @@ export default function Notes({ notesState, calendars = [], taskLists = [], onCr
     deleteNote,
     analyzeNote,
     analyzingIds,
+    searchInNotes,
+    searching,
+    searchResult,
+    searchError,
+    dismissSearch,
   } = notesState
   const selected = notes.find((n) => n.id === selectedId)
   // A confirmação mora aqui, e não na aba: é aqui que dá para saber qual
@@ -209,6 +303,17 @@ export default function Notes({ notesState, calendars = [], taskLists = [], onCr
 
   return (
     <div>
+      {notes.length > 0 && (
+        <NoteSearch
+          onSearch={searchInNotes}
+          searching={searching}
+          result={searchResult}
+          error={searchError}
+          onDismiss={dismissSearch}
+          onOpenNote={setSelectedId}
+        />
+      )}
+
       <TabBar
         notes={notes}
         selectedId={selectedId}
@@ -240,6 +345,7 @@ export default function Notes({ notesState, calendars = [], taskLists = [], onCr
           taskLists={taskLists}
           onCreateEvent={onCreateEvent}
           onCreateTask={onCreateTask}
+          onSelectRelated={setSelectedId}
         />
       ) : (
         <div className="muted" style={{ marginTop: 10 }}>

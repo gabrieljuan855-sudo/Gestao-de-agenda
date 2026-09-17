@@ -3,8 +3,9 @@
 // Ele continua servindo o site estático como antes; as rotas próprias usam
 // o Gemini para interpretar texto em português: POST /api/agent (o agente
 // que conversa e propõe ações sobre a agenda, as tarefas e as anotações),
-// POST /api/briefing (resumo automático do dia/semana) e POST
-// /api/analyze-note (sugestões a partir de uma anotação).
+// POST /api/briefing (resumo automático do dia/semana), POST
+// /api/analyze-note (sugestões a partir de uma anotação) e POST
+// /api/search-notes (responde uma pergunta usando as anotações existentes).
 // A chave do Gemini fica como segredo do Cloudflare e nunca chega ao
 // navegador — é justamente por isso que essa parte roda no servidor.
 
@@ -208,6 +209,8 @@ Regras:
 - "confirmar_presenca": ela diz que vai ou não vai a um compromisso, sem querer excluí-lo. Só "vou" ou "nao".
 - Nunca deixe data ou hora dentro do título.
 - Horas em português como "13h15", "14h" equivalem a 13:15, 14:00.
+- Se a pessoa não disser a prioridade da tarefa, mas o texto sugerir urgência ("urgente", "o quanto antes", "hoje ainda", prazo já em cima), use "alta". Sem sinal de urgência nenhum, deixe "priority" null (o app aplica o padrão dela).
+- Antes de propor "criar_evento" ou "editar_evento", confira se o horário colide com algum compromisso já listado (mesmo dia, horários que se sobrepõem). Se colidir, proponha a ação mesmo assim, mas avise o conflito em "reply" (dizendo com qual compromisso) — quem decide se mantém é a pessoa, não você.
 - No máximo ${MAX_ACOES} ações. Se o pedido exigir mais, faça as mais importantes e diga em "reply" o que ficou de fora.`
 }
 
@@ -350,6 +353,7 @@ Regras:
 - Tom direto e acolhedor, não robótico.
 - Sem saudação ("bom dia", "boa tarde" etc.) — isso já aparece em outro lugar da tela.
 - Resuma, não liste item a item como uma agenda — quem quiser o detalhe abre a tela normal.
+- Se os dados trouxerem minutos ou blocos de foco (tempo de trabalho concentrado, sem interrupção), comente isso brevemente — é um número que a pessoa não vê em nenhum outro lugar do app.
 - Se os dados vierem vazios ou sem nada relevante, diga isso em uma frase curta, sem inventar compromisso ou tarefa nenhuma.`
 }
 
@@ -391,7 +395,58 @@ async function handleBriefing(request, env) {
 
 const SUGGESTION_TYPES = new Set(['evento', 'tarefa', 'documento', 'contato', 'caso'])
 
-function buildAnalyzePrompt({ text, today, weekday }) {
+// Telefone e e-mail nunca vêm do modelo: são dados exatos, e é justamente o
+// tipo de coisa que uma IA generativa pode trocar um dígito sem avisar. Uma
+// expressão regular sobre o texto original da anotação não erra.
+const PHONE_REGEX = /(?:\+55\s?)?\(?\d{2}\)?[\s.-]?9?\d{4}[\s.-]?\d{4}/
+const EMAIL_REGEX = /[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9.-]+[a-zA-Z]/
+
+function extractContact(notaTexto) {
+  const phone = notaTexto.match(PHONE_REGEX)?.[0]?.trim() || null
+  const email = notaTexto.match(EMAIL_REGEX)?.[0] || null
+  return { phone, email }
+}
+
+// Anotações entram numeradas (n1, n2...), no mesmo esquema de referência
+// curta do agente (ver refDeNota em agentActions.js) — usado tanto para
+// apontar uma nota relacionada quanto para a busca por pergunta, e é contra
+// essa mesma lista que a normalização de cada rota confere o que o modelo
+// devolveu, para nunca aceitar uma referência inventada.
+function linhasDeNotas(notas) {
+  return (notas || [])
+    .map((n, i) => `n${i + 1}: ${n?.titulo || '(sem título)'}${n?.trecho ? ` — ${n.trecho}` : ''}`)
+    .join('\n')
+}
+
+// Sanitiza a lista de anotações que o cliente manda (nunca a nota inteira,
+// só título e um trecho curto) antes de entrar em qualquer prompt.
+function sanitizarNotas(notas, max) {
+  return (Array.isArray(notas) ? notas.slice(0, max) : []).map((n) => ({
+    titulo: typeof n?.titulo === 'string' ? n.titulo.trim().slice(0, 80) : '',
+    trecho: typeof n?.trecho === 'string' ? n.trecho.trim().slice(0, 200) : '',
+  }))
+}
+
+// As referências que uma resposta pode citar de verdade são só as que
+// realmente apareceram na lista mandada — o mesmo tipo de conferência que
+// normalizeAgent faz para evento/tarefa.
+function refsValidas(brutas, notasCount) {
+  const vistas = new Set()
+  const validas = []
+  for (const ref of Array.isArray(brutas) ? brutas : []) {
+    if (typeof ref !== 'string') continue
+    const r = ref.trim()
+    if (!/^n\d+$/.test(r)) continue
+    const indice = Number(r.slice(1))
+    if (indice < 1 || indice > notasCount || vistas.has(r)) continue
+    vistas.add(r)
+    validas.push(r)
+  }
+  return validas
+}
+
+function buildAnalyzePrompt({ text, today, weekday, notas }) {
+  const outras = linhasDeNotas(notas)
   return `Você lê uma anotação livre (em português do Brasil, de alguém que trabalha com atendimento social/administrativo) e aponta o que ela sugere fazer.
 
 Hoje é ${weekday}, ${today}. Fuso: America/Sao_Paulo.
@@ -400,6 +455,9 @@ Anotação:
 """
 ${text}
 """
+
+OUTRAS ANOTAÇÕES já existentes (só para você notar se a de agora se relaciona com alguma):
+${outras || '(nenhuma outra anotação)'}
 
 Responda SOMENTE com JSON, sem comentários, neste formato:
 {
@@ -412,7 +470,8 @@ Responda SOMENTE com JSON, sem comentários, neste formato:
       "date": "AAAA-MM-DD ou null",
       "time": "HH:MM em 24h, ou null se não houver hora"
     }
-  ]
+  ],
+  "notaRelacionadaRef": "a referência (n1, n2...) de uma outra anotação claramente sobre o mesmo caso/assunto, ou null"
 }
 
 Regras:
@@ -423,13 +482,19 @@ Regras:
 - "documento": parece que vai precisar virar um documento/relatório escrito — não sugira data nem hora para este tipo.
 - Só inclua "date"/"time" em "evento" e "tarefa", e só quando o texto realmente indicar quando.
 - Nada de sugestão para anotações que são só um pensamento solto, sem nenhuma ação implícita — nesse caso "suggestions" pode vir vazio.
+- "notaRelacionadaRef": só preencha quando a relação for forte e óbvia (mesmo caso, mesma pessoa, mesmo assunto claramente contínuo) — na dúvida, deixe null. NUNCA invente uma referência que não esteja na lista de outras anotações.
 - Não invente informação que não está na anotação.
 - No máximo 5 sugestões.`
 }
 
 // Nada aqui é confiável por vir de um modelo — cada sugestão é validada e
 // as que não batem no formato esperado somem, em vez de quebrar a tela.
-export function normalizeAnalysis(parsed) {
+// `text` é o corpo original da anotação (não a frase curta que o modelo
+// escreveu) — é nele que extractContact procura telefone/e-mail de verdade.
+// `notasCount` é quantas outras anotações foram oferecidas no prompt: contra
+// esse número se confere "notaRelacionadaRef", do mesmo jeito que o agente
+// confere as referências de evento/tarefa em normalizeAgent.
+export function normalizeAnalysis(parsed, { text: notaTexto = '', notasCount = 0 } = {}) {
   const title = typeof parsed?.title === 'string' ? parsed.title.trim().slice(0, 80) : ''
   const rawSuggestions = Array.isArray(parsed?.suggestions) ? parsed.suggestions.slice(0, 5) : []
 
@@ -448,11 +513,17 @@ export function normalizeAnalysis(parsed) {
         // Data/hora só fazem sentido para o que vira compromisso ou tarefa.
         date: type === 'evento' || type === 'tarefa' ? date : null,
         time: type === 'evento' ? time : null,
+        // Só "contato" ganha telefone/e-mail — nos outros tipos não fazem sentido.
+        ...(type === 'contato' ? extractContact(notaTexto) : {}),
       }
     })
     .filter(Boolean)
 
-  return { title, suggestions }
+  const refBruta = typeof parsed?.notaRelacionadaRef === 'string' ? parsed.notaRelacionadaRef.trim() : ''
+  const indiceRelacionada = /^n\d+$/.test(refBruta) ? Number(refBruta.slice(1)) : 0
+  const notaRelacionadaRef = indiceRelacionada >= 1 && indiceRelacionada <= notasCount ? refBruta : null
+
+  return { title, suggestions, notaRelacionadaRef }
 }
 
 async function handleAnalyzeNote(request, env) {
@@ -477,9 +548,79 @@ async function handleAnalyzeNote(request, env) {
   // de controle por uma única gravação.
   if (text.length > 6000) return json({ error: 'Anotação longa demais para analisar de uma vez.' }, 400)
 
+  // As outras anotações vêm já resumidas do cliente (nunca a lista completa
+  // e crua) — mesmo espírito de recortarContexto no agente.
+  const notas = sanitizarNotas(body?.notas, 30)
+
   try {
-    const parsed = await callGemini(env, buildAnalyzePrompt({ text, today: body.today, weekday: body.weekday }))
-    return json(normalizeAnalysis(parsed))
+    const parsed = await callGemini(env, buildAnalyzePrompt({ text, today: body.today, weekday: body.weekday, notas }))
+    return json(normalizeAnalysis(parsed, { text, notasCount: notas.length }))
+  } catch (err) {
+    return erroDeIA(err)
+  }
+}
+
+const MAX_NOTAS_BUSCA = 60
+
+function buildSearchPrompt({ query, today, weekday, notas }) {
+  const lista = linhasDeNotas(notas)
+  return `Você responde perguntas sobre as anotações pessoais de alguém que trabalha com atendimento social/administrativo, em português do Brasil, usando só o que está nelas.
+
+Hoje é ${weekday}, ${today}. Fuso: America/Sao_Paulo.
+
+ANOTAÇÕES (use a referência à esquerda para citar qual usou):
+${lista || '(nenhuma anotação ainda)'}
+
+Pergunta da pessoa:
+"""
+${query}
+"""
+
+Responda SOMENTE com JSON, sem comentários, neste formato:
+{
+  "answer": "a resposta, em até 80 palavras, em português",
+  "refs": ["as referências (n1, n3...) das anotações que você realmente usou para responder"]
+}
+
+Regras:
+- Responda só com o que está nas anotações listadas. Se não encontrar nada relevante, diga isso em "answer" e deixe "refs" vazio — nunca invente conteúdo de anotação nenhuma.
+- NUNCA cite uma referência que não esteja na lista acima.
+- No máximo 8 referências.`
+}
+
+// Nada aqui é confiável por vir de um modelo — "refs" só sobrevive se
+// realmente estiver entre as anotações que foram oferecidas no prompt.
+export function normalizeSearch(parsed, { notasCount = 0 } = {}) {
+  const answer = typeof parsed?.answer === 'string' ? parsed.answer.trim().slice(0, 600) : ''
+  const refs = refsValidas(parsed?.refs, notasCount).slice(0, 8)
+  return { answer, refs }
+}
+
+async function handleSearchNotes(request, env) {
+  const caller = await verifyCaller(request, env)
+  if (!caller) return json({ error: 'Não autorizado.' }, 401)
+
+  if (!env.GEMINI_API_KEY) {
+    return json({ error: 'GEMINI_API_KEY não está configurada neste Worker.' }, 503)
+  }
+
+  let body
+  try {
+    body = await request.json()
+  } catch {
+    return json({ error: 'Corpo inválido.' }, 400)
+  }
+
+  const query = typeof body?.query === 'string' ? body.query.trim() : ''
+  if (!query) return json({ error: 'Envie a pergunta.' }, 400)
+  if (query.length > 300) return json({ error: 'Pergunta longa demais.' }, 400)
+
+  const notas = sanitizarNotas(body?.notas, MAX_NOTAS_BUSCA)
+  if (notas.length === 0) return json({ error: 'Não há anotações para buscar ainda.' }, 400)
+
+  try {
+    const parsed = await callGemini(env, buildSearchPrompt({ query, today: body.today, weekday: body.weekday, notas }))
+    return json(normalizeSearch(parsed, { notasCount: notas.length }))
   } catch (err) {
     return erroDeIA(err)
   }
@@ -506,6 +647,11 @@ export default {
     if (url.pathname === '/api/analyze-note') {
       if (request.method !== 'POST') return json({ error: 'Use POST.' }, 405)
       return handleAnalyzeNote(request, env)
+    }
+
+    if (url.pathname === '/api/search-notes') {
+      if (request.method !== 'POST') return json({ error: 'Use POST.' }, 405)
+      return handleSearchNotes(request, env)
     }
 
     return env.ASSETS.fetch(request)
