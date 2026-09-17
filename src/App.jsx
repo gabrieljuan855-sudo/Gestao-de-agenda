@@ -15,7 +15,7 @@ import {
   reopenTask,
   deleteTask,
 } from './lib/googleApi.js'
-import { rangeForView, shiftReference } from './lib/dates.js'
+import { rangeForView, shiftReference, isSameDay } from './lib/dates.js'
 import QuickAdd from './components/QuickAdd.jsx'
 import Logo from './components/Logo.jsx'
 import Rail from './components/Rail.jsx'
@@ -146,6 +146,37 @@ export default function App() {
 
   useEffect(() => {
     reload()
+  }, [reload])
+
+  // O app nunca se atualizava sozinho: deixado aberto no bolso a tarde
+  // inteira, um compromisso criado no computador só aparecia depois de uma
+  // navegação manual — e a própria virada do dia passava batido, com a tela
+  // de "hoje" presa na data em que foi aberta. Agora ele confere isso sempre
+  // que volta a ficar visível (trocar de app e voltar, destravar o celular)
+  // e, para quem deixa a tela ligada a noite toda sem minimizar nada, também
+  // a cada alguns minutos.
+  useEffect(() => {
+    let lastToday = new Date()
+
+    function checkAndReload() {
+      if (document.visibilityState !== 'visible') return
+      const now = new Date()
+      // A referência só é empurrada se ainda apontava para o "hoje" de antes
+      // da virada: navegar de propósito para outro dia não pode ser desfeito
+      // só porque a meia-noite passou enquanto o app ficava aberto.
+      setReference((r) => (isSameDay(r, lastToday) && !isSameDay(r, now) ? now : r))
+      lastToday = now
+      reload()
+    }
+
+    document.addEventListener('visibilitychange', checkAndReload)
+    window.addEventListener('focus', checkAndReload)
+    const id = setInterval(checkAndReload, 5 * 60 * 1000)
+    return () => {
+      document.removeEventListener('visibilitychange', checkAndReload)
+      window.removeEventListener('focus', checkAndReload)
+      clearInterval(id)
+    }
   }, [reload])
 
   async function handleCreateEvent(preview) {
