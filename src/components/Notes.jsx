@@ -16,24 +16,14 @@ function snippetOf(note) {
   return firstLine ? firstLine.trim().slice(0, 60) : '(sem título)'
 }
 
-function relativeUpdated(iso) {
-  const diffMin = Math.round((Date.now() - new Date(iso).getTime()) / 60000)
-  if (diffMin < 1) return 'agora'
-  if (diffMin < 60) return `há ${diffMin}min`
-  const diffH = Math.round(diffMin / 60)
-  if (diffH < 24) return `há ${diffH}h`
-  return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })
-}
-
 // Título e corpo ficam com estado próprio aqui dentro, sincronizado com a
 // nota selecionada só depois de uma pausa na digitação — o mesmo motivo de
 // sempre: gravar a cada tecla gastaria uma chamada ao Drive por letra. A IA
 // tem seu próprio timer, bem mais longo (ver AI_IDLE_MS): a ideia é analisar
 // quando a anotação estiver "pronta", não a cada pausa curta de digitação.
-function NoteEditor({ note, onChange, onBack, onDelete, onAnalyze, analyzing, syncStatus, calendars, taskLists, onCreateEvent, onCreateTask }) {
+function NoteEditor({ note, onChange, onAnalyze, analyzing, syncStatus, calendars, taskLists, onCreateEvent, onCreateTask }) {
   const [title, setTitle] = useState(note.title)
   const [body, setBody] = useState(note.body)
-  const [confirmingDelete, setConfirmingDelete] = useState(false)
   const firstRender = useRef(true)
   const saveTimer = useRef(null)
   const aiTimer = useRef(null)
@@ -77,26 +67,10 @@ function NoteEditor({ note, onChange, onBack, onDelete, onAnalyze, analyzing, sy
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [title, body])
 
-  // Sair do editor é "terminar" a anotação: grava na hora (sem esperar os
-  // 500ms) e, se sobrou conteúdo novo sem analisar, manda para a IA — é
-  // exatamente o gatilho de "depois que eu terminar" que foi pedido.
-  function handleBack() {
-    clearTimeout(saveTimer.current)
-    clearTimeout(aiTimer.current)
-    onChange({ title, body })
-    maybeAnalyze(body)
-    onBack()
-  }
-
   const suggestions = note.suggestions || []
 
   return (
     <>
-      <div className="panel-head">
-        <button onClick={handleBack}>← Notas</button>
-        <button onClick={() => setConfirmingDelete(true)} style={{ marginLeft: 'auto' }}>Excluir</button>
-      </div>
-
       <input
         type="text"
         value={title}
@@ -135,20 +109,6 @@ function NoteEditor({ note, onChange, onBack, onDelete, onAnalyze, analyzing, sy
           </div>
         </div>
       )}
-
-      {confirmingDelete && (
-        <ConfirmDialog
-          title="Excluir anotação"
-          message="Excluir esta anotação? Isso vale para todos os seus aparelhos."
-          confirmLabel="Excluir"
-          danger
-          onConfirm={() => {
-            setConfirmingDelete(false)
-            onDelete()
-          }}
-          onCancel={() => setConfirmingDelete(false)}
-        />
-      )}
     </>
   )
 }
@@ -177,57 +137,58 @@ function StatusDoDrive({ status }) {
 // As abas seguem o padrão de *primary tabs* do MD3: rótulo, e o indicador
 // ativo — a barra arredondada colada embaixo da aba selecionada. É ela que
 // amarra visualmente a aba ao conteúdo, que é justamente o que faz isso parecer
-// aba de navegador.
+// aba de navegador. (Antes eram pílulas — pílula no MD3 é chip, que serve
+// para filtro e entrada, não para navegar entre coisas abertas.)
 //
-// Antes eram pílulas. Pílula no MD3 é chip, e chip serve para filtro e entrada,
-// não para navegar entre coisas abertas — daí a sensação de estranheza: o
-// componente dizia "filtro" enquanto o trabalho dele era "aba".
-function TabBar({ notes, openIds, selectedId, onSelect, onClose }) {
-  if (openIds.length === 0) return null
+// Toda anotação é uma aba, sempre — não há mais lista por trás. O "+" no fim
+// da barra é o único outro jeito de entrar aqui. Fechar uma aba (✕) é excluir
+// a anotação; quem pede a confirmação é o componente pai, que sabe de qual
+// nota se trata (o trecho dela entra na pergunta).
+function TabBar({ notes, selectedId, onSelect, onRequestDelete, onCreate }) {
   return (
-    <div className="notes-tabs" role="tablist">
-      {openIds.map((id) => {
-        const note = notes.find((n) => n.id === id)
-        if (!note) return null
-        const ativa = id === selectedId
-        return (
-          <div key={id} className={`notes-tab${ativa ? ' is-active' : ''}`}>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={ativa}
-              className="notes-tab-btn"
-              onClick={() => onSelect(id)}
-            >
-              <span className="notes-tab-label">{snippetOf(note)}</span>
-            </button>
-            <button
-              type="button"
-              className="notes-tab-close"
-              aria-label={`Fechar ${snippetOf(note)}`}
-              onClick={() => onClose(id)}
-            >
-              ✕
-            </button>
-            <span className="notes-tab-indicador" aria-hidden="true" />
-          </div>
-        )
-      })}
+    <div className="notes-toolbar">
+      <div className="notes-tabs" role="tablist">
+        {notes.map((note) => {
+          const ativa = note.id === selectedId
+          return (
+            <div key={note.id} className={`notes-tab${ativa ? ' is-active' : ''}`}>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={ativa}
+                className="notes-tab-btn"
+                onClick={() => onSelect(note.id)}
+              >
+                <span className="notes-tab-label">{snippetOf(note)}</span>
+              </button>
+              <button
+                type="button"
+                className="notes-tab-close"
+                aria-label={`Excluir ${snippetOf(note)}`}
+                onClick={() => onRequestDelete(note.id)}
+              >
+                ✕
+              </button>
+              <span className="notes-tab-indicador" aria-hidden="true" />
+            </div>
+          )
+        })}
+      </div>
+      <button type="button" className="notes-tab-add" onClick={onCreate} aria-label="Nova anotação" title="Nova anotação">
+        +
+      </button>
     </div>
   )
 }
 
-// O estado de verdade (a lista, a nota selecionada, a sincronização com o
-// Drive, a análise por IA) mora em useNotes — este componente só existe
+// O estado de verdade (as anotações, qual está selecionada, a sincronização
+// com o Drive, a análise por IA) mora em useNotes — este componente só existe
 // enquanto o painel do trilho está aberto.
 export default function Notes({ notesState, calendars = [], taskLists = [], onCreateEvent, onCreateTask }) {
   const {
     notes,
-    openIds,
     selectedId,
     setSelectedId,
-    openNote,
-    closeTab,
     loading,
     syncStatus,
     error,
@@ -239,20 +200,31 @@ export default function Notes({ notesState, calendars = [], taskLists = [], onCr
     analyzingIds,
   } = notesState
   const selected = notes.find((n) => n.id === selectedId)
+  // A confirmação mora aqui, e não na aba: é aqui que dá para saber qual
+  // anotação está prestes a sumir e mostrar o trecho dela na pergunta.
+  const [pendingDeleteId, setPendingDeleteId] = useState(null)
+  const pendingDelete = notes.find((n) => n.id === pendingDeleteId)
 
-  const tabBar = (
-    <TabBar notes={notes} openIds={openIds} selectedId={selectedId} onSelect={setSelectedId} onClose={closeTab} />
-  )
+  return (
+    <div>
+      <TabBar
+        notes={notes}
+        selectedId={selectedId}
+        onSelect={setSelectedId}
+        onRequestDelete={setPendingDeleteId}
+        onCreate={createNote}
+      />
 
-  if (selected) {
-    return (
-      <>
-        {tabBar}
+      {error && (
+        <Banner tone="warning" actionLabel="✕" onAction={dismissError}>
+          {error}
+        </Banner>
+      )}
+
+      {selected ? (
         <NoteEditor
           note={selected}
           onChange={(patch) => updateNote(selected.id, patch)}
-          onBack={() => setSelectedId(null)}
-          onDelete={() => deleteNote(selected.id)}
           onAnalyze={analyzeNote}
           analyzing={analyzingIds.has(selected.id)}
           syncStatus={syncStatus}
@@ -261,48 +233,25 @@ export default function Notes({ notesState, calendars = [], taskLists = [], onCr
           onCreateEvent={onCreateEvent}
           onCreateTask={onCreateTask}
         />
-      </>
-    )
-  }
-
-  const ordenadas = [...notes].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
-
-  return (
-    <div>
-      {tabBar}
-      <div className="panel-head">
-        <span className="muted">
-          {loading ? 'Carregando...' : `${notes.length} ${notes.length === 1 ? 'anotação' : 'anotações'}`}
-        </span>
-        <button className="primary" onClick={createNote} style={{ marginLeft: 'auto' }}>+ Nova</button>
-      </div>
-
-      {error && (
-        <Banner tone="warning" actionLabel="✕" onAction={dismissError}>
-          {error}
-        </Banner>
+      ) : (
+        <div className="muted" style={{ marginTop: 10 }}>
+          {loading ? 'Carregando...' : 'Nada por aqui ainda. Toque em "+" para começar.'}
+        </div>
       )}
 
-      {ordenadas.length === 0 && !loading && (
-        <div className="muted" style={{ marginTop: 10 }}>Nada por aqui ainda. Toque em "+ Nova" para começar.</div>
+      {pendingDelete && (
+        <ConfirmDialog
+          title="Excluir anotação"
+          message={`Excluir "${snippetOf(pendingDelete)}"? Isso vale para todos os seus aparelhos.`}
+          confirmLabel="Excluir"
+          danger
+          onConfirm={() => {
+            deleteNote(pendingDeleteId)
+            setPendingDeleteId(null)
+          }}
+          onCancel={() => setPendingDeleteId(null)}
+        />
       )}
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
-        {ordenadas.map((note) => (
-          <button
-            key={note.id}
-            className="search-result"
-            onClick={() => openNote(note.id)}
-            style={{ textAlign: 'left' }}
-          >
-            <span className="search-result-text">{snippetOf(note)}</span>
-            {note.suggestions?.length > 0 && <span title="Tem sugestões da IA">✨</span>}
-            <span className="muted" style={{ fontSize: 'var(--label-sm)', flexShrink: 0 }}>
-              {relativeUpdated(note.updatedAt)}
-            </span>
-          </button>
-        ))}
-      </div>
     </div>
   )
 }

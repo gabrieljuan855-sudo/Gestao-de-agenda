@@ -784,21 +784,50 @@ button.danger:hover { background: var(--urgent-bg); }
   .notes-status-sync.is-salvando svg { animation: none; opacity: 0.7; }
 }
 
-/* Abas das anotações — *primary tabs* do MD3.
+/* Abas das anotações — *primary tabs* do MD3. Toda anotação é uma aba, sempre
+   (não há lista por trás): o "+" no fim da barra é o único outro jeito de
+   entrar aqui, no mesmo espírito do "nova aba" de um navegador.
+
    O que faz isto parecer aba de navegador não é a forma do botão, é o
    indicador: a barra de 3px colada embaixo da aba ativa, amarrando-a ao
    conteúdo. A linha divisória por baixo de toda a barra é o outro metade do
-   efeito — ela "abre" só sob a aba ativa. */
+   efeito — ela "abre" só sob a aba ativa, e por isso mora no contêiner
+   inteiro (toolbar), não só na lista de abas: senão o "+" ficaria fora dela.*/
+.notes-toolbar {
+  display: flex;
+  align-items: center;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--outline-variant);
+}
+
 .notes-tabs {
   display: flex;
   align-items: stretch;
   gap: 2px;
   overflow-x: auto;
-  margin-bottom: 12px;
-  border-bottom: 1px solid var(--outline-variant);
+  flex: 1;
+  min-width: 0;
   scrollbar-width: none;
 }
 .notes-tabs::-webkit-scrollbar { display: none; }
+
+.notes-tab-add {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  margin: 0 6px;
+  padding: 0;
+  border: none;
+  border-radius: var(--shape-full);
+  background: transparent;
+  color: var(--on-surface-variant);
+  font-size: var(--title-md);
+  line-height: 1;
+}
+.notes-tab-add:hover { background: var(--surface-variant); color: var(--on-surface); }
 
 .notes-tab {
   position: relative;
