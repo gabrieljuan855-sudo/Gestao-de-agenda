@@ -4,13 +4,13 @@ import Banner from './Banner.jsx'
 import { fromInputs } from '../lib/dates.js'
 import { DEFAULT_PRIORITY } from '../lib/priority.js'
 import { findDefaultCalendar, findListForPriority } from '../lib/defaults.js'
+import { AI_MIN_LENGTH } from '../lib/useNotes.js'
 
 // Tempo parado depois da última tecla para considerar que a anotação foi
 // "finalizada" e vale a pena gastar uma chamada de IA nela. Bem mais longo
 // que o do QuickAdd: aqui o texto é livre e pode crescer por minutos antes
 // de a pessoa realmente terminar o pensamento.
 const AI_IDLE_MS = 45000
-const AI_MIN_LENGTH = 10
 
 function snippetOf(note) {
   if (note.title?.trim()) return note.title.trim()
