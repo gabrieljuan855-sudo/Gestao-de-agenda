@@ -1,20 +1,20 @@
 // Worker do Gestão de Agenda.
 //
 // Ele continua servindo o site estático como antes; as rotas próprias usam
-// o Gemini para interpretar texto em português: POST /api/agent (o agente
-// que conversa e propõe ações sobre a agenda, as tarefas e as anotações),
-// POST /api/briefing (resumo automático do dia/semana) e POST
+// o Claude (Anthropic) para interpretar texto em português: POST /api/agent
+// (o agente que conversa e propõe ações sobre a agenda, as tarefas e as
+// anotações), POST /api/briefing (resumo automático do dia/semana) e POST
 // /api/analyze-note (sugestões a partir de uma anotação).
-// A chave do Gemini fica como segredo do Cloudflare e nunca chega ao
+// A chave da Anthropic fica como segredo do Cloudflare e nunca chega ao
 // navegador — é justamente por isso que essa parte roda no servidor.
 
+import Anthropic from '@anthropic-ai/sdk'
 import { handleAuth } from './auth.js'
 
 const TOKENINFO_URL = 'https://www.googleapis.com/oauth2/v3/tokeninfo'
-// O Google aposenta modelo sem aviso: o gemini-2.0-flash passou a responder
-// 404 pedindo para trocar. Por isso GEMINI_MODEL existe — dá para corrigir
-// pelo painel, sem esperar um deploy.
-const DEFAULT_MODEL = 'gemini-3.6-flash'
+// A Anthropic aposenta modelo com aviso, mas ainda assim dá para trocar sem
+// esperar um deploy — por isso CLAUDE_MODEL existe, corrigível pelo painel.
+const DEFAULT_MODEL = 'claude-opus-5'
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -40,52 +40,57 @@ async function verifyCaller(request, env) {
   return info
 }
 
-async function callGemini(env, prompt) {
-  const model = env.GEMINI_MODEL || DEFAULT_MODEL
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(env.GEMINI_API_KEY)}`
+async function callClaude(env, prompt) {
+  const model = env.CLAUDE_MODEL || DEFAULT_MODEL
+  const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY })
 
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0, responseMimeType: 'application/json' },
-    }),
-  })
-
-  if (!res.ok) {
-    const detail = await res.text()
-    // 503 (sobrecarga) e 429 (limite de uso) são passageiros: o modelo
+  let response
+  try {
+    response = await client.messages.create({
+      model,
+      max_tokens: 4096,
+      // Extração/classificação simples não precisa do esforço máximo — e
+      // gasta bem menos por chamada, o que importa numa rota chamada a
+      // cada mensagem do agente.
+      output_config: { effort: 'low' },
+      messages: [{ role: 'user', content: prompt }],
+    })
+  } catch (err) {
+    // 429 (limite de uso) e 529 (sobrecarga) são passageiros: o modelo
     // costuma voltar em segundos. Quem chama precisa saber disso para
     // decidir se vale tentar de novo em silêncio em vez de alarmar a
     // pessoa com um erro que se resolve sozinho.
-    if (res.status === 503 || res.status === 429) {
-      const limite = res.status === 429
-      const err = new Error(
+    if (err instanceof Anthropic.RateLimitError || err.status === 529) {
+      const limite = err instanceof Anthropic.RateLimitError
+      const transiente = new Error(
         limite
-          ? 'A IA do Google atingiu o limite de uso por agora.'
-          : 'A IA do Google está sobrecarregada agora.'
+          ? 'A IA da Anthropic atingiu o limite de uso por agora.'
+          : 'A IA da Anthropic está sobrecarregada agora.'
       )
-      err.transiente = true
+      transiente.transiente = true
       // Os dois são passageiros, mas em escalas bem diferentes: sobrecarga
       // passa em segundos, cota estourada leva o resto da janela de cobrança.
       // Insistir num limite de cota só queima mais cota.
-      err.motivo = limite ? 'limite' : 'sobrecarga'
-      throw err
+      transiente.motivo = limite ? 'limite' : 'sobrecarga'
+      throw transiente
     }
-    throw new Error(`Gemini respondeu ${res.status}: ${detail.slice(0, 300)}`)
+    throw new Error(`Claude respondeu com erro: ${err.message}`)
   }
 
-  const data = await res.json()
-  const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text
-  if (!raw) throw new Error('Gemini não devolveu conteúdo.')
+  if (response.stop_reason === 'refusal') {
+    throw new Error('Claude recusou a resposta.')
+  }
+
+  const textBlock = response.content.find((b) => b.type === 'text')
+  const raw = textBlock?.text
+  if (!raw) throw new Error('Claude não devolveu conteúdo.')
 
   try {
     return JSON.parse(raw)
   } catch {
-    // Às vezes vem embrulhado em cerca de código, apesar do responseMimeType.
+    // Às vezes vem embrulhado em cerca de código, apesar de pedirmos só JSON.
     const match = raw.match(/\{[\s\S]*\}/)
-    if (!match) throw new Error('Gemini não devolveu JSON válido.')
+    if (!match) throw new Error('Claude não devolveu JSON válido.')
     return JSON.parse(match[0])
   }
 }
@@ -293,8 +298,8 @@ async function handleAgent(request, env) {
   const caller = await verifyCaller(request, env)
   if (!caller) return json({ error: 'Não autorizado.' }, 401)
 
-  if (!env.GEMINI_API_KEY) {
-    return json({ error: 'GEMINI_API_KEY não está configurada neste Worker.' }, 503)
+  if (!env.ANTHROPIC_API_KEY) {
+    return json({ error: 'ANTHROPIC_API_KEY não está configurada neste Worker.' }, 503)
   }
 
   let body
@@ -314,7 +319,7 @@ async function handleAgent(request, env) {
     .map((m) => ({ role: m.role === 'user' ? 'user' : 'assistant', text: m.text.slice(0, 500) }))
 
   try {
-    const parsed = await callGemini(
+    const parsed = await callClaude(
       env,
       buildAgentPrompt({ text, today: body.today, weekday: body.weekday, history, context })
     )
@@ -364,8 +369,8 @@ async function handleBriefing(request, env) {
   const caller = await verifyCaller(request, env)
   if (!caller) return json({ error: 'Não autorizado.' }, 401)
 
-  if (!env.GEMINI_API_KEY) {
-    return json({ error: 'GEMINI_API_KEY não está configurada neste Worker.' }, 503)
+  if (!env.ANTHROPIC_API_KEY) {
+    return json({ error: 'ANTHROPIC_API_KEY não está configurada neste Worker.' }, 503)
   }
 
   let body
@@ -379,7 +384,7 @@ async function handleBriefing(request, env) {
   if (!kind) return json({ error: 'Tipo de briefing inválido.' }, 400)
 
   try {
-    const parsed = await callGemini(
+    const parsed = await callClaude(
       env,
       buildBriefingPrompt({ kind, today: body.today, weekday: body.weekday, context: body.context })
     )
@@ -459,8 +464,8 @@ async function handleAnalyzeNote(request, env) {
   const caller = await verifyCaller(request, env)
   if (!caller) return json({ error: 'Não autorizado.' }, 401)
 
-  if (!env.GEMINI_API_KEY) {
-    return json({ error: 'GEMINI_API_KEY não está configurada neste Worker.' }, 503)
+  if (!env.ANTHROPIC_API_KEY) {
+    return json({ error: 'ANTHROPIC_API_KEY não está configurada neste Worker.' }, 503)
   }
 
   let body
@@ -478,7 +483,7 @@ async function handleAnalyzeNote(request, env) {
   if (text.length > 6000) return json({ error: 'Anotação longa demais para analisar de uma vez.' }, 400)
 
   try {
-    const parsed = await callGemini(env, buildAnalyzePrompt({ text, today: body.today, weekday: body.weekday }))
+    const parsed = await callClaude(env, buildAnalyzePrompt({ text, today: body.today, weekday: body.weekday }))
     return json(normalizeAnalysis(parsed))
   } catch (err) {
     return erroDeIA(err)

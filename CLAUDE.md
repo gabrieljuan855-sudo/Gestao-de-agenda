@@ -1,7 +1,7 @@
 # Gestão de Agenda
 
 App pessoal de agenda e tarefas, ligado ao Google Calendar e ao Google Tasks,
-com anotações sincronizadas pelo Drive e recursos de IA pelo Gemini.
+com anotações sincronizadas pelo Drive e recursos de IA pelo Claude (Anthropic).
 
 ## Como trabalhar aqui
 
@@ -47,7 +47,7 @@ uma pilha de branches que só atrapalha.
 - `src/` — React + Vite. Componentes em `src/components/`, lógica e hooks em
   `src/lib/`.
 - `worker/` — o Cloudflare Worker. Serve o site estático e hospeda as rotas de
-  IA (`/api/agent`, `/api/briefing`, `/api/analyze-note`). A chave do Gemini é
+  IA (`/api/agent`, `/api/briefing`, `/api/analyze-note`). A chave da Anthropic é
   segredo do Worker e **nunca** chega ao navegador — é por isso que essa parte
   roda no servidor.
 - Testes ficam ao lado do que testam (`src/lib/x.test.js`), em vitest. A regra
