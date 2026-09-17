@@ -1052,47 +1052,52 @@ button.danger:hover { background: var(--urgent-bg); }
 @media (max-width: 700px) {
   /* Mesmo respiro de cima do card acima: é no celular que a barra de status
      translúcida do iOS realmente entra em jogo. */
-  .app-shell { padding: calc(16px + env(safe-area-inset-top, 0px)) 12px 48px; }
+  .app-shell { padding: calc(16px + env(safe-area-inset-top, 0px)) 12px calc(88px + env(safe-area-inset-bottom, 0px)); }
 
   /* Agenda, tarefas e trilho lado a lado não cabem num celular. */
   .workspace,
   .workspace--wide { grid-template-columns: 1fr; }
 
-  /* Sem hover no toque, o trilho vira a barra de navegação inferior do MD3:
-     quatro segmentos do mesmo tamanho, ícone com rótulo sempre visível
-     embaixo, e uma pílula marcando qual está aberto — em vez de círculos
-     soltos e mudos flutuando sobre a barra, que é como ela ficava antes. */
+  /* Sem hover no toque, o trilho vira uma barra flutuante: uma pílula solta
+     perto do rodapé, não mais grudada de ponta a ponta na borda da tela. Só
+     ícone (o rótulo continua existindo, mas só para leitor de tela e
+     tooltip via aria-label/title) — com quatro itens tão frequentes quanto
+     estes, o próprio ícone já basta, e a barra fica mais leve, mais perto
+     do "flutuante" dos apps de celular atuais do que da barra cheia do MD3
+     clássico. */
   .rail-wrap { position: static; width: auto; }
   .rail {
     position: fixed;
-    left: 0;
-    right: 0;
-    bottom: 0;
+    left: 50%;
+    right: auto;
+    bottom: calc(14px + env(safe-area-inset-bottom, 0px));
     top: auto;
+    transform: translateX(-50%);
     width: auto;
     flex-direction: row;
-    align-items: stretch;
-    justify-content: stretch;
-    gap: 0;
-    padding: 8px 4px calc(8px + env(safe-area-inset-bottom, 0px));
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 6px;
     background: var(--surface-1);
     box-shadow: var(--elevation-2);
-    border-top: none;
+    border: 1px solid var(--outline-variant);
+    border-radius: var(--shape-full);
     z-index: 30;
   }
 
-  /* Cada aba ocupa a mesma fração da barra, ícone em cima do rótulo — o
-     layout de "Navigation Bar" do MD3, diferente da pílula horizontal do
-     trilho de mesa (que continua como está fora deste breakpoint). */
+  /* Cada aba é só o círculo do ícone — sem rótulo visível, sem ocupar uma
+     fração fixa da largura da barra (que agora encolhe até caber o
+     conteúdo, em vez de esticar de ponta a ponta). */
   .rail-btn {
-    flex: 1 1 0;
+    flex: 0 0 auto;
     flex-direction: column;
     height: auto;
     min-height: 48px;
-    gap: 2px;
-    padding: 4px 2px 2px;
+    gap: 0;
+    padding: 0;
     border: none;
-    border-radius: 0;
+    border-radius: var(--shape-full);
     background: transparent;
     overflow: visible;
   }
@@ -1100,9 +1105,9 @@ button.danger:hover { background: var(--urgent-bg); }
   /* O ícone mora numa pílula própria, que só ganha cor quando a aba está
      aberta ou (no caso do pomodoro) rodando — é o indicador de seleção. */
   .rail-btn-icon {
-    width: auto;
-    height: 32px;
-    min-width: 56px;
+    width: 48px;
+    height: 48px;
+    min-width: 48px;
     flex: 0 0 auto;
     border-radius: var(--shape-full);
     transition: background var(--dur-short) var(--ease-standard), color var(--dur-short) var(--ease-standard);
@@ -1114,31 +1119,24 @@ button.danger:hover { background: var(--urgent-bg); }
     color: var(--accent);
   }
 
-  /* O rótulo volta a aparecer — escondê-lo foi o que deixou a barra "pobre",
-     com ícones soltos e sem dizer o que cada um é. */
+  /* O rótulo de texto sai da vista (a barra virou ícone-só), mas continua no
+     DOM — leitor de tela ainda o lê, e é ele quem dá o texto do title/
+     aria-label do botão. */
   .rail-btn-label {
-    display: block;
-    max-width: none;
-    opacity: 1;
-    padding-left: 0;
-    font-size: var(--label-xs);
-    color: var(--text-secondary);
-    white-space: nowrap;
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
     overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 100%;
-    transition: color var(--dur-short) var(--ease-standard);
-  }
-
-  .rail-btn.is-open .rail-btn-label,
-  .rail-btn.is-live .rail-btn-label {
-    color: var(--accent);
-    font-weight: 600;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
   }
 
   /* O destaque de "Nova tarefa" (ver trilho de mesa) não se aplica aqui: com
-     os quatro itens numa barra de abas, dar realce permanente a um deles
-     confundiria com o indicador de "esta é a aba aberta agora". */
+     os quatro itens numa barra só de ícones, dar realce permanente a um
+     deles confundiria com o indicador de "esta é a aba aberta agora". */
   .rail-btn.is-primary { background: transparent; color: inherit; }
   .rail-btn.is-primary .rail-btn-icon { background: transparent; color: inherit; }
 
