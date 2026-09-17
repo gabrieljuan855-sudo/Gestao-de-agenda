@@ -408,6 +408,9 @@ button.danger:hover { background: var(--urgent-bg); }
 }
 .banner--error { background: var(--urgent-bg); color: var(--urgent); }
 .banner--warning { background: var(--important-bg); color: var(--important); }
+/* Neutro/informativo: o briefing do dia, quando não há nada de errado para
+   sinalizar — é a mesma cor de destaque usada no "Agora/Próximo" do Dia. */
+.banner--info { background: var(--accent-bg); color: var(--accent); }
 
 /* Uma linha de resultado de busca: ícone/pílula, título que trunca, e a
    informação de quando (ou nada, pra tarefa) alinhada à direita. */

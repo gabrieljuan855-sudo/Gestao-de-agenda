@@ -1,13 +1,7 @@
 import { PRIORITY_LABEL, PRIORITY_ORDER, priorityFromListTitle } from '../lib/priority.js'
 import { focusStatsFor } from '../lib/focusStats.js'
 import { formatDuration } from '../lib/dates.js'
-
-function daysSince(dateString) {
-  if (!dateString) return null
-  const created = new Date(dateString)
-  const diff = Date.now() - created.getTime()
-  return Math.floor(diff / (1000 * 60 * 60 * 24))
-}
+import { daysSince } from '../lib/tasks.js'
 
 // Botão de ação da linha, só ícone: três botões de texto (Editar/Focar/
 // Concluir) lado a lado empurravam o título da tarefa para várias linhas,

@@ -1,10 +1,22 @@
 import FocusRing from './FocusRing.jsx'
 import Banner from './Banner.jsx'
+import { findFreeGaps } from '../lib/events.js'
+import { workBlocksFor } from '../lib/schedule.js'
+import { formatTime, formatDuration } from '../lib/dates.js'
+
+// Só o vão que ainda cabe hoje — sugerir um horário que já passou não ajuda
+// ninguém a decidir quando focar.
+function proximoVaoLivre(events, occupies) {
+  const now = new Date()
+  const gaps = findFreeGaps(events, now, workBlocksFor(now), { occupies })
+  return gaps.find((g) => g.end > now) || null
+}
 
 // O pomodoro como ele aparece dentro do painel do trilho: compacto, com o
 // relógio grande e os controles da fase atual. A tela cheia é outro componente.
-export default function FocusPanel({ focus, onCompleteTask }) {
+export default function FocusPanel({ focus, onCompleteTask, events = [], occupies = () => true }) {
   const { phase, clock, paused, phaseLabel, activeTask, progress, notice } = focus
+  const vaoLivre = phase === 'idle' ? proximoVaoLivre(events, occupies) : null
 
   return (
     <div>
@@ -26,6 +38,13 @@ export default function FocusPanel({ focus, onCompleteTask }) {
       <div className="focus-panel-task">
         {activeTask ? activeTask.title : 'Escolha uma tarefa na lista ao lado'}
       </div>
+
+      {vaoLivre && (
+        <div className="muted" style={{ fontSize: 'var(--label-sm)', marginTop: 2 }}>
+          Próximo vão livre: {formatTime(vaoLivre.start)}–{formatTime(vaoLivre.end)} (
+          {formatDuration((vaoLivre.end - vaoLivre.start) / 60000)})
+        </div>
+      )}
 
       <div className="panel-actions">
         {(phase === 'idle' || phase === 'done') && (
