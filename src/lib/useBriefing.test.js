@@ -42,7 +42,7 @@ describe('kindForSlot', () => {
 
 describe('deveAvisarDaFalha', () => {
   it('cala a boca sobre sobrecarga passageira enquanto ainda dá tempo de tentar de novo', () => {
-    // O caso real: 503 do Gemini logo depois das 8h. A varredura tenta de novo
+    // O caso real: 529 da Anthropic logo depois das 8h. A varredura tenta de novo
     // em 5 minutos e quase sempre passa — alarmar aqui é assustar a pessoa com
     // algo que já está sendo tratado e sobre o qual ela não pode fazer nada.
     expect(deveAvisarDaFalha({ transiente: true, msDesdeOAlvo: 0 })).toBe(false)
@@ -57,7 +57,7 @@ describe('deveAvisarDaFalha', () => {
   })
 
   it('avisa na hora sobre erro que não se resolve sozinho', () => {
-    // Chave do Gemini faltando, login vencido: tentar de novo não muda nada,
+    // Chave da Anthropic faltando, login vencido: tentar de novo não muda nada,
     // e a pessoa precisa saber para poder agir.
     expect(deveAvisarDaFalha({ transiente: false, msDesdeOAlvo: 0 })).toBe(true)
     expect(deveAvisarDaFalha({ transiente: undefined, msDesdeOAlvo: 0 })).toBe(true)

@@ -2,7 +2,7 @@ import { ensureToken } from './googleAuth.js'
 import { pausarIA } from './aiCooldown.js'
 
 // Manda um resumo já enxuto dos dados (nunca a lista completa e crua de
-// eventos/tarefas) para o Worker escrever o texto do briefing com o Gemini.
+// eventos/tarefas) para o Worker escrever o texto do briefing com o Claude.
 export async function fetchBriefingFromAI(kind, context) {
   const token = await ensureToken()
   if (!token) throw new Error('Faça login primeiro.')
@@ -25,7 +25,7 @@ export async function fetchBriefingFromAI(kind, context) {
   const data = await res.json().catch(() => ({}))
   if (!res.ok) {
     const err = new Error(data.error || `Falha ao gerar o briefing (${res.status}).`)
-    // Sobrecarga do Gemini é passageira, e a varredura tenta de novo sozinha
+    // Sobrecarga da Anthropic é passageira, e a varredura tenta de novo sozinha
     // enquanto a janela do horário não fecha. Quem trata o erro usa isto para
     // não alarmar à toa (ver useBriefing.js).
     err.transiente = data.transiente === true

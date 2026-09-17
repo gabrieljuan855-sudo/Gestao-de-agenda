@@ -241,7 +241,7 @@ export default function useNotes({ signedIn }) {
         })
         // Antes ia a lista inteira de uma vez. Com muitas anotações pendentes
         // isso vira uma rajada de dezenas de chamadas em segundos — o jeito
-        // mais rápido de estourar o limite por minuto do Gemini. O que sobrar
+        // mais rápido de estourar o limite por minuto da Anthropic. O que sobrar
         // pega a próxima varredura.
         .slice(0, MAX_POR_VARREDURA)
 
