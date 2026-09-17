@@ -755,6 +755,35 @@ button.danger:hover { background: var(--urgent-bg); }
   justify-content: flex-end;
 }
 
+/* O status de gravação, no rodapé do editor. Discreto de propósito: é para
+   ser consultado de relance, não para disputar atenção com o texto. */
+.notes-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: var(--label-sm);
+  color: var(--on-surface-variant);
+}
+.notes-status-sync {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.notes-status-sync.is-erro { color: var(--urgent); }
+/* A nuvem pulsa enquanto grava — o mesmo sinal de "está acontecendo algo"
+   que o Docs dá, sem precisar de um spinner à parte. */
+.notes-status-sync.is-salvando svg { animation: notes-sync-pulsa 1.2s ease-in-out infinite; }
+
+@keyframes notes-sync-pulsa {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .notes-status-sync.is-salvando svg { animation: none; opacity: 0.7; }
+}
+
 /* Abas das anotações — *primary tabs* do MD3.
    O que faz isto parecer aba de navegador não é a forma do botão, é o
    indicador: a barra de 3px colada embaixo da aba ativa, amarrando-a ao

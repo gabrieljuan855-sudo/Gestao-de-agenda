@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import ConfirmDialog from './ConfirmDialog.jsx'
 import Banner from './Banner.jsx'
 import SuggestionCard from './SuggestionCard.jsx'
-import { AI_MIN_LENGTH } from '../lib/useNotes.js'
+import { AI_MIN_LENGTH, descreverSincronizacao } from '../lib/useNotes.js'
 
 // Tempo parado depois da última tecla para considerar que a anotação foi
 // "finalizada" e vale a pena gastar uma chamada de IA nela. Bem mais longo
@@ -30,7 +30,7 @@ function relativeUpdated(iso) {
 // sempre: gravar a cada tecla gastaria uma chamada ao Drive por letra. A IA
 // tem seu próprio timer, bem mais longo (ver AI_IDLE_MS): a ideia é analisar
 // quando a anotação estiver "pronta", não a cada pausa curta de digitação.
-function NoteEditor({ note, onChange, onBack, onDelete, onAnalyze, analyzing, calendars, taskLists, onCreateEvent, onCreateTask }) {
+function NoteEditor({ note, onChange, onBack, onDelete, onAnalyze, analyzing, syncStatus, calendars, taskLists, onCreateEvent, onCreateTask }) {
   const [title, setTitle] = useState(note.title)
   const [body, setBody] = useState(note.body)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
@@ -113,9 +113,9 @@ function NoteEditor({ note, onChange, onBack, onDelete, onAnalyze, analyzing, ca
         rows={12}
       />
 
-      <div className="muted" style={{ fontSize: 'var(--label-sm)', marginTop: 6 }}>
-        Sincronizado com o Drive — some no Google, some em qualquer aparelho.
-        {analyzing && ' · revisando com a IA...'}
+      <div className="notes-status">
+        <StatusDoDrive status={syncStatus} />
+        {analyzing && <span>· revisando com a IA...</span>}
       </div>
 
       {suggestions.length > 0 && (
@@ -153,12 +153,27 @@ function NoteEditor({ note, onChange, onBack, onDelete, onAnalyze, analyzing, ca
   )
 }
 
-// O estado de verdade (a lista, a nota selecionada, a sincronização com o
-// Drive, a análise por IA) mora em useNotes — este componente só existe
-// enquanto o painel do trilho está aberto.
-// A barra de abas: uma aba por anotação aberta nesta sessão (ver useNotes.js
-// — openIds), clicável para trocar de aba e com um ✕ próprio para fechar só
-// aquela aba, sem apagar a anotação. Some quando não há nenhuma aberta.
+// O indicador de gravação, no espírito do que o Docs e o Planilhas fazem: uma
+// nuvem que diz, o tempo todo, se o que está na tela já saiu deste aparelho.
+// Ícone e texto juntos de propósito — só o ícone exigiria decorar o desenho.
+function StatusDoDrive({ status }) {
+  const texto = descreverSincronizacao(status)
+  if (!texto) return null
+
+  const nuvem = <path d="M6.5 19a4.5 4.5 0 0 1-.4-8.98 6 6 0 0 1 11.5 1.48A4 4 0 0 1 17.5 19z" />
+  return (
+    <span className={`notes-status-sync is-${status}`}>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        {nuvem}
+        {status === 'salvo' && <polyline points="9.5,13.5 11.5,15.5 15,11.5" />}
+        {status === 'erro' && <line x1="12" y1="10" x2="12" y2="14" />}
+        {status === 'erro' && <line x1="12" y1="16.5" x2="12" y2="16.6" />}
+      </svg>
+      {texto}
+    </span>
+  )
+}
+
 // As abas seguem o padrão de *primary tabs* do MD3: rótulo, e o indicador
 // ativo — a barra arredondada colada embaixo da aba selecionada. É ela que
 // amarra visualmente a aba ao conteúdo, que é justamente o que faz isso parecer
@@ -202,6 +217,9 @@ function TabBar({ notes, openIds, selectedId, onSelect, onClose }) {
   )
 }
 
+// O estado de verdade (a lista, a nota selecionada, a sincronização com o
+// Drive, a análise por IA) mora em useNotes — este componente só existe
+// enquanto o painel do trilho está aberto.
 export default function Notes({ notesState, calendars = [], taskLists = [], onCreateEvent, onCreateTask }) {
   const {
     notes,
@@ -211,6 +229,7 @@ export default function Notes({ notesState, calendars = [], taskLists = [], onCr
     openNote,
     closeTab,
     loading,
+    syncStatus,
     error,
     dismissError,
     createNote,
@@ -236,6 +255,7 @@ export default function Notes({ notesState, calendars = [], taskLists = [], onCr
           onDelete={() => deleteNote(selected.id)}
           onAnalyze={analyzeNote}
           analyzing={analyzingIds.has(selected.id)}
+          syncStatus={syncStatus}
           calendars={calendars}
           taskLists={taskLists}
           onCreateEvent={onCreateEvent}

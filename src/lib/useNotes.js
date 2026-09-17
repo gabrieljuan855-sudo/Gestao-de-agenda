@@ -39,6 +39,20 @@ const SAVE_DEBOUNCE_MS = 1000
 // duplicar o número nos dois lugares.
 export const AI_MIN_LENGTH = 10
 
+// O que o rodapé do editor diz sobre a gravação. Antes era uma frase fixa
+// ("Sincronizado com o Drive"), que afirmava sucesso mesmo quando nada tinha
+// subido — depois de quatro rodadas de conserto na sincronização, é
+// exatamente esse tipo de afirmação que não dá para confiar.
+//
+// 'ocioso' devolve vazio de propósito: antes do primeiro contato com o Drive
+// não há o que afirmar, e inventar "salvo" aí seria o erro de novo.
+export function descreverSincronizacao(status) {
+  if (status === 'salvando') return 'Salvando...'
+  if (status === 'salvo') return 'Salvo no Drive'
+  if (status === 'erro') return 'Salvo só neste aparelho'
+  return ''
+}
+
 // Não há infraestrutura de push/cron neste app: a varredura "4x por dia" só
 // pode ser uma aproximação que roda enquanto o app está aberto, verificando
 // se algum desses horários já passou desde a última vez que rodou.
@@ -118,6 +132,8 @@ export default function useNotes({ signedIn }) {
   const [selectedId, setSelectedId] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  // 'ocioso' | 'salvando' | 'salvo' | 'erro' — ver descreverSincronizacao.
+  const [syncStatus, setSyncStatus] = useState('ocioso')
   // Ids em análise agora — mais de uma nota pode estar sendo analisada ao
   // mesmo tempo (a digitação numa e a varredura programada, por exemplo).
   const [analyzingIds, setAnalyzingIds] = useState(() => new Set())
@@ -160,7 +176,8 @@ export default function useNotes({ signedIn }) {
         // anotações de quem escreveu antes de a sincronização funcionar.
         if (doDrive === null) {
           const locais = notesRef.current
-          if (locais.length > 0) saveNotes(locais, deletedRef.current).catch(relatarFalhaAoSincronizar)
+          if (locais.length > 0) subirParaODrive(locais)
+          else setSyncStatus('salvo')
           return
         }
 
@@ -174,7 +191,11 @@ export default function useNotes({ signedIn }) {
         setNotes(mescladas)
         writeCache(mescladas, deletedRef.current)
         if (precisaSubir(mescladas, doDrive.notes)) {
-          saveNotes(mescladas, deletedRef.current).catch(relatarFalhaAoSincronizar)
+          subirParaODrive(mescladas)
+        } else {
+          // Nada a subir: os dois lados já estão iguais, e isso é justamente
+          // a informação que faltava na tela.
+          setSyncStatus('salvo')
         }
       })
       .catch((err) => {
@@ -256,12 +277,32 @@ export default function useNotes({ signedIn }) {
   function persist(next) {
     setNotes(next)
     writeCache(next, deletedRef.current)
+    // Há alteração não gravada a partir daqui, e é isso que o status diz —
+    // mesmo durante o segundo de espera do debounce.
+    setSyncStatus('salvando')
     // Uma gravação por pausa na digitação, não uma por tecla — sem isso,
     // toda letra digitada viraria uma chamada ao Drive.
     clearTimeout(saveTimer.current)
     saveTimer.current = setTimeout(() => {
-      saveNotes(next, deletedRef.current).catch(relatarFalhaAoSincronizar)
+      subirParaODrive(next)
     }, SAVE_DEBOUNCE_MS)
+  }
+
+  // Todo caminho que grava no Drive passa por aqui, para o status na tela
+  // nunca discordar do que de fato aconteceu. Antes o sucesso não avisava
+  // nada: só dava para saber que a sincronização funcionava quando ela
+  // falhava, e o rodapé afirmava "Sincronizado com o Drive" de qualquer jeito.
+  async function subirParaODrive(lista) {
+    setSyncStatus('salvando')
+    try {
+      await saveNotes(lista, deletedRef.current)
+      setSyncStatus('salvo')
+      // Uma gravação que deu certo desmente um aviso antigo de falha.
+      setError(null)
+    } catch (err) {
+      setSyncStatus('erro')
+      relatarFalhaAoSincronizar(err)
+    }
   }
 
   function relatarFalhaAoSincronizar(err) {
@@ -358,6 +399,7 @@ export default function useNotes({ signedIn }) {
     openNote,
     closeTab,
     loading,
+    syncStatus,
     error,
     dismissError: () => setError(null),
     createNote,
