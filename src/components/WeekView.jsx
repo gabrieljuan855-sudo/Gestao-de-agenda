@@ -1,5 +1,5 @@
 import { startOfWeek, addDays, isToday, formatTime, formatDuration } from '../lib/dates.js'
-import { eventsOfDay, isAllDay, eventStart, eventEnd, busyMinutesOn } from '../lib/events.js'
+import { eventsOfDay, isAllDay, eventStart, eventEnd, busyMinutesOn, tasksDueOn } from '../lib/events.js'
 import { isWorkday, workloadRatio, workMinutes } from '../lib/schedule.js'
 
 // Com sábado e domingo fora, sobra espaço pra mostrar mais coisa por dia sem
@@ -20,20 +20,13 @@ function loadLevel(busyMinutes, day) {
   return { label: 'livre', className: 'baixa' }
 }
 
-function tasksDueOn(tasks, day) {
-  return tasks.filter((t) => {
-    if (!t.due || t.status === 'completed') return false
-    const due = new Date(t.due)
-    return due.toDateString() === day.toDateString()
-  })
-}
-
 export default function WeekView({
   reference,
   events,
   tasks = [],
   onSelectDay,
   onSelectEvent,
+  onSelectTask,
   occupies = () => true,
   declined = () => false,
   isInfo = () => false,
@@ -117,7 +110,17 @@ export default function WeekView({
                   <span className="muted" style={{ fontSize: 'var(--label-xs)' }}>+{dayEvents.length - MAX_EVENTS} mais</span>
                 )}
                 {dueToday.map((task) => (
-                  <div key={task.id} className="week-event" style={{ opacity: 0.85 }}>
+                  <div
+                    key={task.id}
+                    className="week-event"
+                    style={{ opacity: 0.85, cursor: onSelectTask ? 'pointer' : 'default' }}
+                    onClick={(e) => {
+                      // Mesma razão do stopPropagation no evento acima: sem
+                      // isso o clique subiria e trocaria de visão.
+                      e.stopPropagation()
+                      onSelectTask && onSelectTask(task)
+                    }}
+                  >
                     <span className="week-dot" style={{ background: 'var(--important)' }} />
                     <span className="week-event-text">prazo: {task.title}</span>
                   </div>

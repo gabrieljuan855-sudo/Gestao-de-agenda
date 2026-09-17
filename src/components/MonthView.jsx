@@ -1,5 +1,5 @@
 import { startOfMonth, startOfWeek, addDays, isToday, formatTime, formatDuration } from '../lib/dates.js'
-import { eventsOfDay, isAllDay, eventStart, busyMinutesOn } from '../lib/events.js'
+import { eventsOfDay, isAllDay, eventStart, busyMinutesOn, tasksDueOn } from '../lib/events.js'
 import { isWorkday } from '../lib/schedule.js'
 
 const WEEKDAYS = ['seg', 'ter', 'qua', 'qui', 'sex', 'sáb', 'dom']
@@ -17,8 +17,10 @@ function buildGrid(reference) {
 export default function MonthView({
   reference,
   events,
+  tasks = [],
   onSelectDay,
   onSelectEvent,
+  onSelectTask,
   occupies = () => true,
   declined = () => false,
 }) {
@@ -43,8 +45,16 @@ export default function MonthView({
       <div className="month-grid" style={{ gridTemplateRows: `repeat(${cells.length / 7}, minmax(84px, auto))` }}>
         {cells.map((day) => {
           const dayEvents = eventsOfDay(events, day)
+          const dueToday = tasksDueOn(tasks, day)
           const outside = day.getMonth() !== month
           const today = isToday(day)
+          // Prazo de tarefa some do Mês por completo antes desta mudança —
+          // só a Semana mostrava. Entra na mesma lista de chips do dia, com
+          // o mesmo limite, em vez de virar uma seção à parte que estouraria
+          // a altura da célula.
+          const total = dayEvents.length + dueToday.length
+          const shownEvents = dayEvents.slice(0, MAX_CHIPS)
+          const shownTasks = dueToday.slice(0, Math.max(0, MAX_CHIPS - shownEvents.length))
 
           return (
             <div
@@ -58,7 +68,7 @@ export default function MonthView({
               <div className={`month-daynum${today ? ' month-daynum--today' : ''}`}>{day.getDate()}</div>
 
               <div className="month-chips">
-                {dayEvents.slice(0, MAX_CHIPS).map((event) => {
+                {shownEvents.map((event) => {
                   const allDay = isAllDay(event)
                   const color = event.calendarColor || 'var(--accent)'
                   return (
@@ -81,8 +91,22 @@ export default function MonthView({
                     </div>
                   )
                 })}
-                {dayEvents.length > MAX_CHIPS && (
-                  <div className="month-more">+{dayEvents.length - MAX_CHIPS}</div>
+                {shownTasks.map((task) => (
+                  <div
+                    key={task.id}
+                    className="month-chip"
+                    title={`prazo: ${task.title}`}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onSelectTask && onSelectTask(task)
+                    }}
+                  >
+                    <span className="month-chip-dot" style={{ background: 'var(--important)' }} />
+                    <span className="month-chip-text">prazo: {task.title}</span>
+                  </div>
+                ))}
+                {total > MAX_CHIPS && (
+                  <div className="month-more">+{total - MAX_CHIPS}</div>
                 )}
               </div>
             </div>

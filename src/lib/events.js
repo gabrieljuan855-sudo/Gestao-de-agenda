@@ -47,6 +47,16 @@ export function eventsOfDay(events, day) {
   return sortByStart(events.filter((e) => occursOnDay(e, day)))
 }
 
+// Tarefas com prazo justamente neste dia — usado pela Semana e pelo Mês, que
+// antes tinham cada uma a sua cópia desta mesma conta.
+export function tasksDueOn(tasks, day) {
+  return tasks.filter((t) => {
+    if (!t.due || t.status === 'completed') return false
+    const due = new Date(t.due)
+    return due.toDateString() === day.toDateString()
+  })
+}
+
 export function nextEvent(events, now = new Date()) {
   return sortByStart(events.filter((e) => !isAllDay(e) && eventStart(e) > now))[0] || null
 }

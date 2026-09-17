@@ -13,8 +13,18 @@
     <link rel="icon" href="/favicon-16.png" sizes="16x16" type="image/png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/site.webmanifest" />
-    <meta name="theme-color" content="#faf9f7" />
+    <!-- Duas cores, uma por esquema: sem isso a barra do sistema fica sempre
+         no bege claro, mesmo com o app inteiro no tema escuro. Os valores são
+         os mesmos --surface do index.css nos dois temas. -->
+    <meta name="theme-color" content="#faf9f7" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#18171a" media="(prefers-color-scheme: dark)" />
     <meta name="apple-mobile-web-app-title" content="Agenda" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <!-- "black-translucent" deixa o conteúdo passar por baixo da barra de
+         status do iOS, em vez de uma barra branca fixa destoando do tema
+         escuro (o app já reserva o respiro de cima com env(safe-area-inset-top)
+         onde precisa, como na tela cheia do pomodoro). -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 
     <!-- O script do Google não vem mais fixo aqui: quando o login é feito
          pelo Worker ele não serve para nada, e era uma requisição a um
