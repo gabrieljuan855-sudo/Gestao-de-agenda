@@ -11,6 +11,16 @@ const PHASE_LABEL = {
 
 const FOCUS_MS = 25 * 60 * 1000
 const BREAK_MS = 5 * 60 * 1000
+// Abaixo disso o bloco não vira compromisso: é um toque sem querer no play,
+// não trabalho. Acima, vale registrar mesmo que o ciclo não tenha completado.
+const MIN_BLOCO_MS = 60 * 1000
+
+// A agenda é o registro de onde o tempo foi, não um placar de pomodoros
+// completos: encerrar no meio não pode jogar fora o tempo que já passou.
+export function valeRegistrarBloco(inicio, fim) {
+  if (!inicio || !fim) return false
+  return fim - inicio >= MIN_BLOCO_MS
+}
 
 export function formatClock(ms) {
   const total = Math.max(0, Math.ceil(ms / 1000))
@@ -147,18 +157,26 @@ export default function useFocusTimer({ activeTask, onCycleComplete }) {
   }, [immersive])
 
   async function registerFocusBlock() {
-    if (!activeTask || eventCreatedRef.current) return
+    if (!activeTask || eventCreatedRef.current) return false
+    const inicio = startedAtRef.current || new Date(Date.now() - FOCUS_MS)
+    const fim = new Date()
+    if (!valeRegistrarBloco(inicio, fim)) return false
     eventCreatedRef.current = true
     try {
       await createEvent({
         title: `Foco: ${activeTask.title}`,
-        start: startedAtRef.current || new Date(Date.now() - FOCUS_MS),
-        end: new Date(),
+        start: inicio,
+        end: fim,
         description: 'Bloco de foco registrado automaticamente pelo Gestão de Agenda.',
         extendedProperties: { private: { [FOCUS_TASK_PROP]: activeTask.id } },
       })
+      return true
     } catch (err) {
+      // Antes isto só ia para o console: a pessoa focava, encerrava e nunca
+      // ficava sabendo que o bloco não tinha entrado na agenda.
       console.error('Não foi possível registrar o bloco de foco no Calendar:', err)
+      setNotice('O bloco de foco não entrou na agenda — o Google recusou a gravação.')
+      return false
     }
   }
 
@@ -221,12 +239,22 @@ export default function useFocusTimer({ activeTask, onCycleComplete }) {
     setNow(Date.now())
   }
 
+  // Encerrar no meio de um bloco registrava nada: o tempo já gasto sumia.
+  // Agora ele vai para a agenda igual, com a duração real. O contador de
+  // sessões (registerFocusSession, lá em cima) continua exigindo o bloco
+  // inteiro — contar pomodoro e registrar onde o tempo foi são coisas
+  // diferentes, e só a segunda vale para um bloco interrompido.
   function stop() {
+    const eraFoco = phase === 'focus'
     setPhase('idle')
     setEndsAt(null)
     setPausedLeft(null)
     setImmersive(false)
     firingRef.current = false
+    if (!eraFoco) return
+    registerFocusBlock().then((gravou) => {
+      if (gravou) onCycleComplete && onCycleComplete()
+    })
   }
 
   function skipBreak() {
