@@ -5,7 +5,7 @@ import FocusRing from './FocusRing.jsx'
 //
 // Continua aberta quando a pausa acaba (fase 'done'), com o próximo bloco a um
 // toque: fechar sozinha obrigava a caçar o botão do trilho para emendar.
-export default function FocusOverlay({ focus }) {
+export default function FocusOverlay({ focus, onCompleteTask }) {
   const { phase, clock, paused, activeTask, immersive, progress } = focus
   if (!immersive || phase === 'idle') return null
 
@@ -26,9 +26,14 @@ export default function FocusOverlay({ focus }) {
 
       <div className="focus-actions">
         {phase === 'done' ? (
-          <button className="primary" onClick={focus.start} disabled={!activeTask}>
-            Novo bloco de 25 min
-          </button>
+          <>
+            <button className="primary" onClick={() => focus.start()} disabled={!activeTask}>
+              Novo bloco de 25 min
+            </button>
+            {activeTask && onCompleteTask && (
+              <button onClick={() => onCompleteTask(activeTask)}>Marcar tarefa como concluída</button>
+            )}
+          </>
         ) : (
           <>
             {paused ? (

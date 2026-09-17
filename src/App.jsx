@@ -197,9 +197,51 @@ export default function App() {
     saveCalendarPrefs(next)
   }
 
+  // Trocar de tarefa com um foco rodando deixava o pomodoro preso a uma tarefa
+  // que não é mais a selecionada, e o evento gravado no fim do bloco podia
+  // levar o título errado. Agora a troca avisa e encerra o foco em andamento
+  // antes de valer — sem isso, o vínculo entre a lista e o pomodoro é só de
+  // aparência.
+  function focoEmAndamento() {
+    return focus.phase === 'focus' || focus.phase === 'break'
+  }
+
+  function switchActiveTask(task) {
+    if (activeTask && task.id !== activeTask.id && focoEmAndamento()) {
+      const trocar = window.confirm(
+        'Trocar de tarefa agora encerra o foco em andamento (o bloco em curso não é gravado). Trocar mesmo assim?'
+      )
+      if (!trocar) return false
+      focus.stop()
+    }
+    setActiveTask(task)
+    return true
+  }
+
+  function handleSelectTask(task) {
+    switchActiveTask(task)
+  }
+
+  // Botão "Focar" do card da tarefa: seleciona e já inicia o bloco de 25min
+  // num só clique. Clicar nele na própria tarefa que já está em foco só volta
+  // para a tela cheia, em vez de reiniciar o tempo já andado.
+  function handleFocusTask(task) {
+    if (activeTask?.id === task.id && focoEmAndamento()) {
+      focus.openImmersive()
+      return
+    }
+    if (switchActiveTask(task)) focus.start(task)
+  }
+
   async function handleCompleteTask(task) {
     await completeTask(task.id, task.tasklistId)
-    if (activeTask?.id === task.id) setActiveTask(null)
+    if (activeTask?.id === task.id) {
+      // Também fecha um ciclo em 'done': concluir a tarefa ali mesmo (pelo
+      // atalho da tela de foco) deve voltar para o repouso, não deixar a tela
+      // presa esperando um "novo bloco" de uma tarefa que já acabou.
+      if (focus.phase !== 'idle') focus.stop()
+      setActiveTask(null)
+    }
     await reload()
   }
 
@@ -219,7 +261,10 @@ export default function App() {
   }
 
   async function handleDeleteTask() {
-    if (activeTask?.id === editingTask.id) setActiveTask(null)
+    if (activeTask?.id === editingTask.id) {
+      if (focus.phase !== 'idle') focus.stop()
+      setActiveTask(null)
+    }
     await deleteTask(editingTask)
     await reload()
   }
@@ -320,7 +365,7 @@ export default function App() {
       // destacado, porque há um ciclo esperando decisão.
       icon: focus.phase === 'idle' || focus.phase === 'done' ? '25m' : focus.clock,
       highlight: focus.phase !== 'idle',
-      render: () => <FocusPanel focus={focus} />,
+      render: () => <FocusPanel focus={focus} onCompleteTask={handleCompleteTask} />,
     },
     {
       id: 'notes',
@@ -396,7 +441,9 @@ export default function App() {
         <Backlog
           tasks={tasks}
           activeTaskId={activeTask?.id}
-          onSelect={setActiveTask}
+          focusingTaskId={focoEmAndamento() ? activeTask?.id : null}
+          onSelect={handleSelectTask}
+          onFocus={handleFocusTask}
           onComplete={handleCompleteTask}
           onEdit={setEditingTask}
           showCompleted={showCompleted}
@@ -406,7 +453,7 @@ export default function App() {
         <Rail tools={tools} />
       </div>
 
-      <FocusOverlay focus={focus} />
+      <FocusOverlay focus={focus} onCompleteTask={handleCompleteTask} />
 
       {presenceError && (
         <div className="form-error" style={{ marginTop: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>

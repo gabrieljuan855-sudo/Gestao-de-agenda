@@ -215,7 +215,7 @@ export async function searchEvents(query) {
   return collapseRecurring(ordenados)
 }
 
-export async function createEvent({ title, start, end, description, calendarId = 'primary' }) {
+export async function createEvent({ title, start, end, description, calendarId = 'primary', extendedProperties }) {
   return request(`${CAL_BASE}/calendars/${encodeURIComponent(calendarId)}/events`, {
     method: 'POST',
     body: JSON.stringify({
@@ -223,6 +223,7 @@ export async function createEvent({ title, start, end, description, calendarId =
       description,
       start: { dateTime: start.toISOString() },
       end: { dateTime: end.toISOString() },
+      ...(extendedProperties ? { extendedProperties } : {}),
     }),
   })
 }

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { createEvent } from './googleApi.js'
+import { FOCUS_TASK_PROP, registerFocusSession } from './focusStats.js'
 
 const PHASE_LABEL = {
   idle: 'Nenhum foco ativo',
@@ -100,6 +101,9 @@ export default function useFocusTimer({ activeTask, onCycleComplete }) {
         playChime()
         notify('Foco concluído', activeTask ? `Bloco de ${activeTask.title} terminado.` : 'Hora da pausa.')
         await registerFocusBlock()
+        // O bloco correu até o fim de verdade — é isso que conta como sessão,
+        // diferente de reiniciar ou encerrar antes da hora.
+        if (activeTask) registerFocusSession(activeTask.id, FOCUS_MS / 60000)
         setPhase('break')
         setEndsAt(Date.now() + BREAK_MS)
       } else {
@@ -140,6 +144,7 @@ export default function useFocusTimer({ activeTask, onCycleComplete }) {
         start: startedAtRef.current || new Date(Date.now() - FOCUS_MS),
         end: new Date(),
         description: 'Bloco de foco registrado automaticamente pelo Gestão de Agenda.',
+        extendedProperties: { private: { [FOCUS_TASK_PROP]: activeTask.id } },
       })
     } catch (err) {
       console.error('Não foi possível registrar o bloco de foco no Calendar:', err)
@@ -149,8 +154,13 @@ export default function useFocusTimer({ activeTask, onCycleComplete }) {
   // Começa um bloco de foco do zero. Serve para o primeiro da sessão e para
   // todo "de novo": depois da pausa, no lugar dela, ou por cima de um bloco
   // em andamento.
-  function start() {
-    if (!activeTask) {
+  //
+  // Aceita a tarefa por parâmetro para o botão "Focar" do card da tarefa: ele
+  // seleciona e inicia no mesmo clique, antes que `activeTask` (que vem de
+  // fora, por prop) tenha tempo de chegar num novo render.
+  function start(taskOverride) {
+    const task = taskOverride || activeTask
+    if (!task) {
       alert('Escolha uma tarefa na lista antes de iniciar o foco.')
       return
     }
