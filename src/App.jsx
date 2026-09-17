@@ -493,6 +493,7 @@ export default function App() {
         </div>
         <Backlog
           tasks={tasks}
+          events={events}
           activeTaskId={activeTask?.id}
           focusingTaskId={focoEmAndamento() ? activeTask?.id : null}
           onSelect={handleSelectTask}

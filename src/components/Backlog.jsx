@@ -1,5 +1,5 @@
 import { PRIORITY_LABEL, PRIORITY_ORDER, priorityFromListTitle } from '../lib/priority.js'
-import { focusStatsFor } from '../lib/focusStats.js'
+import { combinedFocusStats } from '../lib/focusStats.js'
 import { formatDuration } from '../lib/dates.js'
 import { daysSince } from '../lib/tasks.js'
 
@@ -49,6 +49,7 @@ function CheckIcon() {
 
 export default function Backlog({
   tasks,
+  events = [],
   activeTaskId,
   focusingTaskId,
   onSelect,
@@ -68,7 +69,7 @@ export default function Backlog({
     const age = daysSince(task.updated)
     const isActive = task.id === activeTaskId
     const emFoco = task.id === focusingTaskId
-    const stats = !done ? focusStatsFor(task.id) : null
+    const stats = !done ? combinedFocusStats(task.id, events) : null
     return (
       <div
         key={task.id}

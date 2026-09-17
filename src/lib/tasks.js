@@ -1,4 +1,4 @@
-import { startOfDay } from './dates.js'
+import { startOfDay, dateOnlyFromISO } from './dates.js'
 
 // Quantos dias desde a última mudança na tarefa — usado tanto pelo aviso
 // "parado há N dias" do Backlog quanto pelo briefing do topo.
@@ -26,7 +26,10 @@ export function stalledTasks(tasks) {
 // passou por completo.
 export function isOverdueTask(task, now = new Date()) {
   if (!task.due || task.status === 'completed') return false
-  return new Date(task.due) < startOfDay(now)
+  // dateOnlyFromISO, não `new Date(task.due)` — mesmo motivo do tasksDueOn
+  // em events.js: o prazo vem como meia-noite UTC, e o fuso do Brasil jogava
+  // isso um dia para trás.
+  return dateOnlyFromISO(task.due) < startOfDay(now)
 }
 
 export function overdueTasks(tasks, now = new Date()) {
