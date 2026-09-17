@@ -932,6 +932,9 @@ button.danger:hover { background: var(--urgent-bg); }
    já estar se abrindo — sem esse atraso o texto "estica" junto com a pílula
    em vez de parecer que ele esmaece para dentro dela. */
 .rail-btn-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   max-width: 0;
   overflow: hidden;
   white-space: nowrap;
@@ -939,19 +942,38 @@ button.danger:hover { background: var(--urgent-bg); }
   font-size: var(--body-sm);
   transition:
     max-width 0.22s cubic-bezier(0.4, 0, 0.2, 1),
-    padding-left 0.22s cubic-bezier(0.4, 0, 0.2, 1),
+    padding 0.22s cubic-bezier(0.4, 0, 0.2, 1),
     opacity 0.15s ease;
 }
 
 .rail-btn:hover .rail-btn-label,
 .rail-btn:focus-visible .rail-btn-label {
-  max-width: 160px;
+  max-width: 190px;
   opacity: 1;
-  padding-left: 14px;
+  /* O padding da direita é o que faltava: sem ele o texto encostava na borda
+     arredondada da pílula e a última letra saía cortada. */
+  padding: 0 16px 0 14px;
   transition:
     max-width 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-    padding-left 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    padding 0.3s cubic-bezier(0.4, 0, 0.2, 1),
     opacity 0.3s ease 0.08s;
+}
+
+/* A tecla de atalho, discreta ao lado do nome. Fica aqui em vez de no
+   atributo title: o tooltip nativo do navegador aparecia POR CIMA desta
+   pílula, repetindo o mesmo nome duas vezes na tela. */
+.rail-btn-tecla {
+  flex-shrink: 0;
+  min-width: 17px;
+  padding: 1px 5px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface-2);
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: var(--label-sm);
+  line-height: 1.4;
+  text-align: center;
 }
 
 /* Com o painel aberto o título já está nele, e a pílula esticada passava por
@@ -960,10 +982,10 @@ button.danger:hover { background: var(--urgent-bg); }
 .rail-btn.is-open:hover .rail-btn-label {
   max-width: 0;
   opacity: 0;
-  padding-left: 0;
+  padding: 0;
   transition:
     max-width 0.22s cubic-bezier(0.4, 0, 0.2, 1),
-    padding-left 0.22s cubic-bezier(0.4, 0, 0.2, 1),
+    padding 0.22s cubic-bezier(0.4, 0, 0.2, 1),
     opacity 0.15s ease;
 }
 

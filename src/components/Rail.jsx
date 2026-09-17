@@ -57,12 +57,14 @@ export default function Rail({ tools, openId, onOpenChange }) {
             onClick={() => handleClick(tool.id)}
             aria-expanded={openId === tool.id}
             aria-label={tool.label}
-            // A tecla no title é metade da descoberta dos atalhos (a outra
-            // metade é a lista no "?"): atalho que ninguém vê é atalho que
-            // ninguém usa.
-            title={tool.tecla ? `${tool.label} (${tool.tecla.toUpperCase()})` : tool.label}
           >
-            <span className="rail-btn-label">{tool.label}</span>
+            {/* Sem `title`: o tooltip nativo do navegador aparecia por cima
+                desta pílula, repetindo o mesmo nome duas vezes. A tecla de
+                atalho entra aqui dentro, que é onde dá para estilizar. */}
+            <span className="rail-btn-label">
+              {tool.label}
+              {tool.tecla && <kbd className="rail-btn-tecla">{tool.tecla.toUpperCase()}</kbd>}
+            </span>
             <span className="rail-btn-icon">{tool.icon}</span>
           </button>
         ))}

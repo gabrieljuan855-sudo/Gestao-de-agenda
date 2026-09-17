@@ -469,7 +469,14 @@ export default function App() {
     {
       id: 'add',
       label: 'Criar',
-      icon: '+',
+      // Desenhado, e não o caractere "+": glifo de texto muda de peso e de
+      // forma conforme a fonte, e ficava fino e torto ao lado da lupa.
+      icon: (
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
+          <line x1="12" y1="5" x2="12" y2="19" />
+          <line x1="5" y1="12" x2="19" y2="12" />
+        </svg>
+      ),
       tecla: 'c',
       // No trilho de mesa, criar é a ação de maior destaque (o equivalente ao
       // FAB do MD3) — ganha a cor de primária mesmo parada, diferente das
@@ -490,7 +497,12 @@ export default function App() {
     {
       id: 'agente',
       label: 'Agente',
-      icon: '✦',
+      icon: (
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 3l2.1 5.4L19.5 10.5l-5.4 2.1L12 18l-2.1-5.4L4.5 10.5l5.4-2.1z" />
+          <path d="M18.5 16.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z" />
+        </svg>
+      ),
       tecla: 'a',
       // Sem onDone: a conversa não se fecha sozinha depois de aplicar uma
       // ação — quase sempre vem outra frase logo em seguida.
@@ -530,7 +542,13 @@ export default function App() {
     {
       id: 'notes',
       label: 'Anotações',
-      icon: '≡',
+      icon: (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
+          <line x1="4" y1="7" x2="20" y2="7" />
+          <line x1="4" y1="12" x2="20" y2="12" />
+          <line x1="4" y1="17" x2="14" y2="17" />
+        </svg>
+      ),
       tecla: 'n',
       render: () => (
         <Notes
