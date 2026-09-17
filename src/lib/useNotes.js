@@ -9,6 +9,32 @@ import { analyzeNoteWithAI } from './aiAnalyzeNote.js'
 const CACHE_KEY = 'gestao-agenda:anotacoes-cache'
 const SAVE_DEBOUNCE_MS = 1000
 
+// Mesmo limite usado no editor (Notes.jsx) para decidir se uma anotação é
+// curta demais para valer uma chamada de IA — exportado daqui para não
+// duplicar o número nos dois lugares.
+export const AI_MIN_LENGTH = 10
+
+// Não há infraestrutura de push/cron neste app: a varredura "4x por dia" só
+// pode ser uma aproximação que roda enquanto o app está aberto, verificando
+// se algum desses horários já passou desde a última vez que rodou.
+const SWEEP_HOURS = [8, 10, 13, 15]
+const SWEEP_KEY = 'gestao-agenda:anotacoes-sweep-ultima'
+
+// O horário do próprio dia que já passou, mais recente — ou, antes das 8h,
+// o último horário de ontem. É contra esse instante que se decide se a
+// varredura de agora já foi feita ou ainda está pendente.
+export function ultimoHorarioDaVarredura(agora) {
+  for (const h of [...SWEEP_HOURS].reverse()) {
+    const slot = new Date(agora)
+    slot.setHours(h, 0, 0, 0)
+    if (slot <= agora) return slot
+  }
+  const slot = new Date(agora)
+  slot.setDate(slot.getDate() - 1)
+  slot.setHours(SWEEP_HOURS[SWEEP_HOURS.length - 1], 0, 0, 0)
+  return slot
+}
+
 function readCache() {
   try {
     const raw = localStorage.getItem(CACHE_KEY)
@@ -52,6 +78,19 @@ export default function useNotes({ signedIn }) {
   const [analyzingIds, setAnalyzingIds] = useState(() => new Set())
   const saveTimer = useRef(null)
   const loadedOnce = useRef(false)
+  // "Última versão conhecida" para a varredura programada usar sem precisar
+  // recriar os listeners toda vez que as anotações ou a seleção mudam.
+  const notesRef = useRef(notes)
+  const selectedIdRef = useRef(selectedId)
+  const runSweepRef = useRef(() => {})
+
+  useEffect(() => {
+    notesRef.current = notes
+  }, [notes])
+
+  useEffect(() => {
+    selectedIdRef.current = selectedId
+  }, [selectedId])
 
   // Carrega do Drive uma vez por sessão, assim que loga. Enquanto isso não
   // chega, o que já estava no cache local continua na tela.
@@ -69,7 +108,65 @@ export default function useNotes({ signedIn }) {
         console.error('Não foi possível carregar as anotações do Drive:', err)
         setError('Não deu para buscar suas anotações mais recentes — mostrando a última versão salva neste aparelho.')
       })
-      .finally(() => setLoading(false))
+      .finally(() => {
+        setLoading(false)
+        // Só depois que a lista de verdade chegou do Drive: rodar a varredura
+        // em cima do cache velho analisaria anotações desatualizadas.
+        runSweepRef.current()
+      })
+  }, [signedIn])
+
+  // A varredura programada: 4 horários fixos no dia (aproximação client-side,
+  // já que o app não tem infraestrutura de push/cron) que revisam com a IA
+  // qualquer anotação editada desde a última análise — cobre o caso de a
+  // pessoa ter fechado o app antes dos 45s de pausa ou de sair do editor
+  // dispararem a análise sozinhos.
+  useEffect(() => {
+    if (!signedIn) return
+
+    async function sweep() {
+      const pendentes = notesRef.current.filter((n) => {
+        if (n.id === selectedIdRef.current) return false
+        if ((n.body || '').trim().length < AI_MIN_LENGTH) return false
+        if (!n.lastAnalyzedAt) return true
+        return new Date(n.updatedAt) > new Date(n.lastAnalyzedAt)
+      })
+      for (const nota of pendentes) {
+        await analyzeNote(nota.id, nota.body)
+      }
+    }
+
+    function checkSweep() {
+      if (document.visibilityState !== 'visible') return
+      const agora = new Date()
+      const alvo = ultimoHorarioDaVarredura(agora)
+      let ultima = null
+      try {
+        ultima = localStorage.getItem(SWEEP_KEY)
+      } catch {
+        // Sem acesso ao localStorage: a varredura roda a cada checagem em vez
+        // de uma vez por horário — pior caso é gastar mais chamadas de IA,
+        // nunca travar a função.
+      }
+      if (ultima && new Date(ultima) >= alvo) return
+      try {
+        localStorage.setItem(SWEEP_KEY, agora.toISOString())
+      } catch {
+        // Ver comentário acima.
+      }
+      sweep()
+    }
+
+    runSweepRef.current = checkSweep
+    document.addEventListener('visibilitychange', checkSweep)
+    window.addEventListener('focus', checkSweep)
+    const id = setInterval(checkSweep, 5 * 60 * 1000)
+    return () => {
+      document.removeEventListener('visibilitychange', checkSweep)
+      window.removeEventListener('focus', checkSweep)
+      clearInterval(id)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [signedIn])
 
   function persist(next) {
