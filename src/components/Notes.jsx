@@ -193,6 +193,8 @@ export default function Notes({ notesState, calendars = [], taskLists = [], onCr
     syncStatus,
     error,
     dismissError,
+    aiError,
+    dismissAiError,
     createNote,
     updateNote,
     deleteNote,
@@ -218,6 +220,12 @@ export default function Notes({ notesState, calendars = [], taskLists = [], onCr
       {error && (
         <Banner tone="warning" actionLabel="✕" onAction={dismissError}>
           {error}
+        </Banner>
+      )}
+
+      {aiError && (
+        <Banner tone="warning" actionLabel="✕" onAction={dismissAiError}>
+          {aiError}
         </Banner>
       )}
 
