@@ -622,6 +622,54 @@ button.danger:hover { background: var(--urgent-bg); }
 .briefing-stat-value { font-size: var(--headline-sm); font-weight: 600; }
 .briefing-stat-label { font-size: var(--label-sm); color: var(--text-secondary); margin-top: 2px; }
 
+/* Barra de abas das anotações: uma por nota aberta na sessão (useNotes.js —
+   openIds), rolável na horizontal quando não cabem todas. */
+.notes-tabs {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  margin-bottom: 10px;
+  padding-bottom: 2px;
+}
+.notes-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  max-width: 160px;
+  padding: 6px 8px 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--shape-full);
+  background: var(--surface-2);
+  color: var(--text-secondary);
+  font-size: var(--label-sm);
+  cursor: pointer;
+}
+.notes-tab.is-active {
+  background: var(--accent-bg);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.notes-tab-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.notes-tab-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--shape-full);
+  opacity: 0.7;
+  flex-shrink: 0;
+}
+.notes-tab-close:hover {
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.08);
+}
+
 /* ---------- barra de período ---------- */
 
 .period-bar {
