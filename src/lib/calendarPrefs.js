@@ -1,3 +1,4 @@
+import { ehRegistroDeConclusao } from './taskDoneEvent.js'
 const PREFS_KEY = 'gestao-agenda:agendas'
 const PRESENCE_KEY = 'gestao-agenda:presenca'
 
@@ -91,6 +92,10 @@ export function isDeclined(event, presence) {
 // Um evento só consome tempo se a agenda dele conta tempo e, quando a agenda
 // pede confirmação, se você tiver confirmado presença.
 export function occupiesTime(event, prefs, presence) {
+  // Registro de tarefa concluída é histórico, não compromisso: ele aparece na
+  // agenda mas não pode carimbar 15 minutos de "ocupado" que nunca existiram,
+  // nem picotar os vãos livres do dia a cada tarefa marcada.
+  if (ehRegistroDeConclusao(event)) return false
   const pref = prefs[event.calendarId]
   if (!pref) return true
   if (!pref.occupies) return false

@@ -237,17 +237,14 @@ export async function searchEvents(query) {
   return collapseRecurring(ordenados)
 }
 
-export async function createEvent({ title, start, end, description, calendarId = 'primary', extendedProperties, allDay = false }) {
+export async function createEvent({ title, start, end, description, calendarId = 'primary', extendedProperties }) {
   return request(`${CAL_BASE}/calendars/${encodeURIComponent(calendarId)}/events`, {
     method: 'POST',
     body: JSON.stringify({
       summary: title,
       description,
-      // Mesma regra do updateEvent: o end.date do Google é exclusivo, então
-      // um evento de um dia só grava o dia seguinte no fim.
-      ...(allDay
-        ? { start: { date: toDateInput(start) }, end: { date: toDateInput(addDays(end, 1)) } }
-        : { start: { dateTime: start.toISOString() }, end: { dateTime: end.toISOString() } }),
+      start: { dateTime: start.toISOString() },
+      end: { dateTime: end.toISOString() },
       ...(extendedProperties ? { extendedProperties } : {}),
     }),
   })
