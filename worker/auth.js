@@ -286,6 +286,12 @@ async function token(request, env) {
     access_token: tokens.access_token,
     expires_in: tokens.expires_in || 3600,
     email: session.email || null,
+    // O que o Google de fato concedeu, que nem sempre é o que foi pedido: a
+    // tela de consentimento tem caixinhas por permissão, e os escopos ficam
+    // congelados no refresh token do dia da autorização. Sem devolver isto, o
+    // app só descobre que falta permissão quando uma chamada falha — e não
+    // tem como dizer qual.
+    scope: tokens.scope || '',
   })
 }
 
