@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { listAllEvents, listAllTasks, prefetchFocusEvents } from './googleApi.js'
 import { fetchBriefingFromAI } from './aiBriefing.js'
-import { iaEmPausa } from './aiCooldown.js'
+import { iaEmPausa, APENAS_AGENTE_ATIVO } from './aiCooldown.js'
 import { isWorkday } from './schedule.js'
 import { occupiesTime, isDeclined } from './calendarPrefs.js'
 import { eventStart, eventEnd, tasksDueOn } from './events.js'
@@ -186,7 +186,9 @@ export default function useBriefing({ signedIn, calendarPrefs, presence }) {
   }, [calendarPrefs, presence])
 
   useEffect(() => {
-    if (!signedIn) return
+    // Ver APENAS_AGENTE_ATIVO em aiCooldown.js — teste de limite de cota em
+    // andamento, só o agente deve chamar o Gemini por enquanto.
+    if (!signedIn || APENAS_AGENTE_ATIVO) return
 
     async function gerar(kind) {
       const { calendarPrefs: prefs, presence: pres } = prefsRef.current
