@@ -1,11 +1,4 @@
-import { startOfDay, endOfDay, addDays } from './dates.js'
-
-// "2026-09-15" com new Date() vira meia-noite UTC, que no Brasil cai no dia
-// anterior. Por isso a data de dia inteiro é montada campo a campo.
-function parseDateOnly(value) {
-  const [year, month, day] = value.split('-').map(Number)
-  return new Date(year, month - 1, day)
-}
+import { startOfDay, endOfDay, addDays, dateOnlyFromISO } from './dates.js'
 
 export function isAllDay(event) {
   return Boolean(event.start?.date && !event.start?.dateTime)
@@ -13,7 +6,7 @@ export function isAllDay(event) {
 
 export function eventStart(event) {
   if (event.start?.dateTime) return new Date(event.start.dateTime)
-  if (event.start?.date) return parseDateOnly(event.start.date)
+  if (event.start?.date) return dateOnlyFromISO(event.start.date)
   return null
 }
 
@@ -21,7 +14,7 @@ export function eventEnd(event) {
   if (event.end?.dateTime) return new Date(event.end.dateTime)
   // Em evento de dia inteiro o end.date do Google é exclusivo: um evento de um
   // dia só termina no dia seguinte.
-  if (event.end?.date) return endOfDay(addDays(parseDateOnly(event.end.date), -1))
+  if (event.end?.date) return endOfDay(addDays(dateOnlyFromISO(event.end.date), -1))
   return eventStart(event)
 }
 
@@ -52,8 +45,10 @@ export function eventsOfDay(events, day) {
 export function tasksDueOn(tasks, day) {
   return tasks.filter((t) => {
     if (!t.due || t.status === 'completed') return false
-    const due = new Date(t.due)
-    return due.toDateString() === day.toDateString()
+    // dateOnlyFromISO, e não `new Date(t.due)`: o Google manda o prazo como
+    // meia-noite UTC, e aplicar o fuso do navegador em cima disso jogava o
+    // dia exibido um a menos em fusos negativos (o Brasil incluso).
+    return dateOnlyFromISO(t.due).toDateString() === day.toDateString()
   })
 }
 

@@ -42,3 +42,37 @@ export function focusStatsFor(taskId) {
   if (!taskId) return null
   return read()[taskId] || null
 }
+
+// Se o cache deste aparelho não tiver nada (aparelho novo, cache limpo),
+// tenta reconstruir a partir dos eventos "Foco: ..." já carregados na
+// tela — que guardam o id da tarefa em extendedProperties.private (ver
+// FOCUS_TASK_PROP). É uma reconstrução parcial, não uma auditoria completa:
+// só enxerga o que está no período que a tela carregou até agora, não a
+// vida inteira da tarefa. Ainda assim é melhor do que mostrar zero numa
+// tarefa que já tem semanas de foco registradas no Calendar.
+export function focusStatsFromEvents(events, taskId) {
+  if (!taskId) return null
+  const meus = events.filter((e) => e.extendedProperties?.private?.[FOCUS_TASK_PROP] === taskId)
+  if (meus.length === 0) return null
+  const minutes = meus.reduce((soma, e) => {
+    const start = new Date(e.start?.dateTime || e.start?.date)
+    const end = new Date(e.end?.dateTime || e.end?.date)
+    return soma + Math.max(0, (end - start) / 60000)
+  }, 0)
+  return { sessions: meus.length, minutes: Math.round(minutes) }
+}
+
+// Junta as duas fontes ficando com o maior valor de cada uma — o cache local
+// pode ter sessões de fora do período carregado agora, e o Calendar pode ter
+// sessões de antes deste aparelho existir; nenhuma das duas sozinha garante
+// o quadro completo, mas a maior das duas nunca subestima o que já foi feito.
+export function combinedFocusStats(taskId, events = []) {
+  const local = focusStatsFor(taskId)
+  const doCalendario = focusStatsFromEvents(events, taskId)
+  if (!local) return doCalendario
+  if (!doCalendario) return local
+  return {
+    sessions: Math.max(local.sessions, doCalendario.sessions),
+    minutes: Math.max(local.minutes, doCalendario.minutes),
+  }
+}

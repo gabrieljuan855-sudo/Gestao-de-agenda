@@ -1,3 +1,17 @@
+// Uma data "pura" (sem hora) que chega embrulhada num timestamp UTC — é
+// assim que o Google Tasks manda o prazo de uma tarefa ("due", sempre
+// "AAAA-MM-DDT00:00:00.000Z") e como um evento de dia inteiro guarda
+// "start.date". Ler isso com `new Date(valor)` direto aplica o fuso do
+// navegador em cima de uma meia-noite que já era UTC: num fuso negativo (o
+// Brasil incluso), o dia exibido sai um a menos do que o prazo real. Aqui só
+// os dez primeiros caracteres (a data) entram na conta, e a data local é
+// montada campo a campo, sem conversão de fuso nenhuma.
+export function dateOnlyFromISO(value) {
+  if (!value) return null
+  const [year, month, day] = value.slice(0, 10).split('-').map(Number)
+  return new Date(year, month - 1, day)
+}
+
 export function startOfDay(date) {
   const d = new Date(date)
   d.setHours(0, 0, 0, 0)

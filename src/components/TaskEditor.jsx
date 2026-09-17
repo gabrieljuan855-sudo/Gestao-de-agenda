@@ -1,13 +1,15 @@
 import { useState } from 'react'
 import Modal from './Modal.jsx'
 import ConfirmDialog from './ConfirmDialog.jsx'
-import { toDateInput, fromInputs } from '../lib/dates.js'
+import { toDateInput, fromInputs, dateOnlyFromISO } from '../lib/dates.js'
 import { PRIORITIES, DEFAULT_PRIORITY } from '../lib/priority.js'
 
 
 export default function TaskEditor({ task, onSave, onDelete, onReopen, onComplete, onClose }) {
   const [title, setTitle] = useState(task.title || '')
-  const [due, setDue] = useState(task.due ? toDateInput(new Date(task.due)) : '')
+  // dateOnlyFromISO, não `new Date(task.due)`: o prazo vem do Google como
+  // meia-noite UTC, e o fuso do Brasil mostrava sempre um dia antes do real.
+  const [due, setDue] = useState(task.due ? toDateInput(dateOnlyFromISO(task.due)) : '')
   const [priority, setPriority] = useState(task.priority || DEFAULT_PRIORITY)
   const [notes, setNotes] = useState(task.notesClean || '')
   const [saving, setSaving] = useState(false)
