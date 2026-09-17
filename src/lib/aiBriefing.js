@@ -22,7 +22,14 @@ export async function fetchBriefingFromAI(kind, context) {
   })
 
   const data = await res.json().catch(() => ({}))
-  if (!res.ok) throw new Error(data.error || `Falha ao gerar o briefing (${res.status}).`)
+  if (!res.ok) {
+    const err = new Error(data.error || `Falha ao gerar o briefing (${res.status}).`)
+    // Sobrecarga do Gemini é passageira, e a varredura tenta de novo sozinha
+    // enquanto a janela do horário não fecha. Quem trata o erro usa isto para
+    // não alarmar à toa (ver useBriefing.js).
+    err.transiente = data.transiente === true
+    throw err
+  }
 
   return data.text || ''
 }

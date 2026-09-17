@@ -19,6 +19,8 @@ const SLOTS = [
 // — ninguém quer o resumo da manhã aparecendo à noite. O slot só é marcado
 // como feito (sem gerar nada) quando esse prazo já passou.
 const JANELA_MS = 90 * 60 * 1000
+// De quanto em quanto tempo a varredura reconfere os horários.
+const CHECAGEM_MS = 5 * 60 * 1000
 // Quanto tempo o cartão fica ao lado do "Bom dia" antes de sumir sozinho.
 const CARTAO_VISIVEL_MS = 30 * 60 * 1000
 const STORAGE_KEY = 'gestao-agenda:briefing-feito'
@@ -58,6 +60,19 @@ export function kindForSlot(slotId, date) {
   if (slotId === 'tarde') return 'dia_tarde'
   if (slotId === 'recap') return dow === 5 ? 'semana_fim' : 'dia_recap'
   return null
+}
+
+// Vale mesmo incomodar a pessoa com este erro?
+//
+// Uma sobrecarga do Gemini (503) se resolve sozinha em segundos, e a varredura
+// já tenta de novo a cada checagem enquanto a janela do horário não fecha.
+// Mostrar um aviso vermelho para isso é alarmar por algo que está sendo
+// tratado — a pessoa não tem o que fazer com essa informação. Então o aviso só
+// aparece quando o erro não vai se resolver sozinho, ou quando já não sobra
+// tempo para outra tentativa.
+export function deveAvisarDaFalha({ transiente, msDesdeOAlvo }) {
+  if (!transiente) return true
+  return msDesdeOAlvo + CHECAGEM_MS >= JANELA_MS
 }
 
 function minutosDoEvento(evento) {
@@ -213,7 +228,9 @@ export default function useBriefing({ signedIn, calendarPrefs, presence }) {
         hideTimerRef.current = setTimeout(() => setShowCard(false), CARTAO_VISIVEL_MS)
       } catch (err) {
         console.error('Não foi possível gerar o briefing:', err)
-        setError(`Não deu para gerar o briefing agora: ${err.message}`)
+        if (deveAvisarDaFalha({ transiente: err.transiente, msDesdeOAlvo: Date.now() - alvo })) {
+          setError(`Não deu para gerar o briefing agora: ${err.message}`)
+        }
       } finally {
         emAndamentoRef.current.delete(slot.id)
       }
@@ -227,7 +244,7 @@ export default function useBriefing({ signedIn, calendarPrefs, presence }) {
     checkAll()
     document.addEventListener('visibilitychange', checkAll)
     window.addEventListener('focus', checkAll)
-    const id = setInterval(checkAll, 5 * 60 * 1000)
+    const id = setInterval(checkAll, CHECAGEM_MS)
     return () => {
       document.removeEventListener('visibilitychange', checkAll)
       window.removeEventListener('focus', checkAll)
