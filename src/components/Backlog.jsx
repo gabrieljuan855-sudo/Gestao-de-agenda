@@ -49,7 +49,7 @@ function CheckIcon() {
 
 export default function Backlog({
   tasks,
-  events = [],
+  focusEvents = [],
   activeTaskId,
   focusingTaskId,
   onSelect,
@@ -69,7 +69,7 @@ export default function Backlog({
     const age = daysSince(task.updated)
     const isActive = task.id === activeTaskId
     const emFoco = task.id === focusingTaskId
-    const stats = !done ? combinedFocusStats(task.id, events) : null
+    const stats = !done ? combinedFocusStats(task.id, focusEvents) : null
     return (
       <div
         key={task.id}
