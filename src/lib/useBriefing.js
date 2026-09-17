@@ -155,6 +155,12 @@ export default function useBriefing({ signedIn, calendarPrefs, presence }) {
   const [briefing, setBriefing] = useState(null) // { kind, text, stats? }
   const [showCard, setShowCard] = useState(false)
   const [overlayOpen, setOverlayOpen] = useState(false)
+  // Antes disto, uma falha em gerar o briefing (rede, Worker fora do ar) não
+  // aparecia em lugar nenhum — a pessoa só não via o cartão, sem saber se
+  // era isso ou se o horário ainda não tinha chegado. A checagem seguinte
+  // (5 min depois, dentro da janela) tenta de novo sozinha; isto só existe
+  // para quando ela também falhar, ou para a última tentativa da janela.
+  const [error, setError] = useState(null)
   const hideTimerRef = useRef(null)
   const emAndamentoRef = useRef(new Set())
   const prefsRef = useRef({ calendarPrefs, presence })
@@ -200,12 +206,14 @@ export default function useBriefing({ signedIn, calendarPrefs, presence }) {
         // Só marca como feito depois de gerar com sucesso: uma falha de rede
         // pode tentar de novo na próxima checagem, enquanto ainda há janela.
         gravarFeito(slot.id)
+        setError(null)
         setBriefing(resultado)
         setShowCard(true)
         clearTimeout(hideTimerRef.current)
         hideTimerRef.current = setTimeout(() => setShowCard(false), CARTAO_VISIVEL_MS)
       } catch (err) {
         console.error('Não foi possível gerar o briefing:', err)
+        setError(`Não deu para gerar o briefing agora: ${err.message}`)
       } finally {
         emAndamentoRef.current.delete(slot.id)
       }
@@ -232,6 +240,8 @@ export default function useBriefing({ signedIn, calendarPrefs, presence }) {
     briefing,
     showCard,
     overlayOpen,
+    error,
+    dismissError: () => setError(null),
     openOverlay: () => setOverlayOpen(true),
     closeOverlay: () => setOverlayOpen(false),
     dismissCard: () => setShowCard(false),

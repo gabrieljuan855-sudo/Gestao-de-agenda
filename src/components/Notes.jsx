@@ -156,11 +156,49 @@ function NoteEditor({ note, onChange, onBack, onDelete, onAnalyze, analyzing, ca
 // O estado de verdade (a lista, a nota selecionada, a sincronização com o
 // Drive, a análise por IA) mora em useNotes — este componente só existe
 // enquanto o painel do trilho está aberto.
+// A barra de abas: uma aba por anotação aberta nesta sessão (ver useNotes.js
+// — openIds), clicável para trocar de aba e com um ✕ próprio para fechar só
+// aquela aba, sem apagar a anotação. Some quando não há nenhuma aberta.
+function TabBar({ notes, openIds, selectedId, onSelect, onClose }) {
+  if (openIds.length === 0) return null
+  return (
+    <div className="notes-tabs">
+      {openIds.map((id) => {
+        const note = notes.find((n) => n.id === id)
+        if (!note) return null
+        return (
+          <button
+            key={id}
+            className={`notes-tab${id === selectedId ? ' is-active' : ''}`}
+            onClick={() => onSelect(id)}
+          >
+            <span className="notes-tab-label">{snippetOf(note)}</span>
+            <span
+              className="notes-tab-close"
+              role="button"
+              aria-label="Fechar aba"
+              onClick={(e) => {
+                e.stopPropagation()
+                onClose(id)
+              }}
+            >
+              ✕
+            </span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 export default function Notes({ notesState, calendars = [], taskLists = [], onCreateEvent, onCreateTask }) {
   const {
     notes,
+    openIds,
     selectedId,
     setSelectedId,
+    openNote,
+    closeTab,
     loading,
     error,
     dismissError,
@@ -172,20 +210,27 @@ export default function Notes({ notesState, calendars = [], taskLists = [], onCr
   } = notesState
   const selected = notes.find((n) => n.id === selectedId)
 
+  const tabBar = (
+    <TabBar notes={notes} openIds={openIds} selectedId={selectedId} onSelect={setSelectedId} onClose={closeTab} />
+  )
+
   if (selected) {
     return (
-      <NoteEditor
-        note={selected}
-        onChange={(patch) => updateNote(selected.id, patch)}
-        onBack={() => setSelectedId(null)}
-        onDelete={() => deleteNote(selected.id)}
-        onAnalyze={analyzeNote}
-        analyzing={analyzingIds.has(selected.id)}
-        calendars={calendars}
-        taskLists={taskLists}
-        onCreateEvent={onCreateEvent}
-        onCreateTask={onCreateTask}
-      />
+      <>
+        {tabBar}
+        <NoteEditor
+          note={selected}
+          onChange={(patch) => updateNote(selected.id, patch)}
+          onBack={() => setSelectedId(null)}
+          onDelete={() => deleteNote(selected.id)}
+          onAnalyze={analyzeNote}
+          analyzing={analyzingIds.has(selected.id)}
+          calendars={calendars}
+          taskLists={taskLists}
+          onCreateEvent={onCreateEvent}
+          onCreateTask={onCreateTask}
+        />
+      </>
     )
   }
 
@@ -193,6 +238,7 @@ export default function Notes({ notesState, calendars = [], taskLists = [], onCr
 
   return (
     <div>
+      {tabBar}
       <div className="panel-head">
         <span className="muted">
           {loading ? 'Carregando...' : `${notes.length} ${notes.length === 1 ? 'anotação' : 'anotações'}`}
@@ -215,7 +261,7 @@ export default function Notes({ notesState, calendars = [], taskLists = [], onCr
           <button
             key={note.id}
             className="search-result"
-            onClick={() => setSelectedId(note.id)}
+            onClick={() => openNote(note.id)}
             style={{ textAlign: 'left' }}
           >
             <span className="search-result-text">{snippetOf(note)}</span>

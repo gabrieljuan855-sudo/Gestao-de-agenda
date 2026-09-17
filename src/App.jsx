@@ -589,6 +589,12 @@ export default function App() {
         </Banner>
       )}
 
+      {briefingState.error && (
+        <Banner tone="warning" actionLabel="Entendi" onAction={briefingState.dismissError}>
+          {briefingState.error}
+        </Banner>
+      )}
+
       {loading && <p className="muted">Atualizando...</p>}
 
       {showCalendarSettings && (

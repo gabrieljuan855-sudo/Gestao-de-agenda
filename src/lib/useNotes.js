@@ -105,6 +105,12 @@ export default function useNotes({ signedIn }) {
   // mesclagem saber o que sumiu de propósito. Um ref basta, e evita um
   // re-render por exclusão.
   const deletedRef = useRef(readCache().deleted)
+  // Abas abertas: as anotações que a pessoa já tocou nesta sessão, na ordem
+  // em que foram abertas. `selectedId` é qual delas está em primeiro plano —
+  // pode ser `null` com abas abertas (voltou para a lista sem fechar nada).
+  // Não persiste entre sessões, do mesmo jeito que `selectedId` nunca
+  // persistiu: reabrir o app começa da lista, com a tela limpa.
+  const [openIds, setOpenIds] = useState([])
   const [selectedId, setSelectedId] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -248,10 +254,34 @@ export default function useNotes({ signedIn }) {
     setError(descreverFalha(err, 'A última alteração ficou salva só neste aparelho'))
   }
 
+  // Abrir uma anotação é sempre abrir (ou focar) a aba dela — nunca duas
+  // abas para a mesma anotação.
+  function openNote(id) {
+    setOpenIds((current) => (current.includes(id) ? current : [...current, id]))
+    setSelectedId(id)
+  }
+
+  // Fecha só a aba: a anotação continua existindo, só sai da barra. Se era a
+  // aba em primeiro plano, quem assume é a vizinha (a anterior, ou a próxima
+  // se era a primeira) — nunca joga de volta para a lista sozinho, que seria
+  // perder o lugar à toa por ter fechado uma aba ao lado.
+  function closeTab(id) {
+    setOpenIds((current) => {
+      const i = current.indexOf(id)
+      const restante = current.filter((x) => x !== id)
+      setSelectedId((atual) => {
+        if (atual !== id) return atual
+        if (restante.length === 0) return null
+        return restante[Math.min(i, restante.length - 1)]
+      })
+      return restante
+    })
+  }
+
   function createNote() {
     const note = newNote()
     persist([note, ...notes])
-    setSelectedId(note.id)
+    openNote(note.id)
     return note
   }
 
@@ -274,7 +304,7 @@ export default function useNotes({ signedIn }) {
       []
     )
     persist(notes.filter((n) => n.id !== id))
-    setSelectedId((current) => (current === id ? null : current))
+    closeTab(id)
   }
 
   // Chamada com o texto atual em mãos (não lido de volta do estado), porque
@@ -307,8 +337,11 @@ export default function useNotes({ signedIn }) {
 
   return {
     notes,
+    openIds,
     selectedId,
     setSelectedId,
+    openNote,
+    closeTab,
     loading,
     error,
     dismissError: () => setError(null),
