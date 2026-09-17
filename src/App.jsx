@@ -14,6 +14,7 @@ import {
   updateTask,
   reopenTask,
   deleteTask,
+  prefetchFocusEvents,
 } from './lib/googleApi.js'
 import { rangeForView, shiftReference, isSameDay } from './lib/dates.js'
 import QuickAdd from './components/QuickAdd.jsx'
@@ -150,6 +151,24 @@ export default function App() {
     reload()
   }, [reload])
 
+  // O contador de pomodoro por tarefa (Backlog) não pode depender só dos
+  // eventos da view aberta na tela — quem está vendo o mês de setembro não
+  // pode achar que uma tarefa nunca teve foco só porque os blocos dela ficaram
+  // em agosto. Busca à parte, num período bem mais largo, atualizada quando
+  // loga e ao fim de cada ciclo de foco (que é quando um bloco novo é gravado).
+  const [focusEvents, setFocusEvents] = useState([])
+
+  const reloadFocusEvents = useCallback(() => {
+    if (!signedIn) return
+    prefetchFocusEvents()
+      .then(setFocusEvents)
+      .catch((err) => console.error('Não foi possível carregar o histórico de blocos de foco:', err))
+  }, [signedIn])
+
+  useEffect(() => {
+    reloadFocusEvents()
+  }, [reloadFocusEvents])
+
   // O app nunca se atualizava sozinho: deixado aberto no bolso a tarde
   // inteira, um compromisso criado no computador só aparecia depois de uma
   // navegação manual — e a própria virada do dia passava batido, com a tela
@@ -206,7 +225,13 @@ export default function App() {
     setView('day')
   }
 
-  const focus = useFocusTimer({ activeTask, onCycleComplete: reload })
+  const focus = useFocusTimer({
+    activeTask,
+    onCycleComplete: () => {
+      reload()
+      reloadFocusEvents()
+    },
+  })
   const notesState = useNotes({ signedIn })
 
   const occupies = (event) => occupiesTime(event, calendarPrefs, presence)
@@ -503,7 +528,7 @@ export default function App() {
         </div>
         <Backlog
           tasks={tasks}
-          events={events}
+          focusEvents={focusEvents}
           activeTaskId={activeTask?.id}
           focusingTaskId={focoEmAndamento() ? activeTask?.id : null}
           onSelect={handleSelectTask}

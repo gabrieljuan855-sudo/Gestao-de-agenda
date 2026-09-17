@@ -3,6 +3,7 @@ import { ensureToken, refreshAfterUnauthorized } from './googleAuth.js'
 import { toDateInput, addDays } from './dates.js'
 import { PRESENCE_PROP, TO_RSVP } from './calendarPrefs.js'
 import { semAcento } from './texto.js'
+import { FOCUS_TASK_PROP } from './focusStats.js'
 
 const CAL_BASE = 'https://www.googleapis.com/calendar/v3'
 const TASKS_BASE = 'https://www.googleapis.com/tasks/v1'
@@ -179,6 +180,18 @@ export async function prefetchEventosDaBusca() {
     cacheDaBusca = null
     throw err
   }
+}
+
+// O contador de pomodoro por tarefa (ver combinedFocusStats) não pode
+// depender só dos eventos da view aberta na tela: quem está no mês de
+// setembro vendo uma tarefa antiga não pode ver o contador zerado só porque
+// os blocos de foco dela ficaram em agosto. Reaproveita o mesmo cache amplo
+// da busca (180 dias passados a 1 ano à frente) em vez de fazer outra ida ao
+// Google só para isto — os blocos "Foco: ..." são identificados pela
+// propriedade privada que createEvent grava neles (ver FOCUS_TASK_PROP).
+export async function prefetchFocusEvents() {
+  const eventos = await prefetchEventosDaBusca()
+  return eventos.filter((e) => e.extendedProperties?.private?.[FOCUS_TASK_PROP])
 }
 
 function combina(event, alvo) {
