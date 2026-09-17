@@ -13,6 +13,13 @@
 // está esperando na frente da tela sabe o que quer.
 const CHAVE = 'gestao-agenda:ia-pausada-ate'
 
+// Interruptor temporário para isolar o consumo de cota só no agente, enquanto
+// o limite do Gemini é testado na prática: desliga o briefing automático, a
+// análise de anotação e a busca — os três outros pontos que chamam a IA. O
+// agente continua funcionando normal. É para ir e voltar (basta trocar para
+// `false`), não uma remoção — não apaga o código que cada um usa.
+export const APENAS_AGENTE_ATIVO = true
+
 // Cota estourada não volta em minutos: espera a próxima janela de cobrança.
 // Uma hora é o meio-termo entre não queimar cota à toa e não deixar o app sem
 // IA o dia inteiro por causa de um pico.
