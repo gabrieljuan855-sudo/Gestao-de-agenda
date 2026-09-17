@@ -433,6 +433,21 @@ button.danger:hover { background: var(--urgent-bg); }
   font-size: var(--body-sm);
 }
 
+/* Cartão de sugestão da IA numa anotação: tipo + texto + ação opcional. */
+.suggestion {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--shape-sm);
+  padding: 8px 10px;
+}
+.suggestion-type {
+  font-size: var(--label-sm);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--accent);
+}
+
 
 /* ---------- anel de progresso do pomodoro ---------- */
 /* Um componente para os dois tamanhos: o SVG tem viewBox fixo e quem manda no

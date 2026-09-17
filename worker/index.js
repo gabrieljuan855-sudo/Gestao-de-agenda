@@ -1,8 +1,9 @@
 // Worker do Gestão de Agenda.
 //
-// Ele continua servindo o site estático como antes; a única rota própria é
-// POST /api/parse, que interpreta texto livre em português usando o Gemini.
-// A chave do Gemini fica como segredo do Cloudflare e nunca chega ao
+// Ele continua servindo o site estático como antes; as rotas próprias usam
+// o Gemini para interpretar texto em português: POST /api/parse (compromisso
+// rápido) e POST /api/analyze-note (sugestões a partir de uma anotação). A
+// chave do Gemini fica como segredo do Cloudflare e nunca chega ao
 // navegador — é justamente por isso que essa parte roda no servidor.
 
 import { handleAuth } from './auth.js'
@@ -136,6 +137,102 @@ export function normalize(parsed) {
   }
 }
 
+const SUGGESTION_TYPES = new Set(['evento', 'tarefa', 'documento', 'contato', 'caso'])
+
+function buildAnalyzePrompt({ text, today, weekday }) {
+  return `Você lê uma anotação livre (em português do Brasil, de alguém que trabalha com atendimento social/administrativo) e aponta o que ela sugere fazer.
+
+Hoje é ${weekday}, ${today}. Fuso: America/Sao_Paulo.
+
+Anotação:
+"""
+${text}
+"""
+
+Responda SOMENTE com JSON, sem comentários, neste formato:
+{
+  "title": "título curto (até 6 palavras) que resuma a anotação inteira",
+  "suggestions": [
+    {
+      "type": "evento" | "tarefa" | "documento" | "contato" | "caso",
+      "text": "frase curta explicando a sugestão, para mostrar na tela",
+      "title": "título pronto para criar o evento/tarefa (só quando fizer sentido; senão null)",
+      "date": "AAAA-MM-DD ou null",
+      "time": "HH:MM em 24h, ou null se não houver hora"
+    }
+  ]
+}
+
+Regras:
+- "evento": algo com data/hora marcada ou implícita ("reunião quinta 14h").
+- "tarefa": algo a fazer sem hora marcada ("ligar para X", "levar documento Y").
+- "contato": precisa falar com alguém, mas a anotação não chega a virar uma tarefa clara sozinha.
+- "caso": indica que um caso/atendimento em andamento precisa de um próximo passo.
+- "documento": parece que vai precisar virar um documento/relatório escrito — não sugira data nem hora para este tipo.
+- Só inclua "date"/"time" em "evento" e "tarefa", e só quando o texto realmente indicar quando.
+- Nada de sugestão para anotações que são só um pensamento solto, sem nenhuma ação implícita — nesse caso "suggestions" pode vir vazio.
+- Não invente informação que não está na anotação.
+- No máximo 5 sugestões.`
+}
+
+// Nada aqui é confiável por vir de um modelo — cada sugestão é validada e
+// as que não batem no formato esperado somem, em vez de quebrar a tela.
+export function normalizeAnalysis(parsed) {
+  const title = typeof parsed?.title === 'string' ? parsed.title.trim().slice(0, 80) : ''
+  const rawSuggestions = Array.isArray(parsed?.suggestions) ? parsed.suggestions.slice(0, 5) : []
+
+  const suggestions = rawSuggestions
+    .map((s) => {
+      const type = SUGGESTION_TYPES.has(s?.type) ? s.type : null
+      const text = typeof s?.text === 'string' ? s.text.trim().slice(0, 300) : ''
+      if (!type || !text) return null
+      const date = /^\d{4}-\d{2}-\d{2}$/.test(s?.date || '') ? s.date : null
+      const time = /^([01]\d|2[0-3]):[0-5]\d$/.test(s?.time || '') ? s.time : null
+      const suggestedTitle = typeof s?.title === 'string' ? s.title.trim().slice(0, 300) : ''
+      return {
+        type,
+        text,
+        title: suggestedTitle || text,
+        // Data/hora só fazem sentido para o que vira compromisso ou tarefa.
+        date: type === 'evento' || type === 'tarefa' ? date : null,
+        time: type === 'evento' ? time : null,
+      }
+    })
+    .filter(Boolean)
+
+  return { title, suggestions }
+}
+
+async function handleAnalyzeNote(request, env) {
+  const caller = await verifyCaller(request, env)
+  if (!caller) return json({ error: 'Não autorizado.' }, 401)
+
+  if (!env.GEMINI_API_KEY) {
+    return json({ error: 'GEMINI_API_KEY não está configurada neste Worker.' }, 503)
+  }
+
+  let body
+  try {
+    body = await request.json()
+  } catch {
+    return json({ error: 'Corpo inválido.' }, 400)
+  }
+
+  const text = typeof body?.text === 'string' ? body.text.trim() : ''
+  if (!text) return json({ error: 'Envie o texto da anotação.' }, 400)
+  // Uma anotação é bem mais longa que o texto de /api/parse, mas ainda
+  // precisa de um teto — sem ele, uma nota gigante vira um custo de IA fora
+  // de controle por uma única gravação.
+  if (text.length > 6000) return json({ error: 'Anotação longa demais para analisar de uma vez.' }, 400)
+
+  try {
+    const parsed = await callGemini(env, buildAnalyzePrompt({ text, today: body.today, weekday: body.weekday }))
+    return json(normalizeAnalysis(parsed))
+  } catch (err) {
+    return json({ error: err.message }, 502)
+  }
+}
+
 async function handleParse(request, env) {
   // Autenticação antes de tudo: quem não é dono não descobre nem como o
   // Worker está configurado.
@@ -184,6 +281,11 @@ export default {
     if (url.pathname === '/api/parse') {
       if (request.method !== 'POST') return json({ error: 'Use POST.' }, 405)
       return handleParse(request, env)
+    }
+
+    if (url.pathname === '/api/analyze-note') {
+      if (request.method !== 'POST') return json({ error: 'Use POST.' }, 405)
+      return handleAnalyzeNote(request, env)
     }
 
     return env.ASSETS.fetch(request)

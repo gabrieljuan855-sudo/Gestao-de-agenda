@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { loadNotes, saveNotes } from './driveNotes.js'
+import { analyzeNoteWithAI } from './aiAnalyzeNote.js'
 
 // Cache local: o que garante que a tela mostra algo na hora, antes do Drive
 // responder, e que continua mostrando algo se a rede cair no meio do
@@ -46,6 +47,9 @@ export default function useNotes({ signedIn }) {
   const [selectedId, setSelectedId] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  // Ids em análise agora — mais de uma nota pode estar sendo analisada ao
+  // mesmo tempo (a digitação numa e a varredura programada, por exemplo).
+  const [analyzingIds, setAnalyzingIds] = useState(() => new Set())
   const saveTimer = useRef(null)
   const loadedOnce = useRef(false)
 
@@ -89,13 +93,47 @@ export default function useNotes({ signedIn }) {
     return note
   }
 
-  function updateNote(id, patch) {
-    persist(notes.map((n) => (n.id === id ? { ...n, ...patch, updatedAt: new Date().toISOString() } : n)))
+  // `touch: false` é para atualização que a própria IA faz (título sugerido,
+  // sugestões novas): isso não é "o usuário editou agora", e bumped
+  // `updatedAt` faria a nota pular para o topo da lista sozinha, sem
+  // nenhuma edição de verdade por trás.
+  function updateNote(id, patch, { touch = true } = {}) {
+    persist(
+      notes.map((n) => (n.id === id ? { ...n, ...patch, ...(touch ? { updatedAt: new Date().toISOString() } : {}) } : n))
+    )
   }
 
   function deleteNote(id) {
     persist(notes.filter((n) => n.id !== id))
     setSelectedId((current) => (current === id ? null : current))
+  }
+
+  // Chamada com o texto atual em mãos (não lido de volta do estado), porque
+  // quem chama pode estar prestes a navegar para fora do editor antes da
+  // gravação debounced da digitação ter tido tempo de acontecer.
+  async function analyzeNote(id, bodyText) {
+    const text = (bodyText ?? '').trim()
+    if (!text) return
+    setAnalyzingIds((prev) => new Set(prev).add(id))
+    try {
+      const { title, suggestions } = await analyzeNoteWithAI(text)
+      const note = notes.find((n) => n.id === id)
+      const patch = { suggestions, lastAnalyzedAt: new Date().toISOString() }
+      // Só substitui o título se o usuário não tiver escrito um por conta
+      // própria — a IA sugere, não sobrescreve o que já foi decidido.
+      if (title && !note?.title?.trim()) patch.title = title
+      updateNote(id, patch, { touch: false })
+    } catch (err) {
+      // A nota continua normal, só sem sugestões novas — uma anotação não
+      // pode travar por causa da IA estar fora do ar.
+      console.error('Não foi possível analisar a anotação:', err)
+    } finally {
+      setAnalyzingIds((prev) => {
+        const next = new Set(prev)
+        next.delete(id)
+        return next
+      })
+    }
   }
 
   return {
@@ -108,5 +146,7 @@ export default function useNotes({ signedIn }) {
     createNote,
     updateNote,
     deleteNote,
+    analyzeNote,
+    analyzingIds,
   }
 }
