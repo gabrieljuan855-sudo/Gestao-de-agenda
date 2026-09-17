@@ -7,7 +7,10 @@ import { semAcento } from './texto.js'
 const CAL_BASE = 'https://www.googleapis.com/calendar/v3'
 const TASKS_BASE = 'https://www.googleapis.com/tasks/v1'
 
-async function request(url, options = {}, { retryOnAuth = true } = {}) {
+// Exportado para outras libs que também falam com APIs do Google
+// autenticadas (hoje, driveNotes.js) reaproveitarem a renovação de token em
+// 401 e o tratamento de erro, em vez de duplicar tudo isso.
+export async function request(url, options = {}, { retryOnAuth = true } = {}) {
   const token = await ensureToken()
   if (!token) throw new Error('Sem token de acesso. Faça login primeiro.')
 

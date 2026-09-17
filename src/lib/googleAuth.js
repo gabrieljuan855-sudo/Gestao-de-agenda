@@ -7,6 +7,10 @@ const SCOPES = [
   // Sem este escopo o token não carrega e-mail, e a rota /api/parse não
   // consegue confirmar que quem chamou é o dono da conta.
   'https://www.googleapis.com/auth/userinfo.email',
+  // Pasta privada do Drive que só este app enxerga — nem aparece no Drive
+  // visível do usuário. É onde as anotações passam a ficar, para sincronizar
+  // entre aparelhos em vez de morrerem no localStorage de um só navegador.
+  'https://www.googleapis.com/auth/drive.appdata',
 ].join(' ')
 
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID
