@@ -1,16 +1,16 @@
 // O freio de cota da IA.
 //
-// O app chama o Gemini sozinho em dois lugares: os briefings por horário
-// (useBriefing.js) e a varredura das anotações (useNotes.js). Os dois tentam
-// de novo quando falham — e essa era a armadilha: quando a falha É o limite de
-// uso estourado, insistir de 5 em 5 minutos só queima mais cota e mantém o
-// limite estourado. O app comia a própria cota sem ninguém estar usando ele.
+// O app chama o Gemini sozinho, sem a pessoa pedir, num único lugar: os
+// briefings por horário (useBriefing.js). Eles tentam de novo quando falham —
+// e essa era a armadilha: quando a falha É o limite de uso estourado,
+// insistir de 5 em 5 minutos só queima mais cota e mantém o limite estourado.
+// O app comia a própria cota sem ninguém estar usando ele.
 //
-// Então, quando o Google diz que o limite acabou, tudo que é automático para
+// Então, quando o Google diz que o limite acabou, o briefing automático para
 // de tentar por um tempo. O que a pessoa pede na hora (o agente, analisar uma
-// anotação que ela acabou de escrever) continua passando: se falhar, ela vê a
-// mensagem e decide se tenta de novo — quem está esperando na frente da tela
-// sabe o que quer.
+// anotação que ela acabou de escrever, buscar nas anotações) continua
+// passando: se falhar, ela vê a mensagem e decide se tenta de novo — quem
+// está esperando na frente da tela sabe o que quer.
 const CHAVE = 'gestao-agenda:ia-pausada-ate'
 
 // Cota estourada não volta em minutos: espera a próxima janela de cobrança.

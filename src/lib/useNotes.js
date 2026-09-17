@@ -4,7 +4,6 @@ import { permissaoDoDriveConcedida } from './googleAuth.js'
 import { mesclarAnotacoes, mesclarApagadas, precisaSubir } from './notesMerge.js'
 import { analyzeNoteWithAI } from './aiAnalyzeNote.js'
 import { searchNotes } from './aiSearchNotes.js'
-import { iaEmPausa } from './aiCooldown.js'
 
 // Falta de permissão não é falha de rede: insistir não resolve, e dizer
 // "não deu agora" manda a pessoa esperar por algo que nunca vai acontecer
@@ -52,30 +51,6 @@ export function descreverSincronizacao(status) {
   if (status === 'salvo') return 'Salvo no Drive'
   if (status === 'erro') return 'Salvo só neste aparelho'
   return ''
-}
-
-// Não há infraestrutura de push/cron neste app: a varredura "4x por dia" só
-// pode ser uma aproximação que roda enquanto o app está aberto, verificando
-// se algum desses horários já passou desde a última vez que rodou.
-const SWEEP_HOURS = [8, 10, 13, 15]
-const SWEEP_KEY = 'gestao-agenda:anotacoes-sweep-ultima'
-// Teto de anotações analisadas por varredura. O que passar disso espera o
-// próximo horário — são 4 por dia, então a fila anda.
-const MAX_POR_VARREDURA = 5
-
-// O horário do próprio dia que já passou, mais recente — ou, antes das 8h,
-// o último horário de ontem. É contra esse instante que se decide se a
-// varredura de agora já foi feita ou ainda está pendente.
-export function ultimoHorarioDaVarredura(agora) {
-  for (const h of [...SWEEP_HOURS].reverse()) {
-    const slot = new Date(agora)
-    slot.setHours(h, 0, 0, 0)
-    if (slot <= agora) return slot
-  }
-  const slot = new Date(agora)
-  slot.setDate(slot.getDate() - 1)
-  slot.setHours(SWEEP_HOURS[SWEEP_HOURS.length - 1], 0, 0, 0)
-  return slot
 }
 
 // O cache nasceu como uma lista crua de anotações e passou a guardar também
@@ -128,8 +103,8 @@ export function resolverNotaRelacionada(ref, outras) {
 
 // Estado das anotações mora aqui, e não dentro do painel — do mesmo jeito
 // que o pomodoro mora em useFocusTimer: o painel só é montado quando o
-// trilho abre, mas as anotações (e, mais adiante, a varredura da IA)
-// precisam continuar existindo com o painel fechado.
+// trilho abre, mas as anotações precisam continuar existindo com o painel
+// fechado.
 export default function useNotes({ signedIn }) {
   const [notes, setNotes] = useState(() => readCache().notes)
   // Os rastros de exclusão nunca aparecem na tela — só existem para a
@@ -145,7 +120,7 @@ export default function useNotes({ signedIn }) {
   // 'ocioso' | 'salvando' | 'salvo' | 'erro' — ver descreverSincronizacao.
   const [syncStatus, setSyncStatus] = useState('ocioso')
   // Ids em análise agora — mais de uma nota pode estar sendo analisada ao
-  // mesmo tempo (a digitação numa e a varredura programada, por exemplo).
+  // mesmo tempo se a pessoa alternar de aba enquanto uma análise ainda roda.
   const [analyzingIds, setAnalyzingIds] = useState(() => new Set())
   // Falha ao pedir sugestões da IA para uma anotação. Separado do `error` de
   // sincronização de propósito — são causas diferentes, e um cobrindo o outro
@@ -162,19 +137,11 @@ export default function useNotes({ signedIn }) {
   const [searchError, setSearchError] = useState(null)
   const saveTimer = useRef(null)
   const loadedOnce = useRef(false)
-  // "Última versão conhecida" para a varredura programada usar sem precisar
-  // recriar os listeners toda vez que as anotações ou a seleção mudam.
   const notesRef = useRef(notes)
-  const selectedIdRef = useRef(selectedId)
-  const runSweepRef = useRef(() => {})
 
   useEffect(() => {
     notesRef.current = notes
   }, [notes])
-
-  useEffect(() => {
-    selectedIdRef.current = selectedId
-  }, [selectedId])
 
   // Sem lista para "voltar", sempre precisa haver uma aba em primeiro plano
   // quando existe pelo menos uma anotação — inclusive assim que o Drive traz
@@ -235,76 +202,7 @@ export default function useNotes({ signedIn }) {
         console.error('Não foi possível carregar as anotações do Drive:', err)
         setError(descreverFalha(err, 'Mostrando a última versão salva neste aparelho'))
       })
-      .finally(() => {
-        setLoading(false)
-        // Só depois que a lista de verdade chegou do Drive: rodar a varredura
-        // em cima do cache velho analisaria anotações desatualizadas.
-        runSweepRef.current()
-      })
-  }, [signedIn])
-
-  // A varredura programada: 4 horários fixos no dia (aproximação client-side,
-  // já que o app não tem infraestrutura de push/cron) que revisam com a IA
-  // qualquer anotação editada desde a última análise — cobre o caso de a
-  // pessoa ter fechado o app antes dos 45s de pausa ou de sair do editor
-  // dispararem a análise sozinhos.
-  useEffect(() => {
-    if (!signedIn) return
-
-    async function sweep() {
-      const pendentes = notesRef.current
-        .filter((n) => {
-          if (n.id === selectedIdRef.current) return false
-          if ((n.body || '').trim().length < AI_MIN_LENGTH) return false
-          if (!n.lastAnalyzedAt) return true
-          return new Date(n.updatedAt) > new Date(n.lastAnalyzedAt)
-        })
-        // Antes ia a lista inteira de uma vez. Com muitas anotações pendentes
-        // isso vira uma rajada de dezenas de chamadas em segundos — o jeito
-        // mais rápido de estourar o limite por minuto do Gemini. O que sobrar
-        // pega a próxima varredura.
-        .slice(0, MAX_POR_VARREDURA)
-
-      for (const nota of pendentes) {
-        // Reconfere a cada volta: se a primeira nota já bateu no limite, não
-        // adianta insistir com as outras.
-        if (iaEmPausa()) return
-        await analyzeNote(nota.id, nota.body)
-      }
-    }
-
-    function checkSweep() {
-      if (document.visibilityState !== 'visible') return
-      if (iaEmPausa()) return
-      const agora = new Date()
-      const alvo = ultimoHorarioDaVarredura(agora)
-      let ultima = null
-      try {
-        ultima = localStorage.getItem(SWEEP_KEY)
-      } catch {
-        // Sem acesso ao localStorage: a varredura roda a cada checagem em vez
-        // de uma vez por horário — pior caso é gastar mais chamadas de IA,
-        // nunca travar a função.
-      }
-      if (ultima && new Date(ultima) >= alvo) return
-      try {
-        localStorage.setItem(SWEEP_KEY, agora.toISOString())
-      } catch {
-        // Ver comentário acima.
-      }
-      sweep()
-    }
-
-    runSweepRef.current = checkSweep
-    document.addEventListener('visibilitychange', checkSweep)
-    window.addEventListener('focus', checkSweep)
-    const id = setInterval(checkSweep, 5 * 60 * 1000)
-    return () => {
-      document.removeEventListener('visibilitychange', checkSweep)
-      window.removeEventListener('focus', checkSweep)
-      clearInterval(id)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+      .finally(() => setLoading(false))
   }, [signedIn])
 
   function persist(next) {
