@@ -2,9 +2,11 @@
 //
 // Ele continua servindo o site estático como antes; as rotas próprias usam
 // o Gemini para interpretar texto em português: POST /api/parse (compromisso
-// rápido) e POST /api/analyze-note (sugestões a partir de uma anotação). A
-// chave do Gemini fica como segredo do Cloudflare e nunca chega ao
-// navegador — é justamente por isso que essa parte roda no servidor.
+// rápido, só criação), POST /api/command (comandos mais amplos — editar,
+// excluir, confirmar presença) e POST /api/analyze-note (sugestões a partir
+// de uma anotação). A chave do Gemini fica como segredo do Cloudflare e
+// nunca chega ao navegador — é justamente por isso que essa parte roda no
+// servidor.
 
 import { handleAuth } from './auth.js'
 
@@ -134,6 +136,126 @@ export function normalize(parsed) {
     // null quando o texto não indica urgência: o formulário é que escolhe o
     // padrão, em vez de o app inventar uma prioridade.
     priority: PRIORITIES.has(parsed?.priority) ? parsed.priority : null,
+  }
+}
+
+const COMMAND_ACTIONS = new Set([
+  'criar_evento',
+  'criar_tarefa',
+  'editar_evento',
+  'excluir_evento',
+  'editar_tarefa',
+  'excluir_tarefa',
+  'confirmar_presenca',
+])
+// Só duas opções — é o mesmo vocabulário binário que o app já usa para
+// presença (ver TO_RSVP em calendarPrefs.js): não existe "talvez" por aqui.
+const PRESENCES = new Set(['vou', 'nao'])
+
+function buildCommandPrompt({ text, today, weekday, calendars }) {
+  const lista = (calendars || [])
+    .map((c) => `- ${c.name}${c.id ? ` (id: ${c.id})` : ''}`)
+    .join('\n')
+
+  return `Você interpreta comandos rápidos, em português do Brasil, sobre a agenda e as tarefas de alguém que trabalha com atendimento social/administrativo.
+
+Hoje é ${weekday}, ${today}. Fuso: America/Sao_Paulo.
+
+Agendas disponíveis:
+${lista || '- (nenhuma informada)'}
+
+Comando do usuário:
+"""
+${text}
+"""
+
+Responda SOMENTE com JSON, sem comentários, neste formato:
+{
+  "action": "criar_evento" | "criar_tarefa" | "editar_evento" | "excluir_evento" | "editar_tarefa" | "excluir_tarefa" | "confirmar_presenca" | "desconhecido",
+  "searchText": "palavras para achar o compromisso/tarefa que já existe (trecho do título) — só quando a ação não for criar; senão null",
+  "title": "título do evento/tarefa (para criar, ou o novo título ao renomear; senão null)",
+  "date": "AAAA-MM-DD ou null",
+  "time": "HH:MM em 24h, ou null",
+  "durationMinutes": número de minutos ou null,
+  "calendarId": "id da agenda mais provável, ou null",
+  "priority": "alta" | "media" | "baixa" | null,
+  "presence": "vou" | "nao" | null,
+  "summary": "uma frase curta (até 15 palavras) confirmando o que vai acontecer, para mostrar para a pessoa antes de executar"
+}
+
+Regras:
+- "criar_evento"/"criar_tarefa": pedir para agendar algo novo — "title" vem preenchido, "searchText" fica null. "criar_evento" quando houver hora marcada; "criar_tarefa" quando for algo a fazer sem hora.
+- "editar_evento"/"editar_tarefa": mudar data, hora, duração ou título de algo que já existe ("mudar a reunião de terça para 15h", "renomear a tarefa X para Y") — "searchText" descreve o que já existe; só os campos que mudam vêm preenchidos, os outros ficam null.
+- "excluir_evento"/"excluir_tarefa": "desmarcar", "cancelar" ou "excluir" algo que já existe — "searchText" descreve o que procurar.
+- "confirmar_presenca": a pessoa diz que vai ou não vai a um compromisso já existente, sem querer excluí-lo ("não vou conseguir ir à reunião de amanhã" é presença "nao", não exclusão) — "searchText" descreve o compromisso, "presence" traz a resposta. Não existe "talvez" — só "vou" ou "nao".
+- "desconhecido": o texto não dá para entender como nenhuma dessas ações — preencha "summary" explicando o que faltou entender.
+- Um dia da semana sem data significa a próxima ocorrência a partir de hoje.
+- Horas em português como "13h15", "14h" equivalem a 13:15, 14:00.
+- Nunca deixe data ou hora dentro do título.
+- Não invente um searchText genérico demais ("reunião" sozinho) quando o texto não especificar qual compromisso — use o pouco que tiver: a pessoa confirma antes de qualquer mudança acontecer de verdade.`
+}
+
+// Nada aqui é confiável por vir de um modelo — cada comando é validado, e a
+// resolução de qual compromisso/tarefa de verdade corresponde ao searchText
+// acontece no cliente, sobre os dados já carregados, nunca aqui.
+export function normalizeCommand(parsed) {
+  const action = COMMAND_ACTIONS.has(parsed?.action) ? parsed.action : 'desconhecido'
+  const title = typeof parsed?.title === 'string' ? parsed.title.trim().slice(0, 300) : ''
+  const searchText = typeof parsed?.searchText === 'string' ? parsed.searchText.trim().slice(0, 200) : ''
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(parsed?.date || '') ? parsed.date : null
+  const time = /^([01]\d|2[0-3]):[0-5]\d$/.test(parsed?.time || '') ? parsed.time : null
+
+  const minutes = Number(parsed?.durationMinutes)
+  const durationMinutes = Number.isFinite(minutes) && minutes > 0 && minutes <= 12 * 60
+    ? Math.round(minutes)
+    : null
+
+  return {
+    action,
+    searchText,
+    title,
+    date,
+    time,
+    durationMinutes,
+    calendarId: typeof parsed?.calendarId === 'string' ? parsed.calendarId : null,
+    priority: PRIORITIES.has(parsed?.priority) ? parsed.priority : null,
+    presence: PRESENCES.has(parsed?.presence) ? parsed.presence : null,
+    summary: typeof parsed?.summary === 'string' ? parsed.summary.trim().slice(0, 200) : '',
+  }
+}
+
+async function handleCommand(request, env) {
+  const caller = await verifyCaller(request, env)
+  if (!caller) return json({ error: 'Não autorizado.' }, 401)
+
+  if (!env.GEMINI_API_KEY) {
+    return json({ error: 'GEMINI_API_KEY não está configurada neste Worker.' }, 503)
+  }
+
+  let body
+  try {
+    body = await request.json()
+  } catch {
+    return json({ error: 'Corpo inválido.' }, 400)
+  }
+
+  const text = typeof body?.text === 'string' ? body.text.trim() : ''
+  if (!text) return json({ error: 'Envie o comando.' }, 400)
+  if (text.length > 500) return json({ error: 'Texto longo demais.' }, 400)
+
+  try {
+    const parsed = await callGemini(
+      env,
+      buildCommandPrompt({
+        text,
+        today: body.today,
+        weekday: body.weekday,
+        calendars: Array.isArray(body.calendars) ? body.calendars.slice(0, 20) : [],
+      })
+    )
+    return json(normalizeCommand(parsed))
+  } catch (err) {
+    return json({ error: err.message }, 502)
   }
 }
 
@@ -281,6 +403,11 @@ export default {
     if (url.pathname === '/api/parse') {
       if (request.method !== 'POST') return json({ error: 'Use POST.' }, 405)
       return handleParse(request, env)
+    }
+
+    if (url.pathname === '/api/command') {
+      if (request.method !== 'POST') return json({ error: 'Use POST.' }, 405)
+      return handleCommand(request, env)
     }
 
     if (url.pathname === '/api/analyze-note') {

@@ -338,6 +338,34 @@ export default function App() {
     await reload()
   }
 
+  // Versões genéricas de editar/excluir, para o comando de texto livre do
+  // QuickAdd: ele acha o evento/tarefa por conta própria (busca, não o
+  // modal de edição), então não pode depender do estado editingEvent/
+  // editingTask como handleSaveEvent/handleDeleteEvent/handleDeleteTask.
+  async function handleCommandUpdateEvent(event, patch) {
+    await updateEvent(event, patch)
+    await reload()
+  }
+
+  async function handleCommandDeleteEvent(event) {
+    await deleteEvent(event)
+    await reload()
+  }
+
+  async function handleCommandUpdateTask(task, patch) {
+    await updateTask(task, patch)
+    await reload()
+  }
+
+  async function handleCommandDeleteTask(task) {
+    if (activeTask?.id === task.id) {
+      if (focus.phase !== 'idle') focus.stop()
+      setActiveTask(null)
+    }
+    await deleteTask(task)
+    await reload()
+  }
+
   // Quem sabe se há login possível é o próprio módulo de autenticação: ele
   // pergunta ao Worker antes de olhar para a variável do build.
   if (authStatus === 'unconfigured') {
@@ -390,7 +418,7 @@ export default function App() {
   const tools = [
     {
       id: 'add',
-      label: 'Nova tarefa',
+      label: 'Comando',
       icon: '+',
       // No trilho de mesa, criar é a ação de maior destaque (o equivalente ao
       // FAB do MD3) — ganha a cor de primária mesmo parada, diferente das
@@ -402,8 +430,14 @@ export default function App() {
         <QuickAdd
           calendars={calendars}
           taskLists={taskLists}
+          tasks={tasks}
           onCreateEvent={handleCreateEvent}
           onCreateTask={handleCreateTask}
+          onUpdateEvent={handleCommandUpdateEvent}
+          onDeleteEvent={handleCommandDeleteEvent}
+          onUpdateTask={handleCommandUpdateTask}
+          onDeleteTask={handleCommandDeleteTask}
+          onSetPresence={handleSetPresence}
           onDone={close}
         />
       ),
