@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { parseQuickAdd } from '../lib/nlp.js'
-import { parseWithAI } from '../lib/aiParse.js'
+import { parseCommandWithAI } from '../lib/aiCommand.js'
+import { searchEvents } from '../lib/googleApi.js'
+import { semAcento } from '../lib/texto.js'
 import { formatDuration, toTimeInput, fromInputs, toDateInput } from '../lib/dates.js'
-import { PRIORITIES, DEFAULT_PRIORITY } from '../lib/priority.js'
+import { isAllDay, eventStart, eventEnd } from '../lib/events.js'
+import { PRIORITIES, DEFAULT_PRIORITY, priorityFromListTitle } from '../lib/priority.js'
 import { findDefaultCalendar, findListForPriority } from '../lib/defaults.js'
 
 const DURATION_OPTIONS = [20, 30, 45, 50, 60, 90, 120]
@@ -13,7 +16,84 @@ const DURATION_OPTIONS = [20, 30, 45, 50, 60, 90, 120]
 const AI_DEBOUNCE_MS = 900
 const AI_MIN_LENGTH = 4
 
-export default function QuickAdd({ calendars = [], taskLists = [], onCreateEvent, onCreateTask, onDone }) {
+const ACTION_LABEL = {
+  editar_evento: 'Mudar compromisso',
+  excluir_evento: 'Excluir compromisso',
+  editar_tarefa: 'Mudar tarefa',
+  excluir_tarefa: 'Excluir tarefa',
+  confirmar_presenca: 'Confirmar presença',
+}
+
+const PRESENCE_LABEL = { vou: 'vou', nao: 'não vou' }
+
+// Converte o comando da IA (ação de criar) no mesmo formato que o parser
+// local (parseQuickAdd) produz — o resto da tela não precisa saber se a
+// prévia veio da leitura simples ou da IA.
+function commandToPreview(cmd) {
+  const base = {
+    title: cmd.title || '',
+    priority: cmd.priority,
+    calendarId: cmd.calendarId || '',
+    durationMinutes: cmd.durationMinutes || 60,
+  }
+  if (cmd.action === 'criar_evento' && cmd.date && cmd.time) {
+    const start = fromInputs(cmd.date, cmd.time)
+    return { ...base, type: 'event', start, end: new Date(start.getTime() + base.durationMinutes * 60000) }
+  }
+  return { ...base, type: 'task', due: cmd.date ? fromInputs(cmd.date) : null }
+}
+
+// Acha a tarefa (ainda não concluída) cujo título contém as palavras do que
+// a IA leu no comando. Não é um match perfeito — por isso a tela sempre
+// mostra qual tarefa achou antes de mexer nela, para a pessoa confirmar ou
+// desistir se não for a certa.
+function findTaskMatch(tasks, searchText) {
+  const alvo = semAcento(searchText)
+  if (!alvo) return null
+  return tasks.find((t) => t.status !== 'completed' && semAcento(t.title).includes(alvo)) || null
+}
+
+// Monta o patch de updateEvent (lib/googleApi.js) a partir do comando: só
+// mexe em data/hora quando a IA realmente leu uma mudança de data ou hora,
+// mantendo a duração original do compromisso quando ela não foi dita.
+function buildEventPatch(event, cmd) {
+  const patch = {}
+  if (cmd.title) patch.title = cmd.title
+  if (cmd.date || cmd.time) {
+    const allDay = isAllDay(event)
+    const curStart = eventStart(event)
+    const curEnd = eventEnd(event)
+    const durationMinutes = cmd.durationMinutes || (curEnd - curStart) / 60000
+    const dateStr = cmd.date || toDateInput(curStart)
+    const start = allDay ? fromInputs(dateStr) : fromInputs(dateStr, cmd.time || toTimeInput(curStart))
+    patch.start = start
+    patch.end = new Date(start.getTime() + durationMinutes * 60000)
+    patch.allDay = allDay
+  }
+  return patch
+}
+
+function buildTaskPatch(cmd) {
+  return {
+    title: cmd.title || undefined,
+    due: cmd.date ? fromInputs(cmd.date) : undefined,
+    priority: cmd.priority || undefined,
+  }
+}
+
+export default function QuickAdd({
+  calendars = [],
+  taskLists = [],
+  tasks = [],
+  onCreateEvent,
+  onCreateTask,
+  onUpdateEvent,
+  onDeleteEvent,
+  onUpdateTask,
+  onDeleteTask,
+  onSetPresence,
+  onDone,
+}) {
   const [text, setText] = useState('')
   const [preview, setPreview] = useState(null)
   const [calendarId, setCalendarId] = useState('')
@@ -26,6 +106,14 @@ export default function QuickAdd({ calendars = [], taskLists = [], onCreateEvent
   const [asking, setAsking] = useState(false)
   const [usedAI, setUsedAI] = useState(false)
   const [aiFailed, setAiFailed] = useState(false)
+  // Comando não-criação (editar/excluir/confirmar presença): `command` é o
+  // que a IA leu, `resolved` é o compromisso/tarefa de verdade que a busca
+  // achou para aquele comando — nunca se executa nada sem os dois prontos e
+  // sem a pessoa clicar em "Confirmar".
+  const [command, setCommand] = useState(null)
+  const [resolving, setResolving] = useState(false)
+  const [resolved, setResolved] = useState(null)
+  const [resolveError, setResolveError] = useState(null)
   const debounceRef = useRef(null)
   const abortRef = useRef(null)
 
@@ -70,9 +158,44 @@ export default function QuickAdd({ calendars = [], taskLists = [], onCreateEvent
     if (parsed?.priority) setPriority(parsed.priority)
   }
 
+  // Depois que a IA lê um comando de editar/excluir/confirmar presença, ainda
+  // falta achar QUAL compromisso ou tarefa de verdade é esse — a IA só leu o
+  // texto, não tem acesso à agenda inteira. A busca roda sobre o que já está
+  // carregado (tarefas) ou sobre o cache amplo de compromissos (googleApi.js).
+  async function resolveTarget(cmd, signal) {
+    setResolving(true)
+    setResolveError(null)
+    setResolved(null)
+    try {
+      if (cmd.action === 'editar_tarefa' || cmd.action === 'excluir_tarefa') {
+        const match = findTaskMatch(tasks, cmd.searchText)
+        if (signal.aborted) return
+        if (!match) {
+          setResolveError('Não encontrei nenhuma tarefa parecida com essa.')
+          return
+        }
+        setResolved({ kind: 'task', item: match })
+      } else {
+        const found = await searchEvents(cmd.searchText)
+        if (signal.aborted) return
+        if (!found.length) {
+          setResolveError('Não encontrei nenhum compromisso parecido com esse.')
+          return
+        }
+        setResolved({ kind: 'event', item: found[0] })
+      }
+    } catch (err) {
+      if (signal.aborted) return
+      setResolveError(`Não deu para procurar: ${err.message}`)
+    } finally {
+      if (!signal.aborted) setResolving(false)
+    }
+  }
+
   // A IA roda sozinha depois de uma pausa na digitação, sem exigir clique: o
-  // parser local já preenche a prévia na hora, e a IA a substitui assim que
-  // fica pronta, sem travar a tela nem gastar uma chamada por letra.
+  // parser local já preenche a prévia de criação na hora, e a IA a substitui
+  // assim que fica pronta — inclusive trocando para uma ação bem diferente
+  // (editar, excluir, confirmar presença) quando é disso que o texto trata.
   async function askAI(value) {
     abortRef.current?.abort()
     const controller = new AbortController()
@@ -81,10 +204,16 @@ export default function QuickAdd({ calendars = [], taskLists = [], onCreateEvent
     setAsking(true)
     setAiFailed(false)
     try {
-      const parsed = await parseWithAI(value, calendars, { signal: controller.signal })
+      const cmd = await parseCommandWithAI(value, calendars, { signal: controller.signal })
       if (controller.signal.aborted) return
-      applyPreview(parsed)
       setUsedAI(true)
+      if (cmd.action === 'criar_evento' || cmd.action === 'criar_tarefa') {
+        setCommand(null)
+        applyPreview(commandToPreview(cmd))
+      } else {
+        setCommand(cmd)
+        if (cmd.action !== 'desconhecido') await resolveTarget(cmd, controller.signal)
+      }
     } catch (err) {
       if (err.name === 'AbortError') return
       // A prévia local já está na tela — a IA é um reforço, não o único
@@ -100,6 +229,11 @@ export default function QuickAdd({ calendars = [], taskLists = [], onCreateEvent
     setError(null)
     setUsedAI(false)
     setAiFailed(false)
+    setCommand(null)
+    setResolved(null)
+    setResolveError(null)
+    // Palpite instantâneo de criação, enquanto a IA não respondeu — ela pode
+    // substituir por uma ação totalmente diferente assim que chegar.
     applyPreview(value.trim() ? parseQuickAdd(value) : null)
 
     clearTimeout(debounceRef.current)
@@ -125,6 +259,9 @@ export default function QuickAdd({ calendars = [], taskLists = [], onCreateEvent
     if (fromList) setPriority(fromList)
   }
 
+  // Um comando não-criação some da tela de "prévia de criação" assim que a
+  // IA responde — as duas telas nunca aparecem juntas.
+  const showCreatePreview = !command && preview
   const isEvent = preview?.type === 'event'
   const needsCalendar = isEvent && calendars.length > 0 && !calendarId
   const needsList = !isEvent && taskLists.length > 0 && !tasklistId
@@ -141,6 +278,9 @@ export default function QuickAdd({ calendars = [], taskLists = [], onCreateEvent
     setUsedAI(false)
     setAiFailed(false)
     setAsking(false)
+    setCommand(null)
+    setResolved(null)
+    setResolveError(null)
     clearTimeout(debounceRef.current)
     abortRef.current?.abort()
     const preferred = findDefaultCalendar(calendars)
@@ -148,16 +288,27 @@ export default function QuickAdd({ calendars = [], taskLists = [], onCreateEvent
   }
 
   async function handleConfirm() {
-    if (!preview) return
     setSaving(true)
     setError(null)
     try {
-      if (isEvent) {
-        const start = fromInputs(toDateInput(preview.start), startTime)
-        const end = new Date(start.getTime() + minutes * 60000)
-        await onCreateEvent({ ...preview, start, end, calendarId })
+      if (command && resolved) {
+        const { item } = resolved
+        if (command.action === 'excluir_evento') await onDeleteEvent(item)
+        else if (command.action === 'editar_evento') await onUpdateEvent(item, buildEventPatch(item, command))
+        else if (command.action === 'confirmar_presenca') await onSetPresence(item, command.presence)
+        else if (command.action === 'excluir_tarefa') await onDeleteTask(item)
+        else if (command.action === 'editar_tarefa') await onUpdateTask(item, buildTaskPatch(command))
+        else return
+      } else if (preview) {
+        if (isEvent) {
+          const start = fromInputs(toDateInput(preview.start), startTime)
+          const end = new Date(start.getTime() + minutes * 60000)
+          await onCreateEvent({ ...preview, start, end, calendarId })
+        } else {
+          await onCreateTask({ ...preview, priority, tasklistId })
+        }
       } else {
-        await onCreateTask({ ...preview, priority, tasklistId })
+        return
       }
       resetDefaults()
       onDone && onDone()
@@ -166,6 +317,12 @@ export default function QuickAdd({ calendars = [], taskLists = [], onCreateEvent
     } finally {
       setSaving(false)
     }
+  }
+
+  const commandActionable = command && command.action !== 'desconhecido'
+  const eventLabel = (event) => {
+    const start = eventStart(event)
+    return `${event.summary || '(sem título)'} — ${start.toLocaleDateString('pt-BR')} ${isAllDay(event) ? '' : toTimeInput(start)}`.trim()
   }
 
   return (
@@ -177,17 +334,58 @@ export default function QuickAdd({ calendars = [], taskLists = [], onCreateEvent
     >
       {/* O painel só abre no clique, então o campo já chega com o cursor
           dentro: abrir e ter que clicar de novo era um toque a mais em toda
-          tarefa criada. */}
+          tarefa criada. Além de criar, dá para pedir para mudar, excluir ou
+          confirmar presença num compromisso ou tarefa que já existe. */}
       <input
         type="text"
         autoFocus
-        placeholder="Ex: Reunião de equipe terça 13h15 por 50min"
+        placeholder="Ex: desmarcar a reunião de terça, ou reunião de equipe terça 13h15"
         value={text}
         onChange={(e) => handleChange(e.target.value)}
         style={{ width: '100%' }}
       />
 
-      {preview && (
+      {/* Comando de editar/excluir/confirmar presença: aparece assim que a IA
+          responde, no lugar da prévia de criação. */}
+      {command && (
+        <div style={{ marginTop: 10, fontSize: 'var(--body-sm)' }}>
+          {!commandActionable ? (
+            <div className="muted">
+              {command.summary || 'Não entendi esse comando — tenta descrever de outro jeito?'}
+            </div>
+          ) : resolving ? (
+            <div className="muted">Procurando...</div>
+          ) : resolveError ? (
+            <div className="form-error">{resolveError}</div>
+          ) : resolved ? (
+            <>
+              <div className="muted" style={{ marginBottom: 6 }}>{ACTION_LABEL[command.action]}</div>
+              <div style={{ marginBottom: 6 }}>
+                <strong>{resolved.kind === 'event' ? eventLabel(resolved.item) : resolved.item.title}</strong>
+              </div>
+              {command.action === 'confirmar_presenca' && (
+                <div className="muted" style={{ marginBottom: 6 }}>
+                  Marcar presença como: <strong>{PRESENCE_LABEL[command.presence] || command.presence}</strong>
+                </div>
+              )}
+              {command.action === 'editar_evento' || command.action === 'editar_tarefa' ? (
+                <div className="muted" style={{ marginBottom: 6 }}>{command.summary}</div>
+              ) : null}
+              {error && <div className="form-error" style={{ marginTop: 8 }}>{error}</div>}
+              <button
+                type="submit"
+                className={command.action.startsWith('excluir_') ? 'danger' : 'primary'}
+                style={{ marginTop: 4 }}
+                disabled={saving}
+              >
+                {saving ? 'Executando...' : 'Confirmar'}
+              </button>
+            </>
+          ) : null}
+        </div>
+      )}
+
+      {showCreatePreview && (
         <div style={{ marginTop: 10, fontSize: 'var(--body-sm)' }}>
           <div className="muted" style={{ marginBottom: 6 }}>
             {asking
