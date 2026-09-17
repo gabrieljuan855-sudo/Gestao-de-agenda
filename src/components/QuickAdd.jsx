@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { parseQuickAdd } from '../lib/nlp.js'
 import { parseWithAI } from '../lib/aiParse.js'
 import { formatDuration, toTimeInput, fromInputs, toDateInput } from '../lib/dates.js'
-import { PRIORITIES, DEFAULT_PRIORITY, priorityFromListTitle } from '../lib/priority.js'
+import { PRIORITIES, DEFAULT_PRIORITY } from '../lib/priority.js'
+import { findDefaultCalendar, findListForPriority } from '../lib/defaults.js'
 
 const DURATION_OPTIONS = [20, 30, 45, 50, 60, 90, 120]
 
@@ -11,20 +12,6 @@ const DURATION_OPTIONS = [20, 30, 45, 50, 60, 90, 120]
 // chamada por letra digitada.
 const AI_DEBOUNCE_MS = 900
 const AI_MIN_LENGTH = 4
-
-// A agenda de trabalho é onde quase tudo cai. Deixar "Escolha a agenda..." em
-// branco obrigava um clique a mais em todo compromisso, e bloqueava o botão de
-// salvar até que ele fosse dado.
-const DEFAULT_CALENDAR = 'creas'
-
-function findDefaultCalendar(calendars) {
-  const named = (cal) => (cal.summaryOverride || cal.summary || '').toLowerCase()
-  return calendars.find((cal) => named(cal).includes(DEFAULT_CALENDAR)) || null
-}
-
-function findListForPriority(taskLists, priority) {
-  return taskLists.find((list) => priorityFromListTitle(list.title) === priority) || null
-}
 
 export default function QuickAdd({ calendars = [], taskLists = [], onCreateEvent, onCreateTask, onDone }) {
   const [text, setText] = useState('')

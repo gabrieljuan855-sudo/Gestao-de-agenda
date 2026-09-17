@@ -421,7 +421,15 @@ export default function App() {
       id: 'notes',
       label: 'Anotações',
       icon: '≡',
-      render: () => <Notes notesState={notesState} />,
+      render: () => (
+        <Notes
+          notesState={notesState}
+          calendars={calendars}
+          taskLists={taskLists}
+          onCreateEvent={handleCreateEvent}
+          onCreateTask={handleCreateTask}
+        />
+      ),
     },
   ]
 
