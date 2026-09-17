@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ultimoHorarioDaVarredura } from './useNotes.js'
+import { ultimoHorarioDaVarredura, descreverSincronizacao } from './useNotes.js'
 
 function em(dataHora) {
   return new Date(`2026-09-17T${dataHora}`)
@@ -20,5 +20,20 @@ describe('ultimoHorarioDaVarredura', () => {
     const resultado = ultimoHorarioDaVarredura(em('05:00:00'))
     expect(resultado.getDate()).toBe(16)
     expect(resultado.getHours()).toBe(15)
+  })
+})
+
+describe('descreverSincronizacao', () => {
+  it('diz o que está acontecendo em cada estado', () => {
+    expect(descreverSincronizacao('salvando')).toBe('Salvando...')
+    expect(descreverSincronizacao('salvo')).toBe('Salvo no Drive')
+    expect(descreverSincronizacao('erro')).toBe('Salvo só neste aparelho')
+  })
+
+  it('cala a boca antes do primeiro contato com o Drive', () => {
+    // O texto fixo "Sincronizado com o Drive" afirmava sucesso mesmo sem nada
+    // ter subido. Vazio aqui é a correção: sem informação, não se inventa.
+    expect(descreverSincronizacao('ocioso')).toBe('')
+    expect(descreverSincronizacao(undefined)).toBe('')
   })
 })
