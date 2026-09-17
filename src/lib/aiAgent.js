@@ -28,7 +28,14 @@ export async function askAgent({ text, history = [], context = {} }, { signal } 
   })
 
   const data = await res.json().catch(() => ({}))
-  if (!res.ok) throw new Error(data.error || `Falha ao falar com o agente (${res.status}).`)
+  if (!res.ok) {
+    const err = new Error(data.error || `Falha ao falar com o agente (${res.status}).`)
+    // Aqui a pessoa está esperando uma resposta na tela, então o erro aparece
+    // de qualquer jeito — mas saber que é passageiro muda o texto, de "deu
+    // errado" para "tenta de novo daqui a pouco".
+    err.transiente = data.transiente === true
+    throw err
+  }
 
   return {
     reply: data.reply || '',

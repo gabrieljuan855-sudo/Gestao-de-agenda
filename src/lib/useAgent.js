@@ -140,7 +140,11 @@ export default function useAgent({ calendars = [], taskLists = [], tasks = [], n
       }
     } catch (err) {
       if (err.name === 'AbortError') return
-      setError(`Não deu para falar com o agente: ${err.message}`)
+      setError(
+        err.transiente
+          ? `${err.message} Tenta de novo daqui a pouco — costuma passar rápido.`
+          : `Não deu para falar com o agente: ${err.message}`
+      )
     } finally {
       if (!controller.signal.aborted) setThinking(false)
     }

@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { kindForSlot } from './useBriefing.js'
+import { kindForSlot, deveAvisarDaFalha } from './useBriefing.js'
+
+const MINUTO = 60 * 1000
 
 // Segunda (21) a domingo (27) de setembro de 2026.
 const segunda = new Date(2026, 8, 21)
@@ -35,5 +37,29 @@ describe('kindForSlot', () => {
     expect(kindForSlot('manha', sabado)).toBeNull()
     expect(kindForSlot('tarde', sabado)).toBeNull()
     expect(kindForSlot('recap', sabado)).toBeNull()
+  })
+})
+
+describe('deveAvisarDaFalha', () => {
+  it('cala a boca sobre sobrecarga passageira enquanto ainda dá tempo de tentar de novo', () => {
+    // O caso real: 503 do Gemini logo depois das 8h. A varredura tenta de novo
+    // em 5 minutos e quase sempre passa — alarmar aqui é assustar a pessoa com
+    // algo que já está sendo tratado e sobre o qual ela não pode fazer nada.
+    expect(deveAvisarDaFalha({ transiente: true, msDesdeOAlvo: 0 })).toBe(false)
+    expect(deveAvisarDaFalha({ transiente: true, msDesdeOAlvo: 30 * MINUTO })).toBe(false)
+  })
+
+  it('avisa sobre sobrecarga quando já não sobra tempo para outra tentativa', () => {
+    // Perto do fim da janela de 90min não vem outra checagem dentro do prazo:
+    // aí o briefing realmente não vai sair, e vale dizer.
+    expect(deveAvisarDaFalha({ transiente: true, msDesdeOAlvo: 86 * MINUTO })).toBe(true)
+    expect(deveAvisarDaFalha({ transiente: true, msDesdeOAlvo: 90 * MINUTO })).toBe(true)
+  })
+
+  it('avisa na hora sobre erro que não se resolve sozinho', () => {
+    // Chave do Gemini faltando, login vencido: tentar de novo não muda nada,
+    // e a pessoa precisa saber para poder agir.
+    expect(deveAvisarDaFalha({ transiente: false, msDesdeOAlvo: 0 })).toBe(true)
+    expect(deveAvisarDaFalha({ transiente: undefined, msDesdeOAlvo: 0 })).toBe(true)
   })
 })
