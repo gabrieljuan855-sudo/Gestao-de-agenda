@@ -1,10 +1,16 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { parseQuickAdd } from '../lib/nlp.js'
 import { parseWithAI } from '../lib/aiParse.js'
 import { formatDuration, toTimeInput, fromInputs, toDateInput } from '../lib/dates.js'
 import { PRIORITIES, DEFAULT_PRIORITY, priorityFromListTitle } from '../lib/priority.js'
 
 const DURATION_OPTIONS = [20, 30, 45, 50, 60, 90, 120]
+
+// Tempo de pausa na digitação antes de acionar a IA sozinha. Curto o
+// suficiente para não parecer lento, longo o suficiente para não gastar uma
+// chamada por letra digitada.
+const AI_DEBOUNCE_MS = 900
+const AI_MIN_LENGTH = 4
 
 // A agenda de trabalho é onde quase tudo cai. Deixar "Escolha a agenda..." em
 // branco obrigava um clique a mais em todo compromisso, e bloqueava o botão de
@@ -32,6 +38,9 @@ export default function QuickAdd({ calendars = [], taskLists = [], onCreateEvent
   const [error, setError] = useState(null)
   const [asking, setAsking] = useState(false)
   const [usedAI, setUsedAI] = useState(false)
+  const [aiFailed, setAiFailed] = useState(false)
+  const debounceRef = useRef(null)
+  const abortRef = useRef(null)
 
   // As agendas chegam depois do primeiro render (vêm da API), por isso o padrão
   // é aplicado aqui e não no useState.
@@ -74,16 +83,28 @@ export default function QuickAdd({ calendars = [], taskLists = [], onCreateEvent
     if (parsed?.priority) setPriority(parsed.priority)
   }
 
-  async function handleAskAI() {
+  // A IA roda sozinha depois de uma pausa na digitação, sem exigir clique: o
+  // parser local já preenche a prévia na hora, e a IA a substitui assim que
+  // fica pronta, sem travar a tela nem gastar uma chamada por letra.
+  async function askAI(value) {
+    abortRef.current?.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
+
     setAsking(true)
-    setError(null)
+    setAiFailed(false)
     try {
-      applyPreview(await parseWithAI(text, calendars))
+      const parsed = await parseWithAI(value, calendars, { signal: controller.signal })
+      if (controller.signal.aborted) return
+      applyPreview(parsed)
       setUsedAI(true)
     } catch (err) {
-      setError(`A IA não conseguiu: ${err.message}`)
+      if (err.name === 'AbortError') return
+      // A prévia local já está na tela — a IA é um reforço, não o único
+      // caminho. Sem isso, um Worker fora do ar travaria a digitação toda.
+      setAiFailed(true)
     } finally {
-      setAsking(false)
+      if (!controller.signal.aborted) setAsking(false)
     }
   }
 
@@ -91,8 +112,24 @@ export default function QuickAdd({ calendars = [], taskLists = [], onCreateEvent
     setText(value)
     setError(null)
     setUsedAI(false)
+    setAiFailed(false)
     applyPreview(value.trim() ? parseQuickAdd(value) : null)
+
+    clearTimeout(debounceRef.current)
+    abortRef.current?.abort()
+    setAsking(false)
+
+    if (value.trim().length >= AI_MIN_LENGTH) {
+      debounceRef.current = setTimeout(() => askAI(value), AI_DEBOUNCE_MS)
+    }
   }
+
+  useEffect(() => {
+    return () => {
+      clearTimeout(debounceRef.current)
+      abortRef.current?.abort()
+    }
+  }, [])
 
   function handleListChange(id) {
     setTasklistId(id)
@@ -105,10 +142,20 @@ export default function QuickAdd({ calendars = [], taskLists = [], onCreateEvent
   const needsCalendar = isEvent && calendars.length > 0 && !calendarId
   const needsList = !isEvent && taskLists.length > 0 && !tasklistId
 
+  // Quando toda lista do usuário já é "Prioridade Alta/Média/Baixa", o
+  // seletor de lista só repetiria os botões de prioridade logo acima. Só faz
+  // sentido mostrá-lo separado quando existe alguma lista de nome próprio.
+  const temListaFora = taskLists.some((list) => !priorityFromListTitle(list.title))
+
   function resetDefaults() {
     setText('')
     setPreview(null)
     setPriority(DEFAULT_PRIORITY)
+    setUsedAI(false)
+    setAiFailed(false)
+    setAsking(false)
+    clearTimeout(debounceRef.current)
+    abortRef.current?.abort()
     const preferred = findDefaultCalendar(calendars)
     setCalendarId(preferred ? preferred.id : '')
   }
@@ -150,11 +197,14 @@ export default function QuickAdd({ calendars = [], taskLists = [], onCreateEvent
 
       {preview && (
         <div style={{ marginTop: 10, fontSize: 'var(--body-sm)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-            <span className="muted">{usedAI ? 'A IA entendeu assim:' : 'Entendi assim:'}</span>
-            <button onClick={handleAskAI} disabled={asking || !text.trim()}>
-              {asking ? 'Interpretando...' : 'Interpretar com IA'}
-            </button>
+          <div className="muted" style={{ marginBottom: 6 }}>
+            {asking
+              ? 'Revisando com a IA...'
+              : usedAI
+                ? 'A IA entendeu assim:'
+                : aiFailed
+                  ? 'IA indisponível agora — ficou na leitura simples:'
+                  : 'Entendi assim:'}
           </div>
 
           <div style={{ marginBottom: 10 }}>
@@ -228,15 +278,17 @@ export default function QuickAdd({ calendars = [], taskLists = [], onCreateEvent
                     ))}
                   </div>
                 </div>
-                <label className="field">
-                  <span>Lista</span>
-                  <select value={tasklistId} onChange={(e) => handleListChange(e.target.value)}>
-                    <option value="">Escolha a lista...</option>
-                    {taskLists.map((list) => (
-                      <option key={list.id} value={list.id}>{list.title}</option>
-                    ))}
-                  </select>
-                </label>
+                {temListaFora && (
+                  <label className="field">
+                    <span>Lista</span>
+                    <select value={tasklistId} onChange={(e) => handleListChange(e.target.value)}>
+                      <option value="">Escolha a lista...</option>
+                      {taskLists.map((list) => (
+                        <option key={list.id} value={list.id}>{list.title}</option>
+                      ))}
+                    </select>
+                  </label>
+                )}
               </>
             )}
           </div>
