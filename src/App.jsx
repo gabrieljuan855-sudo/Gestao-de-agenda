@@ -26,6 +26,9 @@ import useFocusTimer from './lib/useFocusTimer.js'
 import Backlog from './components/Backlog.jsx'
 import Notes from './components/Notes.jsx'
 import useNotes from './lib/useNotes.js'
+import useBriefing from './lib/useBriefing.js'
+import BriefingCard from './components/BriefingCard.jsx'
+import BriefingOverlay from './components/BriefingOverlay.jsx'
 import SearchPanel from './components/SearchPanel.jsx'
 import PeriodBar from './components/PeriodBar.jsx'
 import DayView from './components/DayView.jsx'
@@ -232,6 +235,7 @@ export default function App() {
     },
   })
   const notesState = useNotes({ signedIn })
+  const briefingState = useBriefing({ signedIn, calendarPrefs, presence })
 
   const occupies = (event) => occupiesTime(event, calendarPrefs, presence)
   const declined = (event) => isDeclined(event, presence)
@@ -496,6 +500,9 @@ export default function App() {
             <h2>{greeting()}</h2>
             <div className="muted app-head-sub">Gestão de agenda</div>
           </div>
+          {briefingState.showCard && briefingState.briefing && (
+            <BriefingCard onOpen={briefingState.openOverlay} onDismiss={briefingState.dismissCard} />
+          )}
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button onClick={() => setShowCalendarSettings(true)}>Agendas</button>
@@ -630,6 +637,10 @@ export default function App() {
           }}
           onCancel={() => setPendingSwitch(null)}
         />
+      )}
+
+      {briefingState.overlayOpen && (
+        <BriefingOverlay briefing={briefingState.briefing} onClose={briefingState.closeOverlay} />
       )}
     </div>
   )

@@ -572,6 +572,7 @@ button.danger:hover { background: var(--urgent-bg); }
 
 .app-head {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
   gap: 12px;
@@ -581,6 +582,45 @@ button.danger:hover { background: var(--urgent-bg); }
 .app-head-title { display: flex; align-items: center; gap: 10px; }
 .app-head-title h2 { margin: 0; font-size: var(--headline-sm); line-height: 1.1; }
 .app-head-sub { font-size: var(--label-md); }
+
+/* Cartão "veja o briefing aqui", ao lado do cumprimento — some sozinho depois
+   de 30 minutos (ver useBriefing.js), ou ao tocar no ✕. */
+.briefing-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 8px;
+  padding: 6px 10px;
+  border-radius: var(--shape-full);
+  background: var(--accent-bg);
+  color: var(--accent);
+  font-size: var(--label-md);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.briefing-card-close {
+  display: inline-flex;
+  opacity: 0.7;
+}
+.briefing-card-close:hover { opacity: 1; }
+
+/* Painel de números do briefing de fim de semana — o "formato de dashboard"
+   pedido, sem precisar de biblioteca de gráfico para 4 números. */
+.briefing-stats {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin-top: 14px;
+}
+.briefing-stat {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--shape-sm);
+  padding: 10px 12px;
+  text-align: center;
+}
+.briefing-stat-value { font-size: var(--headline-sm); font-weight: 600; }
+.briefing-stat-label { font-size: var(--label-sm); color: var(--text-secondary); margin-top: 2px; }
 
 /* ---------- barra de período ---------- */
 

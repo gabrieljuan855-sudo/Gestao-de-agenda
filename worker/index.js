@@ -3,10 +3,10 @@
 // Ele continua servindo o site estático como antes; as rotas próprias usam
 // o Gemini para interpretar texto em português: POST /api/parse (compromisso
 // rápido, só criação), POST /api/command (comandos mais amplos — editar,
-// excluir, confirmar presença) e POST /api/analyze-note (sugestões a partir
-// de uma anotação). A chave do Gemini fica como segredo do Cloudflare e
-// nunca chega ao navegador — é justamente por isso que essa parte roda no
-// servidor.
+// excluir, confirmar presença), POST /api/briefing (resumo automático do
+// dia/semana) e POST /api/analyze-note (sugestões a partir de uma anotação).
+// A chave do Gemini fica como segredo do Cloudflare e nunca chega ao
+// navegador — é justamente por isso que essa parte roda no servidor.
 
 import { handleAuth } from './auth.js'
 
@@ -259,6 +259,71 @@ async function handleCommand(request, env) {
   }
 }
 
+const BRIEFING_KINDS = new Set(['dia_manha', 'dia_tarde', 'dia_recap', 'semana_inicio', 'semana_fim'])
+
+const BRIEFING_INTRO = {
+  dia_manha: 'Escreva um briefing curto para o início do dia de alguém que trabalha com atendimento social/administrativo, olhando para os compromissos e tarefas de hoje.',
+  dia_tarde: 'Escreva um briefing curto para o início da tarde, olhando para o que ainda falta hoje (o que já passou da manhã não precisa ser repetido).',
+  dia_recap: 'Escreva um resumo curto do que essa pessoa fez ao longo do dia (tarefas concluídas, blocos de foco, compromissos).',
+  semana_inicio: 'Escreva um briefing curto do que está previsto para a semana inteira que está começando.',
+  semana_fim: 'Escreva um resumo curto (vai acompanhar um painel com números) do que aconteceu ao longo da semana que está terminando.',
+}
+
+function buildBriefingPrompt({ kind, today, weekday, context }) {
+  const intro = BRIEFING_INTRO[kind] || BRIEFING_INTRO.dia_manha
+  return `${intro}
+
+Hoje é ${weekday}, ${today}. Fuso: America/Sao_Paulo. Em português do Brasil.
+
+Dados (JSON, já resumidos):
+${JSON.stringify(context ?? {})}
+
+Responda SOMENTE com JSON, sem comentários, neste formato:
+{ "text": "o briefing, em até 60 palavras" }
+
+Regras:
+- Tom direto e acolhedor, não robótico.
+- Sem saudação ("bom dia", "boa tarde" etc.) — isso já aparece em outro lugar da tela.
+- Resuma, não liste item a item como uma agenda — quem quiser o detalhe abre a tela normal.
+- Se os dados vierem vazios ou sem nada relevante, diga isso em uma frase curta, sem inventar compromisso ou tarefa nenhuma.`
+}
+
+// Nada aqui é confiável por vir de um modelo — o texto é validado e cortado
+// antes de aparecer na tela.
+export function normalizeBriefing(parsed) {
+  const text = typeof parsed?.text === 'string' ? parsed.text.trim().slice(0, 600) : ''
+  return { text }
+}
+
+async function handleBriefing(request, env) {
+  const caller = await verifyCaller(request, env)
+  if (!caller) return json({ error: 'Não autorizado.' }, 401)
+
+  if (!env.GEMINI_API_KEY) {
+    return json({ error: 'GEMINI_API_KEY não está configurada neste Worker.' }, 503)
+  }
+
+  let body
+  try {
+    body = await request.json()
+  } catch {
+    return json({ error: 'Corpo inválido.' }, 400)
+  }
+
+  const kind = BRIEFING_KINDS.has(body?.kind) ? body.kind : null
+  if (!kind) return json({ error: 'Tipo de briefing inválido.' }, 400)
+
+  try {
+    const parsed = await callGemini(
+      env,
+      buildBriefingPrompt({ kind, today: body.today, weekday: body.weekday, context: body.context })
+    )
+    return json(normalizeBriefing(parsed))
+  } catch (err) {
+    return json({ error: err.message }, 502)
+  }
+}
+
 const SUGGESTION_TYPES = new Set(['evento', 'tarefa', 'documento', 'contato', 'caso'])
 
 function buildAnalyzePrompt({ text, today, weekday }) {
@@ -408,6 +473,11 @@ export default {
     if (url.pathname === '/api/command') {
       if (request.method !== 'POST') return json({ error: 'Use POST.' }, 405)
       return handleCommand(request, env)
+    }
+
+    if (url.pathname === '/api/briefing') {
+      if (request.method !== 'POST') return json({ error: 'Use POST.' }, 405)
+      return handleBriefing(request, env)
     }
 
     if (url.pathname === '/api/analyze-note') {
