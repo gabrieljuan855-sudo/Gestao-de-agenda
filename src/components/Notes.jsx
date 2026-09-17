@@ -1,9 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import ConfirmDialog from './ConfirmDialog.jsx'
 import Banner from './Banner.jsx'
-import { fromInputs } from '../lib/dates.js'
-import { DEFAULT_PRIORITY } from '../lib/priority.js'
-import { findDefaultCalendar, findListForPriority } from '../lib/defaults.js'
+import SuggestionCard from './SuggestionCard.jsx'
 import { AI_MIN_LENGTH } from '../lib/useNotes.js'
 
 // Tempo parado depois da última tecla para considerar que a anotação foi
@@ -25,66 +23,6 @@ function relativeUpdated(iso) {
   const diffH = Math.round(diffMin / 60)
   if (diffH < 24) return `há ${diffH}h`
   return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })
-}
-
-const TYPE_LABEL = {
-  evento: 'Agendar',
-  tarefa: 'Tarefa',
-  documento: 'Documento',
-  contato: 'Falar com alguém',
-  caso: 'Evoluir caso',
-}
-
-function SuggestionCard({ suggestion, calendars, taskLists, onCreateEvent, onCreateTask }) {
-  const [state, setState] = useState('idle') // idle | saving | done | error
-  // "documento" nunca cria nada — é só o aviso de que aquilo merece virar um
-  // documento de verdade, escrito por fora do app.
-  const podeAgir = suggestion.type !== 'documento'
-  const viraEvento = suggestion.type === 'evento' && suggestion.date && suggestion.time
-
-  async function criar() {
-    setState('saving')
-    try {
-      if (viraEvento) {
-        const start = fromInputs(suggestion.date, suggestion.time)
-        const calendario = findDefaultCalendar(calendars) || calendars[0]
-        await onCreateEvent({
-          title: suggestion.title,
-          start,
-          end: new Date(start.getTime() + 60 * 60000),
-          calendarId: calendario?.id,
-        })
-      } else {
-        const lista = findListForPriority(taskLists, DEFAULT_PRIORITY)
-        await onCreateTask({
-          title: suggestion.title,
-          priority: DEFAULT_PRIORITY,
-          due: suggestion.date ? fromInputs(suggestion.date) : null,
-          tasklistId: lista?.id,
-        })
-      }
-      setState('done')
-    } catch (err) {
-      console.error('Não foi possível criar a partir da sugestão:', err)
-      setState('error')
-    }
-  }
-
-  return (
-    <div className="suggestion">
-      <div className="suggestion-type">{TYPE_LABEL[suggestion.type] || suggestion.type}</div>
-      <div style={{ fontSize: 'var(--body-sm)', marginTop: 2 }}>{suggestion.text}</div>
-      {podeAgir && state !== 'done' && (
-        <button onClick={criar} disabled={state === 'saving'} style={{ marginTop: 6 }}>
-          {state === 'saving' ? 'Criando...' : viraEvento ? 'Agendar' : 'Criar tarefa'}
-        </button>
-      )}
-      {state === 'done' && <div className="muted" style={{ fontSize: 'var(--label-sm)', marginTop: 6 }}>✓ criado</div>}
-      {state === 'error' && (
-        <div className="muted" style={{ fontSize: 'var(--label-sm)', marginTop: 6 }}>Não deu certo — tente de novo.</div>
-      )}
-    </div>
-  )
 }
 
 // Título e corpo ficam com estado próprio aqui dentro, sincronizado com a

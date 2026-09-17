@@ -1,11 +1,27 @@
 import { useState } from 'react'
 import Modal from './Modal.jsx'
 import ConfirmDialog from './ConfirmDialog.jsx'
+import SuggestionCard from './SuggestionCard.jsx'
 import { toDateInput, fromInputs, dateOnlyFromISO } from '../lib/dates.js'
 import { PRIORITIES, DEFAULT_PRIORITY } from '../lib/priority.js'
+import { analyzeNoteWithAI } from '../lib/aiAnalyzeNote.js'
 
+// Uma tarefa é curta demais para valer a pena mandar para a IA (ex: só
+// "Ligar" sem mais nada) — mesmo piso usado nas anotações.
+const AI_MIN_LENGTH = 10
 
-export default function TaskEditor({ task, onSave, onDelete, onReopen, onComplete, onClose }) {
+export default function TaskEditor({
+  task,
+  onSave,
+  onDelete,
+  onReopen,
+  onComplete,
+  onClose,
+  calendars = [],
+  taskLists = [],
+  onCreateEvent,
+  onCreateTask,
+}) {
   const [title, setTitle] = useState(task.title || '')
   // dateOnlyFromISO, não `new Date(task.due)`: o prazo vem do Google como
   // meia-noite UTC, e o fuso do Brasil mostrava sempre um dia antes do real.
@@ -15,6 +31,13 @@ export default function TaskEditor({ task, onSave, onDelete, onReopen, onComplet
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
+  // Sugestões da IA para esta tarefa: vivem só nesta sessão de edição — o
+  // Google Tasks não tem um campo próprio para guardar isso junto da tarefa
+  // (diferente das anotações, que têm o arquivo JSON no Drive só delas), e
+  // pedir de novo é barato o bastante para não precisar persistir.
+  const [analyzing, setAnalyzing] = useState(false)
+  const [suggestions, setSuggestions] = useState(null)
+  const [analyzeError, setAnalyzeError] = useState(null)
 
   const done = task.status === 'completed'
 
@@ -45,6 +68,23 @@ export default function TaskEditor({ task, onSave, onDelete, onReopen, onComplet
   function handleDelete() {
     run(onDelete)
   }
+
+  async function handleAnalyze() {
+    setAnalyzing(true)
+    setAnalyzeError(null)
+    try {
+      const texto = `${title}\n${notes}`.trim()
+      const { suggestions: novas } = await analyzeNoteWithAI(texto)
+      setSuggestions(novas)
+    } catch (err) {
+      console.error('Não foi possível analisar a tarefa:', err)
+      setAnalyzeError('Não deu para analisar agora — tente de novo em instantes.')
+    } finally {
+      setAnalyzing(false)
+    }
+  }
+
+  const podeAnalisar = `${title}${notes}`.trim().length >= AI_MIN_LENGTH
 
   return (
     <>
@@ -89,6 +129,33 @@ export default function TaskEditor({ task, onSave, onDelete, onReopen, onComplet
           <span>Anotações</span>
           <textarea rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} />
         </label>
+
+        <div style={{ marginBottom: 10 }}>
+          <button type="button" onClick={handleAnalyze} disabled={analyzing || !podeAnalisar}>
+            {analyzing ? 'Analisando...' : '✨ Analisar com IA'}
+          </button>
+          {analyzeError && <div className="form-error" style={{ marginTop: 6 }}>{analyzeError}</div>}
+          {suggestions && (
+            suggestions.length === 0 ? (
+              <div className="muted" style={{ fontSize: 'var(--label-sm)', marginTop: 6 }}>
+                Nada de especial notado nesta tarefa.
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
+                {suggestions.map((s, i) => (
+                  <SuggestionCard
+                    key={i}
+                    suggestion={s}
+                    calendars={calendars}
+                    taskLists={taskLists}
+                    onCreateEvent={onCreateEvent}
+                    onCreateTask={onCreateTask}
+                  />
+                ))}
+              </div>
+            )
+          )}
+        </div>
 
         {task.tasklistTitle && (
           <div className="muted" style={{ fontSize: 'var(--label-sm)' }}>Lista: {task.tasklistTitle}</div>

@@ -286,10 +286,6 @@ export default function App() {
     applySwitch(task, thenStart)
   }
 
-  function handleSelectTask(task) {
-    switchActiveTask(task)
-  }
-
   // Botão "Focar" do card da tarefa: seleciona e já inicia o bloco de 25min
   // num só clique. Clicar nele na própria tarefa que já está em foco só volta
   // para a tela cheia, em vez de reiniciar o tempo já andado.
@@ -528,7 +524,6 @@ export default function App() {
           focusEvents={focusEvents}
           activeTaskId={activeTask?.id}
           focusingTaskId={focoEmAndamento() ? activeTask?.id : null}
-          onSelect={handleSelectTask}
           onFocus={handleFocusTask}
           onComplete={handleCompleteTask}
           onEdit={setEditingTask}
@@ -581,6 +576,10 @@ export default function App() {
           onReopen={handleReopenTask}
           onComplete={() => handleCompleteTask(editingTask)}
           onClose={() => setEditingTask(null)}
+          calendars={calendars}
+          taskLists={taskLists}
+          onCreateEvent={handleCreateEvent}
+          onCreateTask={handleCreateTask}
         />
       )}
 

@@ -3,10 +3,8 @@ import { combinedFocusStats } from '../lib/focusStats.js'
 import { formatDuration } from '../lib/dates.js'
 import { daysSince } from '../lib/tasks.js'
 
-// Botão de ação da linha, só ícone: três botões de texto (Editar/Focar/
-// Concluir) lado a lado empurravam o título da tarefa para várias linhas,
-// justamente o que sobrava menos espaço no celular. O rótulo continua
-// existindo para leitor de tela e para quem passa o mouse (title).
+// Botão de ação da linha, só ícone — o rótulo continua existindo para
+// leitor de tela e para quem passa o mouse (title).
 function IconButton({ label, onClick, className = '', children }) {
   return (
     <button
@@ -18,15 +16,6 @@ function IconButton({ label, onClick, className = '', children }) {
     >
       {children}
     </button>
-  )
-}
-
-function EditIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 20h9" />
-      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" />
-    </svg>
   )
 }
 
@@ -52,7 +41,6 @@ export default function Backlog({
   focusEvents = [],
   activeTaskId,
   focusingTaskId,
-  onSelect,
   onFocus,
   onComplete,
   onEdit,
@@ -73,7 +61,7 @@ export default function Backlog({
     return (
       <div
         key={task.id}
-        onClick={() => !done && onSelect(task)}
+        onClick={() => !done && onEdit(task)}
         style={{
           border: isActive ? '2px solid #1f1e1c' : '1px solid var(--border)',
           borderRadius: 10,
@@ -109,9 +97,6 @@ export default function Backlog({
           )}
         </div>
         <div style={{ display: 'flex', gap: 4, flexShrink: 0, marginLeft: 8 }}>
-          <IconButton label="Editar" onClick={(e) => { e.stopPropagation(); onEdit(task) }}>
-            <EditIcon />
-          </IconButton>
           {!done && onFocus && (
             <IconButton
               label={emFoco ? 'Ver foco' : 'Focar'}
