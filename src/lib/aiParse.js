@@ -5,7 +5,7 @@ import { normalizePriority } from './priority.js'
 // Manda o texto para o Worker interpretar com o Gemini. O token do Google vai
 // junto porque a rota exige dono autenticado: sem isso ela seria cota grátis
 // para qualquer um que descobrisse a URL.
-export async function parseWithAI(text, calendars = []) {
+export async function parseWithAI(text, calendars = [], { signal } = {}) {
   const token = await ensureToken()
   if (!token) throw new Error('Faça login primeiro.')
 
@@ -22,6 +22,7 @@ export async function parseWithAI(text, calendars = []) {
       weekday: now.toLocaleDateString('pt-BR', { weekday: 'long' }),
       calendars: calendars.map((c) => ({ id: c.id, name: c.summaryOverride || c.summary })),
     }),
+    signal,
   })
 
   const data = await res.json().catch(() => ({}))
