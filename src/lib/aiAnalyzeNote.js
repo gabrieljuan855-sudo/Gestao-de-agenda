@@ -33,8 +33,8 @@ export async function analyzeNoteWithAI(text, { notas = [] } = {}) {
 
   const data = await res.json().catch(() => ({}))
   if (!res.ok) {
-    // A varredura das anotações analisa uma nota por chamada: sem este freio,
-    // uma cota estourada vira uma rajada de N falhas seguidas, 4x por dia.
+    // Mesmo freio do briefing (aiCooldown.js): uma cota estourada aqui pausa
+    // também o que roda sozinho em segundo plano, para não insistir à toa.
     pausarIA(data.motivo)
     const err = new Error(data.error || `Falha ao analisar (${res.status}).`)
     // Para quem chama (useNotes.js) escolher a mensagem certa: sobrecarga ou
