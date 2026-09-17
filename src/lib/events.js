@@ -65,6 +65,25 @@ export function currentEvent(events, now = new Date()) {
   return events.find((e) => !isAllDay(e) && eventStart(e) <= now && eventEnd(e) > now) || null
 }
 
+// Pares de compromissos de agendas diferentes que se cruzam no tempo — o
+// tipo de erro que passa batido quando as agendas vêm de lugares diferentes
+// (a sua e a da gestão, por exemplo) e ninguém está olhando as duas juntas
+// na hora de marcar. Só compara o que de fato ocupa o seu tempo: um
+// informativo ou uma presença ainda não confirmada não é conflito de verdade.
+export function findConflicts(events, occupies = () => true) {
+  const timed = events.filter((e) => !isAllDay(e) && occupies(e))
+  const pairs = []
+  for (let i = 0; i < timed.length; i += 1) {
+    for (let j = i + 1; j < timed.length; j += 1) {
+      const a = timed[i]
+      const b = timed[j]
+      if ((a.calendarId || 'primary') === (b.calendarId || 'primary')) continue
+      if (eventStart(a) < eventEnd(b) && eventStart(b) < eventEnd(a)) pairs.push([a, b])
+    }
+  }
+  return pairs
+}
+
 // `occupies` permite excluir do cálculo os eventos que não consomem o seu
 // tempo: agenda informativa, ou compromisso de presença não confirmada.
 export function busyMinutesOn(events, day, occupies = () => true) {

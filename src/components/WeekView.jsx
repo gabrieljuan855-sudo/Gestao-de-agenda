@@ -1,5 +1,5 @@
 import { startOfWeek, addDays, isToday, formatTime, formatDuration } from '../lib/dates.js'
-import { eventsOfDay, isAllDay, eventStart, eventEnd, busyMinutesOn, tasksDueOn } from '../lib/events.js'
+import { eventsOfDay, isAllDay, eventStart, eventEnd, busyMinutesOn, tasksDueOn, findConflicts } from '../lib/events.js'
 import { isWorkday, workloadRatio, workMinutes } from '../lib/schedule.js'
 
 // Com sábado e domingo fora, sobra espaço pra mostrar mais coisa por dia sem
@@ -61,6 +61,7 @@ export default function WeekView({
           const level = loadLevel(busyMinutesOn(events, day, occupies), day)
           const dueToday = tasksDueOn(tasks, day)
           const shown = dayEvents.slice(0, MAX_EVENTS)
+          const hasConflict = findConflicts(dayEvents, occupies).length > 0
 
           return (
             <div
@@ -73,8 +74,17 @@ export default function WeekView({
                 <span style={{ fontSize: 'var(--label-md)', fontWeight: isToday(day) ? 600 : 500 }}>
                   {day.toLocaleDateString('pt-BR', { weekday: 'short' })} {day.getDate()}
                 </span>
-                <span className={`pill ${level.className}`} style={{ fontSize: 'var(--label-xs)', padding: '1px 6px' }}>
-                  {level.label}
+                <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                  {/* Só um sinal discreto aqui — o aviso de verdade, com os
+                      nomes dos compromissos, é o Banner do Dia. */}
+                  {hasConflict && (
+                    <span className="pill alta" style={{ fontSize: 'var(--label-xs)', padding: '1px 6px' }} title="Compromissos que se cruzam neste dia">
+                      conflito
+                    </span>
+                  )}
+                  <span className={`pill ${level.className}`} style={{ fontSize: 'var(--label-xs)', padding: '1px 6px' }}>
+                    {level.label}
+                  </span>
                 </span>
               </div>
 

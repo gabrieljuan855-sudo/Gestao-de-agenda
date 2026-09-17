@@ -34,6 +34,7 @@ import TaskEditor from './components/TaskEditor.jsx'
 import CalendarSettings from './components/CalendarSettings.jsx'
 import Banner from './components/Banner.jsx'
 import ConfirmDialog from './components/ConfirmDialog.jsx'
+import Briefing from './components/Briefing.jsx'
 import {
   loadCalendarPrefs,
   saveCalendarPrefs,
@@ -412,7 +413,7 @@ export default function App() {
       // destacado, porque há um ciclo esperando decisão.
       icon: focus.phase === 'idle' || focus.phase === 'done' ? '25m' : focus.clock,
       highlight: focus.phase !== 'idle',
-      render: () => <FocusPanel focus={focus} onCompleteTask={handleCompleteTask} />,
+      render: () => <FocusPanel focus={focus} onCompleteTask={handleCompleteTask} events={events} occupies={occupies} />,
     },
     {
       id: 'notes',
@@ -437,6 +438,8 @@ export default function App() {
           <button onClick={signOut}>Sair</button>
         </div>
       </div>
+
+      <Briefing events={events} tasks={tasks} occupies={occupies} />
 
       <PeriodBar
         view={view}

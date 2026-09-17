@@ -1,7 +1,17 @@
 import { useEffect, useState } from 'react'
 import { formatTime, formatDuration, isToday } from '../lib/dates.js'
-import { eventsOfDay, isAllDay, eventStart, eventEnd, findFreeGaps, nextEvent, currentEvent } from '../lib/events.js'
+import {
+  eventsOfDay,
+  isAllDay,
+  eventStart,
+  eventEnd,
+  findFreeGaps,
+  nextEvent,
+  currentEvent,
+  findConflicts,
+} from '../lib/events.js'
 import { workBlocksFor, isWorkday } from '../lib/schedule.js'
+import Banner from './Banner.jsx'
 
 // Sessões de foco seguidas da mesma tarefa (pomodoro com pausa no meio) viram
 // um cartão só, em vez de repetir o mesmo título várias vezes na lista.
@@ -100,6 +110,7 @@ export default function DayView({
   const timed = dayEvents.filter((e) => !isAllDay(e))
   const gaps = findFreeGaps(events, date, workBlocksFor(date), { occupies })
   const folga = !isWorkday(date)
+  const conflicts = findConflicts(dayEvents, occupies)
 
   const timeline = [
     ...groupFocusSessions(timed).map((item) => ({
@@ -136,6 +147,17 @@ export default function DayView({
         {date.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' })}
         {folga && ' · fora do expediente'}
       </div>
+
+      {conflicts.length > 0 && (
+        <Banner tone="warning">
+          {conflicts.length === 1 ? 'Dois compromissos se cruzam: ' : `${conflicts.length} pares de compromissos se cruzam: `}
+          {conflicts
+            .slice(0, 2)
+            .map(([a, b]) => `"${a.summary || '(sem título)'}" e "${b.summary || '(sem título)'}"`)
+            .join('; ')}
+          {conflicts.length > 2 && ` e mais ${conflicts.length - 2}`}
+        </Banner>
+      )}
 
       {/* O "Agora/Próximo" é sobre o que está acontecendo com você. O que é
           recusado ou meramente informativo continua listado abaixo, mas não é
