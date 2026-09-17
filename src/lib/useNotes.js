@@ -3,6 +3,7 @@ import { loadNotes, saveNotes, faltaPermissaoDoDrive, driveApiDesativada, motivo
 import { permissaoDoDriveConcedida } from './googleAuth.js'
 import { mesclarAnotacoes, mesclarApagadas, precisaSubir } from './notesMerge.js'
 import { analyzeNoteWithAI } from './aiAnalyzeNote.js'
+import { searchNotes } from './aiSearchNotes.js'
 import { iaEmPausa } from './aiCooldown.js'
 
 // Falta de permissão não é falha de rede: insistir não resolve, e dizer
@@ -113,6 +114,18 @@ function newNote() {
   return { id: makeId(), title: '', body: '', createdAt: now, updatedAt: now }
 }
 
+// Resolve a referência curta que o Worker devolveu ("n1", "n2"...) contra a
+// mesma lista de outras anotações que foi mandada no pedido de análise —
+// mesmo esquema de referência do agente (ver resolverRef em
+// agentActions.js). Devolve null quando a referência não bate com nada da
+// lista, em vez de aceitar de olhos fechados o que o modelo mandou de volta.
+export function resolverNotaRelacionada(ref, outras) {
+  if (typeof ref !== 'string' || !ref.startsWith('n')) return null
+  const indice = Number(ref.slice(1)) - 1
+  const nota = Number.isInteger(indice) && indice >= 0 ? outras[indice] : null
+  return nota ? { id: nota.id, title: nota.title } : null
+}
+
 // Estado das anotações mora aqui, e não dentro do painel — do mesmo jeito
 // que o pomodoro mora em useFocusTimer: o painel só é montado quando o
 // trilho abre, mas as anotações (e, mais adiante, a varredura da IA)
@@ -140,6 +153,13 @@ export default function useNotes({ signedIn }) {
   // falha só ia pro console: o spinner de "analisando" sumia sem sugestão
   // nenhuma, indistinguível de "a IA não achou nada a dizer sobre isto".
   const [aiError, setAiError] = useState(null)
+  // Resultado da última pergunta feita sobre as anotações — { answer, notas }
+  // ou null antes da primeira busca. Fica fora do estado de uma nota
+  // específica porque a pergunta é sobre o conjunto inteiro, não sobre a
+  // aba aberta.
+  const [searchResult, setSearchResult] = useState(null)
+  const [searching, setSearching] = useState(false)
+  const [searchError, setSearchError] = useState(null)
   const saveTimer = useRef(null)
   const loadedOnce = useRef(false)
   // "Última versão conhecida" para a varredura programada usar sem precisar
@@ -371,9 +391,16 @@ export default function useNotes({ signedIn }) {
     if (!text) return
     setAnalyzingIds((prev) => new Set(prev).add(id))
     try {
-      const { title, suggestions } = await analyzeNoteWithAI(text)
+      // Nunca a nota inteira das outras — só título e um trecho curto, o
+      // bastante para o modelo notar uma relação sem custar uma chamada cara.
+      const outras = notes.filter((n) => n.id !== id)
+      const { title, suggestions, notaRelacionadaRef } = await analyzeNoteWithAI(text, { notas: outras })
       const note = notes.find((n) => n.id === id)
-      const patch = { suggestions, lastAnalyzedAt: new Date().toISOString() }
+      const patch = {
+        suggestions,
+        lastAnalyzedAt: new Date().toISOString(),
+        relatedNote: resolverNotaRelacionada(notaRelacionadaRef, outras),
+      }
       // Só substitui o título se o usuário não tiver escrito um por conta
       // própria — a IA sugere, não sobrescreve o que já foi decidido.
       if (title && !note?.title?.trim()) patch.title = title
@@ -397,6 +424,31 @@ export default function useNotes({ signedIn }) {
     }
   }
 
+  // Pergunta em linguagem natural sobre o conjunto de anotações ("o que eu
+  // escrevi sobre o caso da Maria?"). Guarda a lista de notas na mesma ordem
+  // mandada ao Worker — é contra ela que as referências que voltam (n1, n2...)
+  // são resolvidas de volta para a nota real.
+  async function searchInNotes(query) {
+    const q = (query ?? '').trim()
+    if (!q) return
+    setSearching(true)
+    setSearchError(null)
+    try {
+      const { answer, refs } = await searchNotes(q, notes)
+      const encontradas = refs.map((ref) => resolverNotaRelacionada(ref, notes)).filter(Boolean)
+      setSearchResult({ answer, notas: encontradas })
+    } catch (err) {
+      console.error('Não foi possível buscar nas anotações:', err)
+      setSearchError(
+        err.transiente
+          ? 'A IA está sobrecarregada ou sem cota por agora — tenta de novo daqui a pouco.'
+          : `Não deu para buscar agora (${err.message}).`
+      )
+    } finally {
+      setSearching(false)
+    }
+  }
+
   return {
     notes,
     selectedId,
@@ -412,5 +464,10 @@ export default function useNotes({ signedIn }) {
     deleteNote,
     analyzeNote,
     analyzingIds,
+    searchInNotes,
+    searching,
+    searchResult,
+    searchError,
+    dismissSearch: () => setSearchResult(null),
   }
 }
