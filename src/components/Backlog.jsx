@@ -9,6 +9,50 @@ function daysSince(dateString) {
   return Math.floor(diff / (1000 * 60 * 60 * 24))
 }
 
+// Botão de ação da linha, só ícone: três botões de texto (Editar/Focar/
+// Concluir) lado a lado empurravam o título da tarefa para várias linhas,
+// justamente o que sobrava menos espaço no celular. O rótulo continua
+// existindo para leitor de tela e para quem passa o mouse (title).
+function IconButton({ label, onClick, className = '', children }) {
+  return (
+    <button
+      type="button"
+      className={`icon-btn${className ? ` ${className}` : ''}`}
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+    >
+      {children}
+    </button>
+  )
+}
+
+function EditIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" />
+    </svg>
+  )
+}
+
+function FocusIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <circle cx="12" cy="12" r="8" />
+      <circle cx="12" cy="12" r="2.6" fill="currentColor" stroke="none" />
+    </svg>
+  )
+}
+
+function CheckIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="4 12 9 17 20 6" />
+    </svg>
+  )
+}
+
 export default function Backlog({
   tasks,
   activeTaskId,
@@ -46,7 +90,7 @@ export default function Backlog({
           opacity: done ? 0.6 : 1,
         }}
       >
-        <div>
+        <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontWeight: 500, fontSize: 'var(--body-md)', textDecoration: done ? 'line-through' : 'none' }}>
             {task.title}
           </div>
@@ -69,14 +113,24 @@ export default function Backlog({
             <span className="muted" style={{ marginLeft: 8 }}>parado há {age} dias</span>
           )}
         </div>
-        <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-          <button onClick={(e) => { e.stopPropagation(); onEdit(task) }}>Editar</button>
+        <div style={{ display: 'flex', gap: 4, flexShrink: 0, marginLeft: 8 }}>
+          <IconButton label="Editar" onClick={(e) => { e.stopPropagation(); onEdit(task) }}>
+            <EditIcon />
+          </IconButton>
           {!done && onFocus && (
-            <button onClick={(e) => { e.stopPropagation(); onFocus(task) }}>
-              {emFoco ? 'Ver foco' : 'Focar'}
-            </button>
+            <IconButton
+              label={emFoco ? 'Ver foco' : 'Focar'}
+              className={emFoco ? 'icon-btn--live' : ''}
+              onClick={(e) => { e.stopPropagation(); onFocus(task) }}
+            >
+              <FocusIcon />
+            </IconButton>
           )}
-          {!done && <button onClick={(e) => { e.stopPropagation(); onComplete(task) }}>Concluir</button>}
+          {!done && (
+            <IconButton label="Concluir" onClick={(e) => { e.stopPropagation(); onComplete(task) }}>
+              <CheckIcon />
+            </IconButton>
+          )}
         </div>
       </div>
     )
