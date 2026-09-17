@@ -10,7 +10,6 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.126.0",
     "chrono-node": "^2.7.7",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"

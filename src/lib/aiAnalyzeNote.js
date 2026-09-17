@@ -1,7 +1,7 @@
 import { ensureToken } from './googleAuth.js'
 import { pausarIA } from './aiCooldown.js'
 
-// Manda o texto de uma anotação para o Worker analisar com o Claude e sugerir
+// Manda o texto de uma anotação para o Worker analisar com o Gemini e sugerir
 // um título curto e ações (agendar, criar tarefa, falar com alguém, evoluir
 // um caso, ou só o aviso de que aquilo merece virar um documento).
 export async function analyzeNoteWithAI(text) {

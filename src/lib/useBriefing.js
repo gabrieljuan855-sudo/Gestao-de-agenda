@@ -65,7 +65,7 @@ export function kindForSlot(slotId, date) {
 
 // Vale mesmo incomodar a pessoa com este erro?
 //
-// Uma sobrecarga da Anthropic (529) se resolve sozinha em segundos, e a varredura
+// Uma sobrecarga do Gemini (503) se resolve sozinha em segundos, e a varredura
 // já tenta de novo a cada checagem enquanto a janela do horário não fecha.
 // Mostrar um aviso vermelho para isso é alarmar por algo que está sendo
 // tratado — a pessoa não tem o que fazer com essa informação. Então o aviso só

@@ -1,6 +1,6 @@
 // O freio de cota da IA.
 //
-// O app chama o Claude sozinho em dois lugares: os briefings por horário
+// O app chama o Gemini sozinho em dois lugares: os briefings por horário
 // (useBriefing.js) e a varredura das anotações (useNotes.js). Os dois tentam
 // de novo quando falham — e essa era a armadilha: quando a falha É o limite de
 // uso estourado, insistir de 5 em 5 minutos só queima mais cota e mantém o
