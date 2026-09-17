@@ -49,4 +49,29 @@ describe('parseQuickAdd', () => {
     const r = parseQuickAdd('Organizar a mesa', ref)
     expect(r.priority).toBe(null)
   })
+
+  it('"hoje" não é urgência sozinho — só o dia batendo com hoje não é o mesmo que urgente', () => {
+    const r = parseQuickAdd('Reunião hoje às 15h com o fornecedor', ref)
+    expect(r.priority).not.toBe('alta')
+  })
+
+  it('"de Nh" sem minutos é horário, não duração — "reunião de 9h" quer dizer "às 9h"', () => {
+    const r = parseQuickAdd('Reunião de 9h amanhã', ref)
+    expect(r.type).toBe('event')
+    expect(r.start.getHours()).toBe(9)
+  })
+
+  it('"de NhMM", com os minutos escritos, continua sendo duração', () => {
+    const r = parseQuickAdd('Reunião 20/09/2026 14h de 1h30', ref)
+    expect(r.durationMinutes).toBe(90)
+  })
+
+  it('não apaga o verbo/substantivo do título por ele também marcar prioridade', () => {
+    const r = parseQuickAdd('Entregar relatório até sexta-feira', ref)
+    expect(r.title).toBe('Entregar relatório')
+    expect(r.priority).toBe('media')
+
+    const r2 = parseQuickAdd('Prazo do projeto amanhã', ref)
+    expect(r2.title).toBe('Prazo do projeto')
+  })
 })

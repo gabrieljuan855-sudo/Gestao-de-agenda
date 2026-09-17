@@ -1,7 +1,17 @@
 import * as chrono from 'chrono-node'
 
-const URGENT_WORDS = ['urgente', 'hoje', 'agora', 'imediato']
+// "hoje" saiu daqui: aparece em quase todo compromisso marcado para o mesmo
+// dia ("Reunião hoje às 15h com o fornecedor"), e isso inflava qualquer coisa
+// para "alta" sem nenhuma urgência real por trás — só o dia batendo com hoje.
+const URGENT_WORDS = ['urgente', 'agora', 'imediato']
 const IMPORTANT_WORDS = ['importante', 'prazo', 'até', 'entregar']
+
+// As mesmas palavras de prioridade, só que o que sai do título quando vira
+// dado estruturado. "prazo" e "entregar" ficam de fora de propósito: são o
+// verbo e o substantivo que dizem o que fazer ("Entregar relatório", "Prazo
+// do projeto") — tirar como se fossem só marcador apagava o sentido inteiro
+// do título ("Entregar relatório até sexta-feira" virava só "relatório").
+const TITLE_NOISE_WORDS = ['urgente', 'hoje', 'agora', 'imediato', 'importante', 'até']
 
 const DEFAULT_MINUTES = 60
 
@@ -15,14 +25,19 @@ function detectPriority(text) {
   return null
 }
 
-// "por 40min", "durante 2 horas", "umas 2 horas", "de 1h30", "por 2hs"
-const DURATION_PREFIX = '(?:por|durante|umas?|cerca de|aprox(?:imadamente)?|de)'
+// "por 40min", "durante 2 horas", "umas 2 horas", "por 2hs"
+const DURATION_PREFIX = '(?:por|durante|umas?|cerca de|aprox(?:imadamente)?)'
 
 // "h(?:oras?|s)?" cobre "h", "hora(s)" e o "hs" abreviado ("por 2hs"); sem o
 // "s" essa forma não batia com nada aqui e sobrava pro reconhecedor de
 // horário, que lia "2hs" como "às 02:00" em vez de duração.
 const DURATION_PATTERNS = [
   { re: new RegExp(`\\b${DURATION_PREFIX}\\s+(\\d{1,2})\\s*h(?:oras?|s)?\\s*(\\d{1,2})?\\s*(?:min|minutos?)?\\b`, 'i'), kind: 'hm' },
+  // "de 1h30" é duração, mas só com os minutos escritos — "de 9h" sozinho é
+  // como a maioria escreve horário ("reunião de 9h" = "às 9h"), não duração.
+  // Sem essa exigência, "Reunião de 9h amanhã" perdia a hora inteira para a
+  // duração e o compromisso virava tarefa sem horário nenhum.
+  { re: /\bde\s+(\d{1,2})h(\d{2})\b/i, kind: 'hm' },
   { re: new RegExp(`\\b${DURATION_PREFIX}\\s+(\\d{1,3})\\s*(?:min|minutos?)\\b`, 'i'), kind: 'm' },
   { re: /\b(\d{1,2})h(\d{2})?\s*(?:de\s+duração)\b/i, kind: 'hm' },
 ]
@@ -48,8 +63,7 @@ function cleanTitle(text, ...segmentsToRemove) {
   }
   // \b não fecha palavra terminada em acento ("até"), porque só considera
   // [A-Za-z0-9_]; por isso a borda é feita com lookaround sobre letras.
-  const priorityWords = [...URGENT_WORDS, ...IMPORTANT_WORDS]
-  cleaned = cleaned.replace(new RegExp(`(?<!\\p{L})(${priorityWords.join('|')})(?!\\p{L})`, 'giu'), ' ')
+  cleaned = cleaned.replace(new RegExp(`(?<!\\p{L})(${TITLE_NOISE_WORDS.join('|')})(?!\\p{L})`, 'giu'), ' ')
   // "quinta que vem": o dia já virou data, e o "que vem" sozinho não é título.
   cleaned = cleaned.replace(/(?<!\p{L})que\s+vem(?!\p{L})/giu, ' ')
   return cleaned.replace(/\s{2,}/g, ' ').replace(/^[,\s-]+|[,\s-]+$/g, '').trim()
