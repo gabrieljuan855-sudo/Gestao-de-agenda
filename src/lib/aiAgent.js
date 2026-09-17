@@ -1,5 +1,6 @@
 import { ensureToken } from './googleAuth.js'
 import { normalizePriority } from './priority.js'
+import { pausarIA } from './aiCooldown.js'
 
 // Manda uma mensagem da conversa para o agente no Worker, junto com o que ele
 // precisa enxergar (agenda, tarefas, anotações) e o histórico da conversa.
@@ -34,6 +35,9 @@ export async function askAgent({ text, history = [], context = {} }, { signal } 
     // de qualquer jeito — mas saber que é passageiro muda o texto, de "deu
     // errado" para "tenta de novo daqui a pouco".
     err.transiente = data.transiente === true
+    // O agente é pedido na hora e continua passando mesmo em pausa, mas a
+    // recusa que ele recebe vale para segurar o que roda sozinho.
+    pausarIA(data.motivo)
     throw err
   }
 

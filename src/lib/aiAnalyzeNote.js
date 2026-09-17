@@ -1,4 +1,5 @@
 import { ensureToken } from './googleAuth.js'
+import { pausarIA } from './aiCooldown.js'
 
 // Manda o texto de uma anotação para o Worker analisar com o Gemini e sugerir
 // um título curto e ações (agendar, criar tarefa, falar com alguém, evoluir
@@ -22,7 +23,12 @@ export async function analyzeNoteWithAI(text) {
   })
 
   const data = await res.json().catch(() => ({}))
-  if (!res.ok) throw new Error(data.error || `Falha ao analisar (${res.status}).`)
+  if (!res.ok) {
+    // A varredura das anotações analisa uma nota por chamada: sem este freio,
+    // uma cota estourada vira uma rajada de N falhas seguidas, 4x por dia.
+    pausarIA(data.motivo)
+    throw new Error(data.error || `Falha ao analisar (${res.status}).`)
+  }
 
   return {
     title: data.title || '',
