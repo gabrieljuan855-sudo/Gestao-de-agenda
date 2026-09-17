@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { loadNotes, saveNotes, faltaPermissaoDoDrive } from './driveNotes.js'
+import { mesclarAnotacoes, mesclarApagadas, precisaSubir } from './notesMerge.js'
 import { analyzeNoteWithAI } from './aiAnalyzeNote.js'
 
 // Falta de permissão não é falha de rede: insistir não resolve, e dizer
@@ -41,19 +42,26 @@ export function ultimoHorarioDaVarredura(agora) {
   return slot
 }
 
+// O cache nasceu como uma lista crua de anotações e passou a guardar também
+// os rastros de exclusão. Quem já tem a versão antiga gravada não pode perder
+// nada por causa da troca de formato — daí a leitura aceitar as duas.
 function readCache() {
   try {
     const raw = localStorage.getItem(CACHE_KEY)
-    const parsed = raw ? JSON.parse(raw) : []
-    return Array.isArray(parsed) ? parsed : []
+    const parsed = raw ? JSON.parse(raw) : null
+    if (Array.isArray(parsed)) return { notes: parsed, deleted: [] }
+    return {
+      notes: Array.isArray(parsed?.notes) ? parsed.notes : [],
+      deleted: Array.isArray(parsed?.deleted) ? parsed.deleted : [],
+    }
   } catch {
-    return []
+    return { notes: [], deleted: [] }
   }
 }
 
-function writeCache(notes) {
+function writeCache(notes, deleted) {
   try {
-    localStorage.setItem(CACHE_KEY, JSON.stringify(notes))
+    localStorage.setItem(CACHE_KEY, JSON.stringify({ notes, deleted }))
   } catch {
     // Sem espaço ou sem permissão: a nota continua na tela, só não persiste
     // aqui — o Drive ainda é tentado normalmente.
@@ -75,7 +83,11 @@ function newNote() {
 // trilho abre, mas as anotações (e, mais adiante, a varredura da IA)
 // precisam continuar existindo com o painel fechado.
 export default function useNotes({ signedIn }) {
-  const [notes, setNotes] = useState(readCache)
+  const [notes, setNotes] = useState(() => readCache().notes)
+  // Os rastros de exclusão nunca aparecem na tela — só existem para a
+  // mesclagem saber o que sumiu de propósito. Um ref basta, e evita um
+  // re-render por exclusão.
+  const deletedRef = useRef(readCache().deleted)
   const [selectedId, setSelectedId] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -105,20 +117,31 @@ export default function useNotes({ signedIn }) {
     loadedOnce.current = true
     setLoading(true)
     loadNotes()
-      .then((fromDrive) => {
+      .then((doDrive) => {
         setError(null)
         // `null` é o Drive ainda não ter arquivo nenhum (ou ter vindo
         // ilegível). O que está neste aparelho é a única cópia que existe:
         // ela sobe, e não é substituída por uma lista vazia. Tratar esse
         // caso como "o Drive diz que não há nada" apagaria de vez as
         // anotações de quem escreveu antes de a sincronização funcionar.
-        if (fromDrive === null) {
+        if (doDrive === null) {
           const locais = notesRef.current
-          if (locais.length > 0) saveNotes(locais).catch(relatarFalhaAoSincronizar)
+          if (locais.length > 0) saveNotes(locais, deletedRef.current).catch(relatarFalhaAoSincronizar)
           return
         }
-        setNotes(fromDrive)
-        writeCache(fromDrive)
+
+        // Os dois lados podem ter escrito desde a última conversa — inclusive
+        // o mesmo aparelho em dois armazenamentos diferentes (no iOS, o app
+        // da tela de início e o Safari são separados). Mesclar, em vez de
+        // deixar o Drive sobrescrever, é o que impede um lado de apagar o
+        // que o outro escreveu.
+        const mescladas = mesclarAnotacoes(notesRef.current, doDrive.notes, doDrive.deleted)
+        deletedRef.current = mesclarApagadas(deletedRef.current, doDrive.deleted)
+        setNotes(mescladas)
+        writeCache(mescladas, deletedRef.current)
+        if (precisaSubir(mescladas, doDrive.notes)) {
+          saveNotes(mescladas, deletedRef.current).catch(relatarFalhaAoSincronizar)
+        }
       })
       .catch((err) => {
         console.error('Não foi possível carregar as anotações do Drive:', err)
@@ -191,12 +214,12 @@ export default function useNotes({ signedIn }) {
 
   function persist(next) {
     setNotes(next)
-    writeCache(next)
+    writeCache(next, deletedRef.current)
     // Uma gravação por pausa na digitação, não uma por tecla — sem isso,
     // toda letra digitada viraria uma chamada ao Drive.
     clearTimeout(saveTimer.current)
     saveTimer.current = setTimeout(() => {
-      saveNotes(next).catch(relatarFalhaAoSincronizar)
+      saveNotes(next, deletedRef.current).catch(relatarFalhaAoSincronizar)
     }, SAVE_DEBOUNCE_MS)
   }
 
@@ -226,7 +249,14 @@ export default function useNotes({ signedIn }) {
     )
   }
 
+  // A exclusão precisa deixar rastro: é só por ele que o outro aparelho
+  // distingue "esta anotação foi apagada" de "esta anotação ainda não subiu"
+  // — sem isso, a mesclagem devolveria para a tela tudo que foi apagado.
   function deleteNote(id) {
+    deletedRef.current = mesclarApagadas(
+      [...deletedRef.current.filter((d) => d.id !== id), { id, at: new Date().toISOString() }],
+      []
+    )
     persist(notes.filter((n) => n.id !== id))
     setSelectedId((current) => (current === id ? null : current))
   }
