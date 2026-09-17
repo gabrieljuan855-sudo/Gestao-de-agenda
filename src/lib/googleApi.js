@@ -33,7 +33,13 @@ export async function request(url, options = {}, { retryOnAuth = true } = {}) {
 
   if (!res.ok) {
     const body = await res.text()
-    throw new Error(`Erro na API do Google (${res.status}): ${body}`)
+    const err = new Error(`Erro na API do Google (${res.status}): ${body}`)
+    // Quem chama precisa distinguir "deu ruim agora" (tenta de novo) de
+    // "falta permissão" (só um login novo resolve) — e isso não dá para ler
+    // de um texto de mensagem sem virar adivinhação.
+    err.status = res.status
+    err.body = body
+    throw err
   }
   if (res.status === 204) return null
   return res.json()
