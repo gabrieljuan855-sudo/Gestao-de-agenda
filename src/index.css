@@ -256,7 +256,11 @@ textarea:focus-visible,
 .app-shell {
   max-width: 1180px;
   margin: 0 auto;
-  padding: 20px 16px 60px;
+  /* black-translucent (ver index.html) deixa a página desenhar por baixo da
+     barra de status do iOS; sem esse respiro extra, o topo da tela ("Bom
+     dia") ficaria embaixo do relógio/notch no celular. Em quem não tem
+     notch nem barra de status própria, o env() vale 0 e nada muda. */
+  padding: calc(20px + env(safe-area-inset-top, 0px)) 16px 60px;
 }
 
 .card {
@@ -1028,7 +1032,9 @@ button.danger:hover { background: var(--urgent-bg); }
 .pill.baixa { background: var(--low-bg); color: var(--low); }
 
 @media (max-width: 700px) {
-  .app-shell { padding: 16px 12px 48px; }
+  /* Mesmo respiro de cima do card acima: é no celular que a barra de status
+     translúcida do iOS realmente entra em jogo. */
+  .app-shell { padding: calc(16px + env(safe-area-inset-top, 0px)) 12px 48px; }
 
   /* Agenda, tarefas e trilho lado a lado não cabem num celular. */
   .workspace,

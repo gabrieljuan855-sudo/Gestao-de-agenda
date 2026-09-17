@@ -438,6 +438,7 @@ export default function App() {
               tasks={tasks}
               onSelectDay={openDay}
               onSelectEvent={setEditingEvent}
+              onSelectTask={setEditingTask}
               occupies={occupies}
               declined={declined}
               isInfo={(e) => isInformational(e, calendarPrefs)}
@@ -447,8 +448,10 @@ export default function App() {
             <MonthView
               reference={reference}
               events={events}
+              tasks={tasks}
               onSelectDay={openDay}
               onSelectEvent={setEditingEvent}
+              onSelectTask={setEditingTask}
               occupies={occupies}
               declined={declined}
             />

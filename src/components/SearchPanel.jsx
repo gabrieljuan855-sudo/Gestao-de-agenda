@@ -4,6 +4,7 @@ import { formatTime } from '../lib/dates.js'
 import { eventStart, isAllDay } from '../lib/events.js'
 import { PRIORITY_LABEL } from '../lib/priority.js'
 import { semAcento } from '../lib/texto.js'
+import Banner from './Banner.jsx'
 
 function whenLabel(event) {
   const start = eventStart(event)
@@ -25,6 +26,9 @@ export default function SearchPanel({ tasks = [], onSelectEvent, onSelectTask, c
   const [events, setEvents] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  // Só existe para o botão "Tentar de novo" forçar o efeito de busca a rodar
+  // de novo com o mesmo texto — trocar de valor já basta para reexecutá-lo.
+  const [retryTick, setRetryTick] = useState(0)
 
   const trimmed = query.trim()
   const ready = trimmed.length >= 2
@@ -75,7 +79,7 @@ export default function SearchPanel({ tasks = [], onSelectEvent, onSelectTask, c
       cancelled = true
       clearTimeout(id)
     }
-  }, [trimmed, ready, search])
+  }, [trimmed, ready, search, retryTick])
 
   const nothingFound = ready && !loading && !error && matchingTasks.length === 0 && events.length === 0
 
@@ -99,7 +103,11 @@ export default function SearchPanel({ tasks = [], onSelectEvent, onSelectTask, c
       {trimmed && !ready && (
         <div className="muted" style={{ marginTop: 10, fontSize: 'var(--label-md)' }}>Digite ao menos 2 letras.</div>
       )}
-      {error && <div className="form-error" style={{ marginTop: 10 }}>Não deu para buscar: {error}</div>}
+      {error && (
+        <Banner tone="error" actionLabel="Tentar de novo" onAction={() => setRetryTick((n) => n + 1)}>
+          Não deu para buscar: {error}
+        </Banner>
+      )}
 
       {matchingTasks.length > 0 && (
         <div style={{ marginTop: 10 }}>
