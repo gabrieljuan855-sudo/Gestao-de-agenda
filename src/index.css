@@ -784,6 +784,39 @@ button.danger:hover { background: var(--urgent-bg); }
   .notes-status-sync.is-salvando svg { animation: none; opacity: 0.7; }
 }
 
+/* Botão de imprimir: texto simples, sem contorno, no mesmo tom discreto do
+   status ao lado — é uma saída secundária, não a ação da tela. */
+.notes-print-btn {
+  margin-left: auto;
+  padding: 2px 8px;
+  border: none;
+  background: transparent;
+  color: var(--on-surface-variant);
+  font-size: var(--label-sm);
+}
+.notes-print-btn:hover { color: var(--on-surface); }
+
+/* O que sai na impressão é este bloco, não o formulário: título e
+   input/textarea têm placeholder, borda e uma altura fixa que corta texto
+   comprido — nenhum dos dois é o que se quer no papel. Escondido na tela
+   normal, e é a única coisa visível quando a página vai para a impressora. */
+.notes-print-only { display: none; }
+
+@media print {
+  body * { visibility: hidden; }
+  .notes-print-only, .notes-print-only * { visibility: visible; }
+  .notes-print-only {
+    display: block;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    color: #000;
+  }
+  .notes-print-only h1 { font-size: var(--title-lg); margin-bottom: 12px; }
+  .notes-print-only p { margin: 0 0 4px; }
+}
+
 /* Busca por pergunta sobre o conjunto de anotações — fica acima das abas
    porque a pergunta é sobre todas elas, não sobre a que está aberta. */
 .notes-search {

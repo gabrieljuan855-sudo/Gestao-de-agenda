@@ -125,6 +125,19 @@ function NoteEditor({ note, onChange, onAnalyze, analyzing, syncStatus, calendar
       <div className="notes-status">
         <StatusDoDrive status={syncStatus} />
         {analyzing && <span>· revisando com a IA...</span>}
+        <button type="button" className="notes-print-btn" onClick={() => window.print()}>
+          Imprimir
+        </button>
+      </div>
+
+      {/* Só isto fica visível na hora de imprimir (ver @media print em
+          index.css) — título e input/textarea têm bordas, placeholder e
+          podem cortar texto que não cabe na altura visível deles. */}
+      <div className="notes-print-only" aria-hidden="true">
+        <h1>{title.trim() || '(sem título)'}</h1>
+        {body.split('\n').map((linha, i) => (
+          <p key={i}>{linha || ' '}</p>
+        ))}
       </div>
 
       {note.relatedNote && (
