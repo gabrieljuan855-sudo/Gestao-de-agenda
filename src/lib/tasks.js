@@ -1,4 +1,5 @@
 import { startOfDay, dateOnlyFromISO } from './dates.js'
+import { PRIORITY_ORDER } from './priority.js'
 
 // Quantos dias desde a última mudança na tarefa — usado tanto pelo aviso
 // "parado há N dias" do Backlog quanto pelo briefing do topo.
@@ -49,4 +50,18 @@ export function ordenarTarefasPorPrazo(tasks) {
     if (!b.due) return -1
     return new Date(a.due) - new Date(b.due)
   })
+}
+
+// Prioridade primeiro (é a dimensão que a pessoa escolhe de propósito);
+// dentro da mesma prioridade, quem vence antes sobe — sem isso, uma tarefa
+// de prioridade baixa vencendo hoje ficava perdida atrás de uma dúzia de
+// tarefas de prioridade baixa sem prazo nenhum. Usada tanto pela lista de
+// Próximas ações quanto pela tela Agora.
+export function compararPorPrioridadeEPrazo(a, b) {
+  const porPrioridade = PRIORITY_ORDER.indexOf(a.priority) - PRIORITY_ORDER.indexOf(b.priority)
+  if (porPrioridade !== 0) return porPrioridade
+  if (!a.due && !b.due) return 0
+  if (!a.due) return 1
+  if (!b.due) return -1
+  return new Date(a.due) - new Date(b.due)
 }

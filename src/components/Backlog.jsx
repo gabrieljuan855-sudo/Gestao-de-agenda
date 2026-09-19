@@ -1,8 +1,8 @@
 import { useState } from 'react'
-import { PRIORITY_LABEL, PRIORITY_ORDER, priorityFromListTitle } from '../lib/priority.js'
+import { PRIORITY_LABEL, priorityFromListTitle } from '../lib/priority.js'
 import { combinedFocusStats } from '../lib/focusStats.js'
 import { formatDuration, dateOnlyFromISO } from '../lib/dates.js'
-import { daysSince, isOverdueTask } from '../lib/tasks.js'
+import { daysSince, isOverdueTask, compararPorPrioridadeEPrazo } from '../lib/tasks.js'
 
 // Botão de ação da linha, só ícone — o rótulo continua existindo para
 // leitor de tela e para quem passa o mouse (title).
@@ -41,19 +41,6 @@ function prazoLabel(due) {
   return dateOnlyFromISO(due).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })
 }
 
-// Prioridade primeiro (é a dimensão que a pessoa escolhe de propósito);
-// dentro da mesma prioridade, quem vence antes sobe — sem isso, uma tarefa
-// de prioridade baixa vencendo hoje ficava perdida atrás de uma dúzia de
-// tarefas de prioridade baixa sem prazo nenhum.
-function compararTarefas(a, b) {
-  const porPrioridade = PRIORITY_ORDER.indexOf(a.priority) - PRIORITY_ORDER.indexOf(b.priority)
-  if (porPrioridade !== 0) return porPrioridade
-  if (!a.due && !b.due) return 0
-  if (!a.due) return 1
-  if (!b.due) return -1
-  return new Date(a.due) - new Date(b.due)
-}
-
 export default function Backlog({
   tasks,
   focusEvents = [],
@@ -72,7 +59,7 @@ export default function Backlog({
 
   const pending = tasks.filter((t) => t.status !== 'completed' && (!filtro || t.contexto === filtro))
   const completed = tasks.filter((t) => t.status === 'completed')
-  const sorted = [...pending].sort(compararTarefas)
+  const sorted = [...pending].sort(compararPorPrioridadeEPrazo)
 
   function renderTask(task, { done = false } = {}) {
     const age = daysSince(task.updated)

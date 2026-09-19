@@ -9,8 +9,11 @@ import {
   nextEvent,
   currentEvent,
   findConflicts,
+  tasksDueOn,
 } from '../lib/events.js'
 import { workBlocksFor, isWorkday } from '../lib/schedule.js'
+import { isOverdueTask } from '../lib/tasks.js'
+import { PRIORITY_LABEL } from '../lib/priority.js'
 import Banner from './Banner.jsx'
 
 // Sessões de foco seguidas da mesma tarefa (pomodoro com pausa no meio) viram
@@ -88,13 +91,17 @@ function NextUp({ events }) {
 export default function DayView({
   date,
   events,
+  tasks = [],
   onSelectEvent,
+  onSelectTask,
+  onCompleteTask,
   occupies = () => true,
   isInfo = () => false,
   asksPresence = () => false,
   presenceOf = () => null,
   declined = () => false,
   onSetPresence,
+  schedule,
 }) {
   const [now, setNow] = useState(() => new Date())
   const showNow = isToday(date)
@@ -108,9 +115,13 @@ export default function DayView({
   const dayEvents = eventsOfDay(events, date)
   const allDay = dayEvents.filter(isAllDay)
   const timed = dayEvents.filter((e) => !isAllDay(e))
-  const gaps = findFreeGaps(events, date, workBlocksFor(date), { occupies })
-  const folga = !isWorkday(date)
+  const gaps = findFreeGaps(events, date, workBlocksFor(date, schedule), { occupies })
+  const folga = !isWorkday(date, schedule)
   const conflicts = findConflicts(dayEvents, occupies)
+  // Tarefas com prazo neste dia: antes o único lugar onde uma tarefa a fazer
+  // "hoje" aparecia era numa lista à parte (o Backlog) — a tela onde a pessoa
+  // de fato executa o dia inteiro ignorava tarefa por completo.
+  const tarefasDoDia = tasksDueOn(tasks, date)
 
   const timeline = [
     ...groupFocusSessions(timed).map((item) => ({
@@ -184,8 +195,47 @@ export default function DayView({
         </div>
       )}
 
+      {tarefasDoDia.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
+          {tarefasDoDia.map((task) => {
+            const atrasada = isOverdueTask(task)
+            return (
+              <div
+                key={task.id}
+                onClick={() => onSelectTask && onSelectTask(task)}
+                className="day-event"
+                style={{
+                  borderLeft: `3px solid ${atrasada ? 'var(--urgent)' : 'var(--border-strong)'}`,
+                  background: 'var(--surface-2)',
+                  cursor: onSelectTask ? 'pointer' : 'default',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: 'var(--body-md)' }}>{task.title}</div>
+                  <span className={`pill ${task.priority}`}>{PRIORITY_LABEL[task.priority]}</span>
+                  {task.contexto && (
+                    <span className="muted" style={{ marginLeft: 8, fontSize: 'var(--label-sm)' }}>@{task.contexto}</span>
+                  )}
+                  {atrasada && (
+                    <span style={{ marginLeft: 8, fontSize: 'var(--label-sm)', color: 'var(--urgent)' }}>atrasada</span>
+                  )}
+                </div>
+                {onCompleteTask && (
+                  <button type="button" onClick={(e) => { e.stopPropagation(); onCompleteTask(task) }}>
+                    Concluir
+                  </button>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {timeline.length === 0 && <div className="muted">Nenhum compromisso neste dia.</div>}
+        {timeline.length === 0 && tarefasDoDia.length === 0 && <div className="muted">Nenhum compromisso neste dia.</div>}
 
         {rendered.map((item) => {
           if (item.kind === 'period') {

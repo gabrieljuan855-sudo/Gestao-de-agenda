@@ -353,6 +353,7 @@ export async function listTasks({ tasklistId = '@default', tasklistTitle = '', s
       contexto: meta.contexto,
       projeto: meta.projeto,
       aguardando: meta.aguardando,
+      duracao: meta.duracao,
       notesClean: meta.notes,
       tasklistId,
     }
@@ -384,13 +385,14 @@ export async function createTask({
   contexto = null,
   projeto = null,
   aguardando = null,
+  duracao = null,
   tasklistId = '@default',
 }) {
   return request(`${TASKS_BASE}/lists/${encodeURIComponent(tasklistId)}/tasks`, {
     method: 'POST',
     body: JSON.stringify({
       title,
-      notes: encodeMeta({ priority, contexto, projeto, aguardando }, notes),
+      notes: encodeMeta({ priority, contexto, projeto, aguardando, duracao }, notes),
       due: due ? due.toISOString() : undefined,
     }),
   })
@@ -403,7 +405,7 @@ export async function completeTask(taskId, tasklistId = '@default') {
   })
 }
 
-export async function updateTask(task, { title, due, priority, notes, contexto, projeto, aguardando }) {
+export async function updateTask(task, { title, due, priority, notes, contexto, projeto, aguardando, duracao }) {
   const body = {}
   if (title !== undefined) body.title = title
   // O Google Tasks guarda só a data do prazo; a hora é ignorada pela API.
@@ -413,7 +415,8 @@ export async function updateTask(task, { title, due, priority, notes, contexto, 
     notes !== undefined ||
     contexto !== undefined ||
     projeto !== undefined ||
-    aguardando !== undefined
+    aguardando !== undefined ||
+    duracao !== undefined
   ) {
     // O bloco é reescrito inteiro, então o que não veio no patch precisa vir
     // da tarefa — senão mudar só a prioridade apagaria o contexto. `??`
@@ -427,6 +430,7 @@ export async function updateTask(task, { title, due, priority, notes, contexto, 
         contexto: contexto !== undefined ? contexto : task.contexto,
         projeto: projeto !== undefined ? projeto : task.projeto,
         aguardando: aguardando !== undefined ? aguardando : task.aguardando,
+        duracao: duracao !== undefined ? duracao : task.duracao,
       },
       notes !== undefined ? notes : task.notesClean
     )
@@ -490,6 +494,7 @@ export async function moverTarefa(task, tasklistDestinoId, patch = {}) {
       contexto: patch.contexto !== undefined ? patch.contexto : task.contexto,
       projeto: patch.projeto !== undefined ? patch.projeto : task.projeto,
       aguardando: patch.aguardando !== undefined ? patch.aguardando : task.aguardando,
+      duracao: patch.duracao !== undefined ? patch.duracao : task.duracao,
       tasklistId: tasklistDestinoId,
     })
     await deleteTask(task)

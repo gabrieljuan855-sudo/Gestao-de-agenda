@@ -32,6 +32,14 @@ segredos e por isso não podem ficar no navegador.
 - **Projeto sem próxima ação**: um aviso quando alguma etiqueta de projeto
   (`#caso-silva`) não tem nenhuma tarefa em Próximas ações — o sinal clássico
   de um projeto que parou de andar sem ninguém perceber.
+- **Agora**: a pergunta de engajamento do GTD — dado o contexto e o tempo que
+  sobra até o próximo compromisso, qual é a melhor próxima ação disponível?
+  Filtra por contexto e (opcionalmente) só o que cabe no vão livre real, e
+  deixa agendar ali mesmo um bloco no Calendar para a tarefa escolhida
+  (*time-blocking*). O horário de trabalho que decide o que é "vão livre" é
+  configurável nesta tela, por dia da semana.
+- **Tarefas na visão de Dia**: o que vence hoje aparece direto na tela onde
+  você já está olhando o dia, não só na lista lateral.
 - **Cronômetro de foco (Pomodoro 25/5)**: ao focar numa tarefa, o app cria
   automaticamente um evento real no Calendar com o tempo gasto.
 - **Visões de dia, semana e mês**: dia mostra a linha do tempo; semana mostra
@@ -186,13 +194,14 @@ Tasks não tem campo livre para metadado (os eventos do Calendar têm; as
 tarefas, não):
 
 ```
-[alta @ligar #caso-silva ~ana desde:2026-09-10] texto livre da nota
+[alta @ligar #caso-silva ~ana desde:2026-09-10 min:15] texto livre da nota
 ```
 
 Prioridade sem marcador, contexto com `@`, projeto com `#`, de quem se espera
-com `~` e desde quando com `desde:`. Continua uma linha legível no app do
-Google Tasks — é o motivo de não ser JSON. As notas antigas, que só tinham
-`[urgente]`, seguem sendo lidas normalmente.
+com `~`, desde quando com `desde:` e a estimativa de duração (minutos, para a
+tela Agora decidir o que cabe no tempo livre) com `min:`. Continua uma linha
+legível no app do Google Tasks — é o motivo de não ser JSON. As notas antigas,
+que só tinham `[urgente]`, seguem sendo lidas normalmente.
 
 **Projeto não é um cadastro à parte** — é só a mesma etiqueta `#projeto`
 repetida em mais de uma tarefa. O app não guarda "projetos" em lugar nenhum;

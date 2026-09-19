@@ -41,6 +41,8 @@ import Notes from './components/Notes.jsx'
 import useNotes from './lib/useNotes.js'
 import Entrada from './components/Entrada.jsx'
 import Aguardando from './components/Aguardando.jsx'
+import Agora from './components/Agora.jsx'
+import { loadWorkSchedule } from './lib/schedule.js'
 import ShortcutsOverlay from './components/ShortcutsOverlay.jsx'
 import useAtalhos from './lib/useAtalhos.js'
 import { montarEventoDeConclusao } from './lib/taskDoneEvent.js'
@@ -130,6 +132,11 @@ export default function App() {
   const [loginError] = useState(motivoDoLogin)
   const [presenceError, setPresenceError] = useState(null)
   const [registroError, setRegistroError] = useState(null)
+  const [agendaError, setAgendaError] = useState(null)
+  // O horário de trabalho decide o que a tela Agora conta como "tempo livre"
+  // e o que o Dia mostra como vão livre — mora aqui, e não dentro de Agora,
+  // porque o DayView também precisa dele.
+  const [workSchedule, setWorkSchedule] = useState(() => loadWorkSchedule())
 
   useEffect(() => {
     initGoogleAuth(setSignedIn, setAuthStatus)
@@ -474,8 +481,8 @@ export default function App() {
     await reload()
   }
 
-  function handleProximaAcao(item, { titulo, contexto, projeto }) {
-    return moverEsclarecido(item, LISTA_PROXIMAS, { title: titulo, contexto, projeto })
+  function handleProximaAcao(item, { titulo, contexto, projeto, duracao }) {
+    return moverEsclarecido(item, LISTA_PROXIMAS, { title: titulo, contexto, projeto, duracao })
   }
 
   // Aguardando e Algum dia mandando de volta para o jogo: mesma lista de
@@ -520,6 +527,34 @@ export default function App() {
     notesState.createNote({ title: titulo, body: item.notesClean || '' })
     await deleteTask(item)
     await reload()
+  }
+
+  // Time-blocking da tela Agora: reserva o vão livre escolhido no Calendar
+  // para a tarefa, do mesmo jeito que o bloco de foco reserva 25 minutos — a
+  // diferença é que aqui quem escolhe a duração é a pessoa, não um relógio.
+  // A tarefa continua existindo depois: o bloco é só o lembrete de quando
+  // fazer, concluir continua sendo um gesto à parte.
+  async function handleAgendarBloco(task, { start, end }) {
+    const calendario = findDefaultCalendar(calendars) || calendars[0]
+    const duracaoMax = (end - start) / 60000
+    const minutos = Math.min(task.duracao || 30, duracaoMax)
+    try {
+      await createEvent({
+        title: task.title,
+        start,
+        end: new Date(start.getTime() + minutos * 60000),
+        calendarId: calendario?.id || 'primary',
+      })
+      setAgendaError(null)
+      await reload()
+    } catch (err) {
+      console.error('Não deu para agendar o bloco:', err)
+      setAgendaError(`Não deu para agendar "${task.title}": ${err.message}`)
+    }
+  }
+
+  function handleWorkSchedule(next) {
+    setWorkSchedule(next)
   }
 
   async function handleSaveEvent(patch) {
@@ -704,6 +739,29 @@ export default function App() {
       ),
     },
     {
+      id: 'agora',
+      label: 'Agora',
+      icon: (
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+          <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+        </svg>
+      ),
+      // A pergunta que esta tela responde ("o que eu faço com o tempo que
+      // tenho agora?") é sobre o momento presente — largura de coluna normal
+      // basta, sem o "wide" que a Entrada e as Anotações precisam.
+      render: () => (
+        <Agora
+          tasks={tarefasEsclarecidas}
+          events={events}
+          occupies={occupies}
+          schedule={workSchedule}
+          onSchedule={handleWorkSchedule}
+          onFocus={handleFocusTask}
+          onAgendar={handleAgendarBloco}
+        />
+      ),
+    },
+    {
       id: 'aguardando',
       label: 'Aguardando',
       icon: (
@@ -813,13 +871,17 @@ export default function App() {
             <DayView
               date={reference}
               events={events}
+              tasks={tarefasEsclarecidas}
               onSelectEvent={setEditingEvent}
+              onSelectTask={setEditingTask}
+              onCompleteTask={handleCompleteTask}
               occupies={occupies}
               declined={declined}
               isInfo={(e) => isInformational(e, calendarPrefs)}
               asksPresence={(e) => needsPresence(e, calendarPrefs)}
               presenceOf={(e) => presenceOf(e, presence)}
               onSetPresence={handleSetPresence}
+              schedule={workSchedule}
             />
           )}
           {view === 'week' && (
@@ -896,6 +958,12 @@ export default function App() {
       {registroError && (
         <Banner tone="warning" actionLabel="Entendi" onAction={() => setRegistroError(null)}>
           {registroError}
+        </Banner>
+      )}
+
+      {agendaError && (
+        <Banner tone="warning" actionLabel="Entendi" onAction={() => setAgendaError(null)}>
+          {agendaError}
         </Banner>
       )}
 
