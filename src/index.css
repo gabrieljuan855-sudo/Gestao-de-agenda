@@ -56,11 +56,6 @@
   --shadow: rgba(31, 30, 28, 0.13);
   --shadow-weak: rgba(31, 30, 28, 0.07);
 
-  /* Cores do logo que não são a marca do Google (essas ficam fixas nos dois
-     temas): o cinza das argolas e o anel do pomodoro que ainda não passou. */
-  --logo-mark: #5f6368;
-  --logo-track: #e8eaed;
-
   /* ---------- forma ---------- */
   /* Escala de seis degraus, no lugar dos oito valores soltos de antes. */
   --shape-xs: 4px;
@@ -163,9 +158,6 @@
 
     --shadow: rgba(0, 0, 0, 0.4);
     --shadow-weak: rgba(0, 0, 0, 0.22);
-
-    --logo-mark: #9aa0a6;
-    --logo-track: #3a3835;
   }
 }
 

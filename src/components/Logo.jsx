@@ -1,38 +1,39 @@
-// A marca do app: a folha da agenda (com as argolas), o anel do pomodoro em
-// três quartos — os Google colors marcando o tempo corrido, o cinza o que
-// falta — e o certo verde da tarefa concluída no centro.
+// A marca do app: um cérebro em traço único, na cor de destaque — a mesma
+// linguagem monocromática dos ícones do trilho (Rail.jsx), em vez de uma
+// segunda paleta só para a marca. As dobras (gyri) na borda são o que
+// distingue isso de uma bolha lisa qualquer: sem elas a forma lê como um
+// coração ou um escudo, não como um cérebro.
 //
 // Fica inline, e não como <img src="/logo.svg">, para aparecer junto com a
-// tela em vez de piscar depois de uma requisição extra. Por estar inline (e
-// não num arquivo .svg à parte, que não vê CSS nenhum da página), a folha e
-// as partes neutras usam as variáveis de tema: no escuro o papel branco
-// ficaria um retângulo aceso no meio da tela. As quatro cores da marca do
-// Google (azul, vermelho, amarelo, verde) continuam fixas nos dois temas —
-// são a identidade, não decoração.
-export default function Logo({ size = 28, title = 'Gestão de Agenda' }) {
+// tela em vez de piscar depois de uma requisição extra.
+const LOBO =
+  'M23 7' +
+  ' C 20 5.7 16.3 6.2 14.2 8.4' +
+  ' C 11.3 7.5 8.4 9.2 7.7 12' +
+  ' C 5.2 12.5 3.6 15 4.1 17.5' +
+  ' C 2 18.7 1.2 21.5 2.5 23.7' +
+  ' C 0.9 25.6 1.1 28.5 3 30.1' +
+  ' C 2.2 32.6 3.5 35.3 6 36.2' +
+  ' C 6.1 38.8 8.3 40.9 11 40.7' +
+  ' C 12.2 43 14.8 44.2 17.3 43.3' +
+  ' C 18.7 44.5 20.7 44.8 22.4 44' +
+  ' C 22.7 43.85 23 43.6 23 43.2' +
+  ' Z'
+
+export default function Logo({ size = 28, title = 'Segundo Cérebro' }) {
   return (
     <svg viewBox="0 0 48 48" width={size} height={size} role="img" aria-label={title}>
-      <rect x="13.5" y="3" width="6" height="10" rx="3" style={{ fill: 'var(--logo-mark)' }} />
-      <rect x="28.5" y="3" width="6" height="10" rx="3" style={{ fill: 'var(--logo-mark)' }} />
-      <rect
-        x="5" y="9" width="38" height="36" rx="8"
-        style={{ fill: 'var(--surface-1)', stroke: 'var(--border-strong)' }}
-        strokeWidth="2"
-      />
-      <g fill="none" strokeWidth="5.2" strokeLinecap="round">
-        <path d="M11.5 27.5 A 12.5 12.5 0 0 1 24 15" style={{ stroke: 'var(--logo-track)' }} />
-        <path d="M24 15 A 12.5 12.5 0 0 1 36.5 27.5" stroke="#4285F4" />
-        <path d="M36.5 27.5 A 12.5 12.5 0 0 1 24 40" stroke="#EA4335" />
-        <path d="M24 40 A 12.5 12.5 0 0 1 11.5 27.5" stroke="#FBBC04" />
-      </g>
+      <path d={LOBO} fill="none" stroke="var(--accent)" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
       <path
-        d="M18.4 27.8 L 22.4 31.8 L 30 23.4"
+        d={LOBO}
+        transform="translate(48,0) scale(-1,1)"
         fill="none"
-        stroke="#34A853"
-        strokeWidth="4"
-        strokeLinecap="round"
+        stroke="var(--accent)"
+        strokeWidth="3"
         strokeLinejoin="round"
+        strokeLinecap="round"
       />
+      <path d="M23.5 6.5 L23.5 43.2" stroke="var(--accent)" strokeWidth="1.8" strokeLinecap="round" opacity="0.45" />
     </svg>
   )
 }

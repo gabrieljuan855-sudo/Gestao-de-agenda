@@ -167,7 +167,7 @@ export default function useFocusTimer({ activeTask, onCycleComplete }) {
         title: `Foco: ${activeTask.title}`,
         start: inicio,
         end: fim,
-        description: 'Bloco de foco registrado automaticamente pelo Gestão de Agenda.',
+        description: 'Bloco de foco registrado automaticamente pelo Segundo Cérebro.',
         extendedProperties: { private: { [FOCUS_TASK_PROP]: activeTask.id } },
       })
       return true

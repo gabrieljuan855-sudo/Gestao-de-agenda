@@ -28,7 +28,7 @@ describe('montarEventoDeConclusao', () => {
 
   it('não inventa descrição para o que a tarefa não tem', () => {
     const evento = montarEventoDeConclusao({ id: 'x', title: 'Solta' }, quando)
-    expect(evento.description).toBe('Concluída pelo Gestão de Agenda.')
+    expect(evento.description).toBe('Concluída pelo Segundo Cérebro.')
   })
 
   it('não quebra com uma tarefa sem título nem id', () => {
