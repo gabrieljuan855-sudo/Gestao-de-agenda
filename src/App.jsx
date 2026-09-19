@@ -16,10 +16,19 @@ import {
   deleteTask,
   prefetchFocusEvents,
   garantirLista,
+  moverTarefa,
 } from './lib/googleApi.js'
-import { LISTA_ENTRADA } from './lib/gtd.js'
+import {
+  LISTA_ENTRADA,
+  LISTA_PROXIMAS,
+  LISTA_AGUARDANDO,
+  LISTA_ALGUM_DIA,
+  LISTAS_GTD,
+  acharLista,
+} from './lib/gtd.js'
 import { enfileirar, descarregar, quantasPendentes } from './lib/outbox.js'
-import { rangeForView, shiftReference, isSameDay } from './lib/dates.js'
+import { rangeForView, shiftReference, isSameDay, toDateInput } from './lib/dates.js'
+import { findDefaultCalendar } from './lib/defaults.js'
 import QuickAdd from './components/QuickAdd.jsx'
 import Logo from './components/Logo.jsx'
 import Rail from './components/Rail.jsx'
@@ -29,8 +38,7 @@ import useFocusTimer from './lib/useFocusTimer.js'
 import Backlog from './components/Backlog.jsx'
 import Notes from './components/Notes.jsx'
 import useNotes from './lib/useNotes.js'
-import AgentPanel from './components/AgentPanel.jsx'
-import useAgent from './lib/useAgent.js'
+import Entrada from './components/Entrada.jsx'
 import ShortcutsOverlay from './components/ShortcutsOverlay.jsx'
 import useAtalhos from './lib/useAtalhos.js'
 import { montarEventoDeConclusao } from './lib/taskDoneEvent.js'
@@ -140,15 +148,22 @@ export default function App() {
         setCalendars(writable)
         setCalendarPrefs(loadCalendarPrefs(cals))
         try {
-          const entrada = await garantirLista(lists, LISTA_ENTRADA)
-          setEntradaId(entrada.id)
-          setTaskLists(lists.some((l) => l.id === entrada.id) ? lists : [...lists, entrada])
+          // Em sequência, não em paralelo: criar quatro listas de uma vez é
+          // justamente o tipo de rajada que a API do Tasks recusa.
+          let atuais = lists
+          for (const titulo of LISTAS_GTD) {
+            const lista = await garantirLista(atuais, titulo)
+            if (!atuais.some((l) => l.id === lista.id)) atuais = [...atuais, lista]
+          }
+          setTaskLists(atuais)
+          setEntradaId(acharLista(atuais, LISTA_ENTRADA)?.id || '')
         } catch (err) {
-          // Sem a Entrada a captura ainda funciona: cai na lista padrão do
+          // Sem as listas a captura ainda funciona: cai na lista padrão do
           // Google. Melhor guardar no lugar errado do que perder o que a
           // pessoa acabou de tirar da cabeça.
-          console.error('Não deu para garantir a lista Entrada:', err)
+          console.error('Não deu para garantir as listas do método:', err)
           setTaskLists(lists)
+          setEntradaId(acharLista(lists, LISTA_ENTRADA)?.id || '')
         }
       })
       .catch((err) => console.error('Não deu para carregar agendas e listas:', err))
@@ -339,7 +354,7 @@ export default function App() {
 
   useAtalhos({
     criar: () => abrirOuFechar('add'),
-    agente: () => abrirOuFechar('agente'),
+    entrada: () => abrirOuFechar('entrada'),
     notas: () => abrirOuFechar('notes'),
     buscar: () => abrirOuFechar('search'),
     pomodoro: () => abrirOuFechar('focus'),
@@ -351,26 +366,6 @@ export default function App() {
     proximo: () => setReference((r) => shiftReference(view, r, 1)),
     ajuda: () => setMostrandoAtalhos((atual) => !atual),
   })
-  // Os handlers abaixo são declarações de função, então já existem aqui. O
-  // agente executa por eles em vez de falar com a API direto: assim ele passa
-  // exatamente pelos mesmos caminhos (e recarregamentos) do resto da tela.
-  const agentState = useAgent({
-    calendars,
-    taskLists,
-    tasks,
-    notes: notesState.notes,
-    handlers: {
-      onCreateEvent: handleCreateEvent,
-      onCreateTask: handleCreateTask,
-      onUpdateEvent: handleCommandUpdateEvent,
-      onDeleteEvent: handleCommandDeleteEvent,
-      onUpdateTask: handleCommandUpdateTask,
-      onDeleteTask: handleCommandDeleteTask,
-      onCompleteTask: handleCompleteTask,
-      onSetPresence: handleSetPresence,
-    },
-  })
-
   const occupies = (event) => occupiesTime(event, calendarPrefs, presence)
   const declined = (event) => isDeclined(event, presence)
 
@@ -459,6 +454,63 @@ export default function App() {
     await reload()
   }
 
+  // ---------- Esclarecer a Entrada ----------
+  //
+  // Cada decisão é a mesma operação por baixo: mover a tarefa da Entrada para
+  // a lista que corresponde ao que ela é, ajustando o título e as etiquetas
+  // no caminho. Sair da Entrada é o que marca o item como processado — não há
+  // estado "já pensei nisso" separado para esquecer de atualizar.
+  const idDaLista = useCallback(
+    (titulo) => acharLista(taskLists, titulo)?.id || '',
+    [taskLists]
+  )
+
+  async function moverEsclarecido(item, listaTitulo, patch) {
+    const destino = idDaLista(listaTitulo)
+    if (!destino) throw new Error(`a lista "${listaTitulo}" não existe na sua conta`)
+    await moverTarefa(item, destino, patch)
+    await reload()
+  }
+
+  function handleProximaAcao(item, { titulo, contexto }) {
+    return moverEsclarecido(item, LISTA_PROXIMAS, { title: titulo, contexto })
+  }
+
+  function handleAguardando(item, { titulo, quem }) {
+    return moverEsclarecido(item, LISTA_AGUARDANDO, {
+      title: titulo,
+      // A data de hoje é o "desde quando" da espera: é ela que permite dizer
+      // "parado há 12 dias" na revisão, em vez de um limbo sem idade.
+      aguardando: { quem, desde: toDateInput(new Date()) },
+    })
+  }
+
+  function handleAlgumDia(item, { titulo }) {
+    return moverEsclarecido(item, LISTA_ALGUM_DIA, { title: titulo })
+  }
+
+  // Virou compromisso: entra no calendário e sai das listas. O calendário só
+  // recebe o que tem hora marcada de verdade — é o que o mantém confiável.
+  async function handleAgendarDaEntrada(item, { titulo, start }) {
+    const calendario = findDefaultCalendar(calendars) || calendars[0]
+    await createEvent({
+      title: titulo,
+      start,
+      end: new Date(start.getTime() + 60 * 60000),
+      calendarId: calendario?.id || 'primary',
+    })
+    await deleteTask(item)
+    await reload()
+  }
+
+  // Não pede ação nenhuma: vira anotação no Drive e deixa de ocupar espaço na
+  // cabeça e na lista.
+  async function handleReferencia(item, { titulo }) {
+    notesState.createNote({ title: titulo, body: item.notesClean || '' })
+    await deleteTask(item)
+    await reload()
+  }
+
   async function handleSaveEvent(patch) {
     await updateEvent(editingEvent, patch)
     await reload()
@@ -488,26 +540,10 @@ export default function App() {
     await reload()
   }
 
-  // Versões genéricas de editar/excluir, para o comando de texto livre do
-  // QuickAdd: ele acha o evento/tarefa por conta própria (busca, não o
-  // modal de edição), então não pode depender do estado editingEvent/
-  // editingTask como handleSaveEvent/handleDeleteEvent/handleDeleteTask.
-  async function handleCommandUpdateEvent(event, patch) {
-    await updateEvent(event, patch)
-    await reload()
-  }
-
-  async function handleCommandDeleteEvent(event) {
-    await deleteEvent(event)
-    await reload()
-  }
-
-  async function handleCommandUpdateTask(task, patch) {
-    await updateTask(task, patch)
-    await reload()
-  }
-
-  async function handleCommandDeleteTask(task) {
+  // Excluir recebendo a tarefa por parâmetro, para quem age sobre um item que
+  // não está no modal de edição — hoje, a tela da Entrada mandando algo para
+  // o lixo.
+  async function handleExcluirTarefa(task) {
     if (activeTask?.id === task.id) {
       if (focus.phase !== 'idle') focus.stop()
       setActiveTask(null)
@@ -565,6 +601,20 @@ export default function App() {
     )
   }
 
+  // O que está esperando decisão: tudo que ainda mora na Entrada. Não há
+  // marca de "processado" — sair da lista É o processamento.
+  const naEntrada = (t) => Boolean(entradaId) && t.tasklistId === entradaId
+  const itensDaEntrada = tasks.filter((t) => t.status !== 'completed' && naEntrada(t))
+
+  // A lista de tarefas mostra o que já foi decidido. O que ainda está cru tem
+  // tela e contador próprios — deixar os dois juntos devolveria exatamente o
+  // amontoado que a Entrada existe para desfazer.
+  const tarefasEsclarecidas = tasks.filter((t) => !naEntrada(t))
+
+  // Os contextos que a pessoa já usa viram os botões da tela de esclarecer,
+  // em vez de uma lista inventada por mim: o vocabulário é dela.
+  const contextosUsados = [...new Set(tasks.map((t) => t.contexto).filter(Boolean))].sort()
+
   const tools = [
     {
       id: 'add',
@@ -594,18 +644,35 @@ export default function App() {
       ),
     },
     {
-      id: 'agente',
-      label: 'Agente',
+      id: 'entrada',
+      label: 'Entrada',
       icon: (
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M12 3l2.1 5.4L19.5 10.5l-5.4 2.1L12 18l-2.1-5.4L4.5 10.5l5.4-2.1z" />
-          <path d="M18.5 16.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z" />
+          <path d="M4 13h4l1.5 3h5L16 13h4" />
+          <path d="M4 13l2.5-7h11L20 13v5H4z" />
         </svg>
       ),
-      tecla: 'a',
-      // Sem onDone: a conversa não se fecha sozinha depois de aplicar uma
-      // ação — quase sempre vem outra frase logo em seguida.
-      render: () => <AgentPanel agentState={agentState} />,
+      tecla: 'e',
+      // O painel é largo: esclarecer é a tela onde a pessoa lê, reescreve o
+      // título e escolhe entre seis caminhos — não cabe numa coluna estreita.
+      wide: true,
+      // O contador é o convite: uma Entrada com itens parados é o sinal de
+      // que há coisa não decidida, e é o único número do app que pede ação.
+      badge: itensDaEntrada.length,
+      // Sem onDone: processar vem em lote, um item puxando o próximo.
+      render: () => (
+        <Entrada
+          itens={itensDaEntrada}
+          contextos={contextosUsados}
+          onProximaAcao={handleProximaAcao}
+          onAguardando={handleAguardando}
+          onAgendar={handleAgendarDaEntrada}
+          onAlgumDia={handleAlgumDia}
+          onReferencia={handleReferencia}
+          onConcluir={handleCompleteTask}
+          onExcluir={handleExcluirTarefa}
+        />
+      ),
     },
     {
       id: 'search',
@@ -733,7 +800,7 @@ export default function App() {
           )}
         </div>
         <Backlog
-          tasks={tasks}
+          tasks={tarefasEsclarecidas}
           focusEvents={focusEvents}
           activeTaskId={activeTask?.id}
           focusingTaskId={focoEmAndamento() ? activeTask?.id : null}

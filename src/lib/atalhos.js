@@ -5,8 +5,8 @@
 // sem acorde. O que torna isso seguro é a guarda de campo de texto logo
 // abaixo; sem ela, digitar "casa" numa anotação abriria três painéis.
 export const ATALHOS = [
-  { tecla: 'c', acao: 'criar', descricao: 'Criar compromisso ou tarefa' },
-  { tecla: 'a', acao: 'agente', descricao: 'Agente de IA' },
+  { tecla: 'c', acao: 'criar', descricao: 'Capturar' },
+  { tecla: 'e', acao: 'entrada', descricao: 'Entrada (esclarecer)' },
   { tecla: 'n', acao: 'notas', descricao: 'Anotações' },
   { tecla: 'b', acao: 'buscar', descricao: 'Buscar', alias: '/' },
   { tecla: 'p', acao: 'pomodoro', descricao: 'Pomodoro' },
@@ -21,7 +21,7 @@ export const ATALHOS = [
 
 const POR_TECLA = {
   c: 'criar',
-  a: 'agente',
+  e: 'entrada',
   n: 'notas',
   b: 'buscar',
   '/': 'buscar',

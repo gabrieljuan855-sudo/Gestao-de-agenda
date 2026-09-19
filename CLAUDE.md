@@ -47,7 +47,8 @@ uma pilha de branches que só atrapalha.
 - `src/` — React + Vite. Componentes em `src/components/`, lógica e hooks em
   `src/lib/`.
 - `worker/` — o Cloudflare Worker. Serve o site estático e hospeda as rotas de
-  IA (`/api/agent`, `/api/briefing`, `/api/analyze-note`). A chave do Gemini é
+  IA (`/api/esclarecer`, `/api/briefing`, `/api/analyze-note`,
+  `/api/search-notes`). A chave do Gemini é
   segredo do Worker e **nunca** chega ao navegador — é por isso que essa parte
   roda no servidor.
 - Testes ficam ao lado do que testam (`src/lib/x.test.js`), em vitest. A regra

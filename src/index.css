@@ -338,6 +338,79 @@ textarea:focus-visible,
   gap: 10px;
 }
 
+/* A tela de esclarecer. Cada decisão possível é um bloco com nome, para a
+   escolha ser de olhar e não de lembrar — é o oposto do campo em branco. */
+.entrada-topo {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.entrada-dois-minutos {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--shape-sm);
+  background: var(--low-container);
+  color: var(--low);
+  font-size: var(--label-md);
+}
+
+.entrada-secao {
+  margin: 14px 0 8px;
+  font-size: var(--label-sm);
+  color: var(--on-surface-variant);
+}
+
+.entrada-bloco {
+  padding: 10px;
+  margin-bottom: 8px;
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--shape-sm);
+}
+
+.entrada-bloco-titulo {
+  font-size: var(--label-md);
+  color: var(--on-surface-variant);
+  margin-bottom: 8px;
+}
+
+.entrada-contextos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+/* Chip de seleção: aqui o uso é o do MD3 mesmo — escolher um valor entre
+   vários —, diferente de navegar, que é trabalho de aba ou de botão. */
+.entrada-contextos .pill {
+  cursor: pointer;
+  border: 1px solid transparent;
+  background: var(--surface-variant);
+  color: var(--on-surface-variant);
+}
+.entrada-contextos .pill.is-escolhido {
+  border-color: var(--primary);
+  background: var(--primary-container);
+  color: var(--on-primary-container);
+}
+
+.entrada-contexto-novo {
+  flex: 1;
+  min-width: 120px;
+}
+
+.entrada-outros {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
 /* A saída para agendar: discreta de propósito. Capturar continua sendo o
    caminho padrão, e este é o desvio de um caso só — compromisso com dia e
    hora marcados. */
@@ -1075,6 +1148,9 @@ button.danger:hover { background: var(--urgent-bg); }
    fica ancorado à direita e o rótulo aparece no espaço que surge. 48px é o
    alvo de toque mínimo do MD3 — os 44px de antes ficavam um pouco aquém. */
 .rail-btn {
+  /* Âncora do contador da Entrada (.rail-btn-badge), que é posicionado
+     por cima do ícone. */
+  position: relative;
   display: flex;
   flex-direction: row-reverse;
   align-items: center;
@@ -1106,6 +1182,26 @@ button.danger:hover { background: var(--urgent-bg); }
   justify-content: center;
   font-size: var(--body-lg);
   font-variant-numeric: tabular-nums;
+}
+
+/* Quantos itens estão esperando decisão. Fica colado no ícone (o rótulo só
+   existe no hover) e some sozinho quando a Entrada esvazia. */
+.rail-btn-badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--shape-full);
+  background: var(--urgent);
+  color: var(--on-primary);
+  font-size: var(--label-xs);
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
 }
 
 /* Fechar é rápido (o rótulo só precisa sumir da frente do cursor); abrir é

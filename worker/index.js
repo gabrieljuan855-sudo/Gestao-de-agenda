@@ -1,11 +1,11 @@
 // Worker do Gestão de Agenda.
 //
 // Ele continua servindo o site estático como antes; as rotas próprias usam
-// o Gemini para interpretar texto em português: POST /api/agent (o agente
-// que conversa e propõe ações sobre a agenda, as tarefas e as anotações),
-// POST /api/briefing (resumo automático do dia/semana), POST
-// /api/analyze-note (sugestões a partir de uma anotação) e POST
-// /api/search-notes (responde uma pergunta usando as anotações existentes).
+// o Gemini para interpretar texto em português: POST /api/esclarecer (lê um
+// item da Entrada e propõe o que ele é), POST /api/briefing (resumo
+// automático do dia/semana), POST /api/analyze-note (sugestões a partir de
+// uma anotação) e POST /api/search-notes (responde uma pergunta usando as
+// anotações existentes).
 // A chave do Gemini fica como segredo do Cloudflare e nunca chega ao
 // navegador — é justamente por isso que essa parte roda no servidor.
 
@@ -101,198 +101,84 @@ function erroDeIA(err) {
   )
 }
 
-const PRIORITIES = new Set(['alta', 'media', 'baixa'])
+// ---------- Esclarecer ----------
+//
+// Esta rota substituiu o agente de conversa, e a diferença é de formato, não
+// de capacidade.
+//
+// O agente recebia a agenda inteira de 30 dias, as tarefas e as anotações a
+// cada mensagem — 7 a 25 mil caracteres por turno, reenviados de novo no
+// turno seguinte — para que o modelo pudesse escolher *qual* item mexer. Era
+// caro por causa disso, e toda a engenharia de referências curtas e validação
+// existia para tornar essa escolha segura.
+//
+// Aqui a pessoa já escolheu o item: é o que está na frente dela, na Entrada.
+// Então o prompt é só o texto dele mais a lista de contextos que ela já usa.
+// Umas poucas centenas de caracteres, uma chamada, uma decisão.
+const TIPOS_ESCLARECER = new Set(['acao', 'aguardando', 'agendar', 'algum_dia', 'referencia'])
 
-// Só duas opções — é o mesmo vocabulário binário que o app já usa para
-// presença (ver TO_RSVP em calendarPrefs.js): não existe "talvez" por aqui.
-const PRESENCES = new Set(['vou', 'nao'])
-
-// O agente: diferente de /api/command, ele enxerga a agenda, as tarefas e as
-// anotações antes de decidir, conversa em várias rodadas e pode propor mais de
-// uma ação de uma vez. Nada do que ele propõe é executado aqui — quem executa
-// é o cliente, e só depois de a pessoa aprovar.
-const AGENT_ACTIONS = new Set([
-  'criar_evento',
-  'criar_tarefa',
-  'editar_evento',
-  'excluir_evento',
-  'editar_tarefa',
-  'excluir_tarefa',
-  'concluir_tarefa',
-  'confirmar_presenca',
-])
-
-// Quais ações mexem num item que já existe (e portanto exigem uma referência
-// válida), e de que tipo tem que ser essa referência. Sem esta tabela, um
-// "editar_tarefa" apontando para uma referência de evento passaria batido e o
-// cliente tentaria gravar um patch de tarefa num compromisso.
-const AGENT_REF_KIND = {
-  editar_evento: 'e',
-  excluir_evento: 'e',
-  confirmar_presenca: 'e',
-  editar_tarefa: 't',
-  excluir_tarefa: 't',
-  concluir_tarefa: 't',
-}
-
-const MAX_ACOES = 8
-
-function linhasDoContexto(context) {
-  const eventos = (context?.eventos || [])
-    .map((e) => `${e.ref}: ${e.titulo} — ${e.dia}${e.hora ? ` ${e.hora}` : ' (dia inteiro)'}${e.agenda ? ` [${e.agenda}]` : ''}`)
-    .join('\n')
-  const tarefas = (context?.tarefas || [])
-    .map((t) => `${t.ref}: ${t.titulo}${t.prazo ? ` — prazo ${t.prazo}` : ''}${t.prioridade ? ` (${t.prioridade})` : ''}`)
-    .join('\n')
-  const notas = (context?.notas || [])
-    .map((n) => `${n.ref}: ${n.titulo}${n.trecho ? ` — ${n.trecho}` : ''}`)
-    .join('\n')
-  return { eventos, tarefas, notas }
-}
-
-function buildAgentPrompt({ text, today, weekday, history, context }) {
-  const { eventos, tarefas, notas } = linhasDoContexto(context)
-  const agendas = (context?.calendars || [])
-    .map((c) => `- ${c.name}${c.id ? ` (id: ${c.id})` : ''}`)
-    .join('\n')
-  const conversa = (history || [])
-    .map((m) => `${m.role === 'user' ? 'Pessoa' : 'Você'}: ${m.text}`)
-    .join('\n')
-
-  return `Você é o assistente de agenda de alguém que trabalha com atendimento social/administrativo, em português do Brasil. Você conversa e propõe ações sobre a agenda e as tarefas dela.
+function buildEsclarecerPrompt({ texto, contextos, today, weekday }) {
+  const lista = (contextos || []).map((c) => `@${c}`).join(', ')
+  return `Você ajuda alguém que trabalha com atendimento social/administrativo a processar a caixa de entrada dela, em português do Brasil. Cada item foi anotado às pressas e agora precisa virar uma coisa clara.
 
 Hoje é ${weekday}, ${today}. Fuso: America/Sao_Paulo.
 
-Agendas disponíveis:
-${agendas || '- (nenhuma informada)'}
-
-COMPROMISSOS (use a referência à esquerda para se referir a eles):
-${eventos || '(nenhum no período que você enxerga)'}
-
-TAREFAS PENDENTES:
-${tarefas || '(nenhuma)'}
-
-ANOTAÇÕES (somente leitura — você pode usar como contexto, mas não pode criar nem editar anotação):
-${notas || '(nenhuma)'}
-${conversa ? `\nConversa até agora:\n${conversa}\n` : ''}
-Mensagem nova da pessoa:
+Item anotado:
 """
-${text}
+${texto}
 """
+
+Contextos que ela já usa: ${lista || '(nenhum ainda)'}
 
 Responda SOMENTE com JSON, sem comentários, neste formato:
 {
-  "reply": "sua resposta em conversa, até 60 palavras",
-  "actions": [
-    {
-      "action": "criar_evento" | "criar_tarefa" | "editar_evento" | "excluir_evento" | "editar_tarefa" | "excluir_tarefa" | "concluir_tarefa" | "confirmar_presenca",
-      "ref": "a referência (e1, t2...) do item que já existe — obrigatória em tudo que não for criar; null ao criar",
-      "title": "título (ao criar, ou o novo título ao renomear; senão null)",
-      "date": "AAAA-MM-DD ou null",
-      "time": "HH:MM em 24h, ou null",
-      "durationMinutes": número de minutos ou null,
-      "calendarId": "id da agenda, ou null",
-      "priority": "alta" | "media" | "baixa" | null,
-      "presence": "vou" | "nao" | null,
-      "resumo": "frase curta (até 12 palavras) do que essa ação faz, para a pessoa ler antes de aprovar"
-    }
-  ]
+  "tipo": "acao" | "aguardando" | "agendar" | "algum_dia" | "referencia",
+  "titulo": "a próxima ação concreta, começando por um verbo no infinitivo",
+  "contexto": "uma palavra só, sem @, do modo de fazer (ligar, computador, rua, conversar) — ou null",
+  "quem": "de quem ela está esperando, quando o tipo for aguardando; senão null",
+  "date": "AAAA-MM-DD, só quando o texto disser uma data de verdade; senão null",
+  "time": "HH:MM em 24h, só quando houver hora marcada; senão null"
 }
 
 Regras:
-- "actions" pode vir vazio: quando a pessoa só faz uma pergunta ("o que tenho amanhã?"), responda em "reply" e não proponha ação nenhuma.
-- NUNCA invente uma referência. Só use referências que aparecem nas listas acima. Se a pessoa pedir algo sobre um item que você não encontra nas listas, diga isso em "reply" e não proponha a ação.
-- Você enxerga um período limitado. Se o que ela pede pode estar fora dele, diga isso em vez de chutar.
-- Ao criar, "ref" é null e "title" vem preenchido. "criar_evento" quando houver hora; "criar_tarefa" quando não houver.
-- Ao editar, preencha só os campos que mudam; o resto fica null.
-- "concluir_tarefa": a pessoa diz que já fez algo ("terminei o relatório").
-- "confirmar_presenca": ela diz que vai ou não vai a um compromisso, sem querer excluí-lo. Só "vou" ou "nao".
-- Nunca deixe data ou hora dentro do título.
-- Horas em português como "13h15", "14h" equivalem a 13:15, 14:00.
-- Se a pessoa não disser a prioridade da tarefa, mas o texto sugerir urgência ("urgente", "o quanto antes", "hoje ainda", prazo já em cima), use "alta". Sem sinal de urgência nenhum, deixe "priority" null (o app aplica o padrão dela).
-- Antes de propor "criar_evento" ou "editar_evento", confira se o horário colide com algum compromisso já listado (mesmo dia, horários que se sobrepõem). Se colidir, proponha a ação mesmo assim, mas avise o conflito em "reply" (dizendo com qual compromisso) — quem decide se mantém é a pessoa, não você.
-- No máximo ${MAX_ACOES} ações. Se o pedido exigir mais, faça as mais importantes e diga em "reply" o que ficou de fora.`
+- "acao": ela mesma precisa fazer algo. O título tem que ser a **menor ação física visível** — "Ligar para a escola sobre a vaga do João", não "Resolver escola". Se não dá para agir sem antes saber de outra coisa, a ação é descobrir essa coisa.
+- "aguardando": ela já pediu e depende de outra pessoa. Preencha "quem".
+- "agendar": tem dia e hora marcados, ou é algo que só pode acontecer num momento específico.
+- "algum_dia": faria sentido um dia, mas não agora e sem prazo.
+- "referencia": não pede ação nenhuma, é informação para guardar.
+- Prefira um contexto que já esteja na lista acima; só invente outro se nenhum servir.
+- NÃO invente nome de pessoa, data nem detalhe que não esteja no texto. Na dúvida, null.
+- O título mantém as palavras da pessoa sempre que der; você está deixando claro, não reescrevendo.`
 }
 
-// Nada aqui é confiável por vir de um modelo. Além de validar campo a campo
-// como as outras rotas, esta confere cada referência contra o conjunto que o
-// próprio prompt ofereceu: uma ação apontando para um item que não foi
-// mostrado é descartada, porque executá-la significaria mexer num compromisso
-// que ninguém escolheu.
-export function normalizeAgent(parsed, { refs = [] } = {}) {
-  const conhecidas = new Set(refs)
-  const reply = typeof parsed?.reply === 'string' ? parsed.reply.trim().slice(0, 400) : ''
-  const brutas = Array.isArray(parsed?.actions) ? parsed.actions.slice(0, MAX_ACOES) : []
+// Nada aqui é confiável por vir de um modelo — cada campo é validado antes de
+// virar botão na tela, do mesmo jeito que as outras rotas fazem.
+export function normalizeEsclarecer(parsed) {
+  const tipo = TIPOS_ESCLARECER.has(parsed?.tipo) ? parsed.tipo : null
+  const titulo = typeof parsed?.titulo === 'string' ? parsed.titulo.trim().slice(0, 300) : ''
+  const contextoBruto = typeof parsed?.contexto === 'string' ? parsed.contexto.trim() : ''
+  // Uma palavra só, sem acento nem espaço: é assim que o contexto é gravado
+  // na etiqueta da nota (ver etiqueta() em gtd.js).
+  const contexto =
+    contextoBruto
+      .normalize('NFD')
+      .replace(/\p{Diacritic}/gu, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 30) || null
 
-  let descartadas = 0
-  const actions = []
-  for (const bruta of brutas) {
-    const action = AGENT_ACTIONS.has(bruta?.action) ? bruta.action : null
-    if (!action) {
-      descartadas++
-      continue
-    }
-
-    const title = typeof bruta?.title === 'string' ? bruta.title.trim().slice(0, 300) : ''
-    const criar = action === 'criar_evento' || action === 'criar_tarefa'
-    if (criar && !title) {
-      descartadas++
-      continue
-    }
-
-    const ref = typeof bruta?.ref === 'string' ? bruta.ref.trim() : ''
-    if (!criar) {
-      const esperado = AGENT_REF_KIND[action]
-      if (!ref || !conhecidas.has(ref) || !ref.startsWith(esperado)) {
-        descartadas++
-        continue
-      }
-    }
-
-    const minutes = Number(bruta?.durationMinutes)
-    const durationMinutes = Number.isFinite(minutes) && minutes > 0 && minutes <= 12 * 60
-      ? Math.round(minutes)
-      : null
-
-    actions.push({
-      // O id é do servidor, nunca do modelo: é por ele que o cliente aprova
-      // uma ação específica, e um id repetido pelo modelo aprovaria a errada.
-      id: `a${actions.length + 1}`,
-      action,
-      ref: criar ? null : ref,
-      title,
-      date: /^\d{4}-\d{2}-\d{2}$/.test(bruta?.date || '') ? bruta.date : null,
-      time: /^([01]\d|2[0-3]):[0-5]\d$/.test(bruta?.time || '') ? bruta.time : null,
-      durationMinutes,
-      calendarId: typeof bruta?.calendarId === 'string' ? bruta.calendarId : null,
-      priority: PRIORITIES.has(bruta?.priority) ? bruta.priority : null,
-      presence: PRESENCES.has(bruta?.presence) ? bruta.presence : null,
-      resumo: typeof bruta?.resumo === 'string' ? bruta.resumo.trim().slice(0, 200) : '',
-    })
-  }
-
-  return { reply, actions, descartadas }
-}
-
-// As referências que o prompt realmente ofereceu. É contra esta lista que
-// normalizeAgent confere o que o modelo devolveu.
-function refsDoContexto(context) {
-  return [
-    ...(context?.eventos || []).map((e) => e?.ref),
-    ...(context?.tarefas || []).map((t) => t?.ref),
-  ].filter((r) => typeof r === 'string' && r)
-}
-
-function recortarContexto(context) {
   return {
-    calendars: Array.isArray(context?.calendars) ? context.calendars.slice(0, 20) : [],
-    eventos: Array.isArray(context?.eventos) ? context.eventos.slice(0, 60) : [],
-    tarefas: Array.isArray(context?.tarefas) ? context.tarefas.slice(0, 60) : [],
-    notas: Array.isArray(context?.notas) ? context.notas.slice(0, 30) : [],
+    tipo,
+    titulo,
+    contexto,
+    quem: tipo === 'aguardando' && typeof parsed?.quem === 'string' ? parsed.quem.trim().slice(0, 80) : null,
+    date: /^\d{4}-\d{2}-\d{2}$/.test(parsed?.date || '') ? parsed.date : null,
+    time: /^([01]\d|2[0-3]):[0-5]\d$/.test(parsed?.time || '') ? parsed.time : null,
   }
 }
 
-async function handleAgent(request, env) {
+async function handleEsclarecer(request, env) {
   const caller = await verifyCaller(request, env)
   if (!caller) return json({ error: 'Não autorizado.' }, 401)
 
@@ -307,21 +193,20 @@ async function handleAgent(request, env) {
     return json({ error: 'Corpo inválido.' }, 400)
   }
 
-  const text = typeof body?.text === 'string' ? body.text.trim() : ''
-  if (!text) return json({ error: 'Envie a mensagem.' }, 400)
-  if (text.length > 500) return json({ error: 'Texto longo demais.' }, 400)
+  const texto = typeof body?.texto === 'string' ? body.texto.trim() : ''
+  if (!texto) return json({ error: 'Envie o item.' }, 400)
+  if (texto.length > 500) return json({ error: 'Item longo demais.' }, 400)
 
-  const context = recortarContexto(body?.context)
-  const history = (Array.isArray(body?.history) ? body.history.slice(-12) : [])
-    .filter((m) => m && typeof m.text === 'string')
-    .map((m) => ({ role: m.role === 'user' ? 'user' : 'assistant', text: m.text.slice(0, 500) }))
+  const contextos = (Array.isArray(body?.contextos) ? body.contextos.slice(0, 20) : [])
+    .filter((c) => typeof c === 'string' && c.trim())
+    .map((c) => c.trim().slice(0, 30))
 
   try {
     const parsed = await callGemini(
       env,
-      buildAgentPrompt({ text, today: body.today, weekday: body.weekday, history, context })
+      buildEsclarecerPrompt({ texto, contextos, today: body.today, weekday: body.weekday })
     )
-    return json(normalizeAgent(parsed, { refs: refsDoContexto(context) }))
+    return json(normalizeEsclarecer(parsed))
   } catch (err) {
     return erroDeIA(err)
   }
@@ -428,8 +313,8 @@ function sanitizarNotas(notas, max) {
 }
 
 // As referências que uma resposta pode citar de verdade são só as que
-// realmente apareceram na lista mandada — o mesmo tipo de conferência que
-// normalizeAgent faz para evento/tarefa.
+// realmente apareceram na lista mandada. Aceitar uma referência inventada
+// levaria a pessoa para a anotação errada ao clicar.
 function refsValidas(brutas, notasCount) {
   const vistas = new Set()
   const validas = []
@@ -492,8 +377,8 @@ Regras:
 // `text` é o corpo original da anotação (não a frase curta que o modelo
 // escreveu) — é nele que extractContact procura telefone/e-mail de verdade.
 // `notasCount` é quantas outras anotações foram oferecidas no prompt: contra
-// esse número se confere "notaRelacionadaRef", do mesmo jeito que o agente
-// confere as referências de evento/tarefa em normalizeAgent.
+// esse número se confere "notaRelacionadaRef", para o modelo não apontar uma
+// anotação que nunca esteve na lista.
 export function normalizeAnalysis(parsed, { text: notaTexto = '', notasCount = 0 } = {}) {
   const title = typeof parsed?.title === 'string' ? parsed.title.trim().slice(0, 80) : ''
   const rawSuggestions = Array.isArray(parsed?.suggestions) ? parsed.suggestions.slice(0, 5) : []
@@ -634,9 +519,9 @@ export default {
       return handleAuth(request, env, url.pathname)
     }
 
-    if (url.pathname === '/api/agent') {
+    if (url.pathname === '/api/esclarecer') {
       if (request.method !== 'POST') return json({ error: 'Use POST.' }, 405)
-      return handleAgent(request, env)
+      return handleEsclarecer(request, env)
     }
 
     if (url.pathname === '/api/briefing') {

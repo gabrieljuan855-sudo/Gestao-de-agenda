@@ -5,7 +5,7 @@ import SuggestionCard from './SuggestionCard.jsx'
 import { toDateInput, fromInputs, dateOnlyFromISO } from '../lib/dates.js'
 import { PRIORITIES, DEFAULT_PRIORITY } from '../lib/priority.js'
 import { analyzeNoteWithAI } from '../lib/aiAnalyzeNote.js'
-import { APENAS_AGENTE_ATIVO } from '../lib/aiCooldown.js'
+import { IA_DESLIGADA } from '../lib/aiCooldown.js'
 
 // Uma tarefa é curta demais para valer a pena mandar para a IA (ex: só
 // "Ligar" sem mais nada) — mesmo piso usado nas anotações.
@@ -131,10 +131,10 @@ export default function TaskEditor({
           <textarea rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} />
         </label>
 
-        {/* Ver APENAS_AGENTE_ATIVO em aiCooldown.js — este botão escapava do
-            interruptor, e o teste de limite de cota acabava medindo duas
-            superfícies de IA em vez de uma. */}
-        {!APENAS_AGENTE_ATIVO && (
+        {/* Ver IA_DESLIGADA em aiCooldown.js: a chave geral da IA. Este botão
+            já escapou dela uma vez, e o app acabou gastando cota por um
+            caminho que ninguém achava que estava ligado. */}
+        {!IA_DESLIGADA && (
           <div style={{ marginBottom: 10 }}>
             <button type="button" onClick={handleAnalyze} disabled={analyzing || !podeAnalisar}>
               {analyzing ? 'Analisando...' : '✨ Analisar com IA'}
