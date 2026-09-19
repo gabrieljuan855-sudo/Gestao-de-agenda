@@ -38,12 +38,20 @@ export function temEntrada(taskLists) {
 // escrever a prioridade no começo da nota — `[alta] texto livre`. Aqui esse
 // mesmo bloco passa a carregar o resto: contexto e de quem se está esperando.
 //
-//     [alta @ligar ~ana desde:2026-09-10] texto livre da pessoa
+//     [alta @ligar ~ana desde:2026-09-10 min:15] texto livre da pessoa
 //
 // Continua uma linha legível no app oficial do Google Tasks, que é o ponto:
 // quem abrir a tarefa por lá entende o que está escrito, em vez de encontrar
 // um blob de JSON.
 const BLOCO_META = /^\[([^\]]*)\]\s*/
+
+// Só um número positivo faz sentido como estimativa de duração; qualquer
+// outra coisa (vazio, negativo, texto) é tratada como "sem estimativa" em vez
+// de travar a leitura da tarefa inteira.
+function normalizeDuracao(value) {
+  const n = Number(value)
+  return Number.isFinite(n) && n > 0 ? Math.round(n) : null
+}
 
 // Contexto e nome não podem ter espaço (o espaço separa as etiquetas) nem
 // acento (para "@ligação" e "@ligacao" não virarem dois contextos).
@@ -55,7 +63,7 @@ export function etiqueta(texto) {
 }
 
 export function parseMeta(notes) {
-  const vazio = { priority: null, contexto: null, projeto: null, aguardando: null, notes: '' }
+  const vazio = { priority: null, contexto: null, projeto: null, aguardando: null, duracao: null, notes: '' }
   if (!notes) return vazio
 
   const match = notes.match(BLOCO_META)
@@ -66,12 +74,14 @@ export function parseMeta(notes) {
   let projeto = null
   let quem = null
   let desde = null
+  let duracao = null
 
   for (const token of match[1].split(/\s+/).filter(Boolean)) {
     if (token.startsWith('@')) contexto = token.slice(1) || null
     else if (token.startsWith('#')) projeto = token.slice(1) || null
     else if (token.startsWith('~')) quem = token.slice(1) || null
     else if (token.startsWith('desde:')) desde = token.slice('desde:'.length) || null
+    else if (token.startsWith('min:')) duracao = normalizeDuracao(token.slice('min:'.length))
     // A prioridade é a única etiqueta sem marcador, por compatibilidade com
     // as notas que já existem gravadas como "[alta] ...".
     else if (!priority) priority = normalizePriority(token)
@@ -82,11 +92,12 @@ export function parseMeta(notes) {
     contexto,
     projeto,
     aguardando: quem ? { quem, desde } : null,
+    duracao,
     notes: notes.replace(BLOCO_META, ''),
   }
 }
 
-export function encodeMeta({ priority, contexto, projeto, aguardando } = {}, notes) {
+export function encodeMeta({ priority, contexto, projeto, aguardando, duracao } = {}, notes) {
   const partes = [normalizePriority(priority) || DEFAULT_PRIORITY]
   if (contexto) partes.push(`@${etiqueta(contexto)}`)
   if (projeto) partes.push(`#${etiqueta(projeto)}`)
@@ -96,6 +107,10 @@ export function encodeMeta({ priority, contexto, projeto, aguardando } = {}, not
     // dias" depois — sem ela, "Aguardando" vira um limbo sem prazo.
     if (aguardando.desde) partes.push(`desde:${aguardando.desde}`)
   }
+  const min = normalizeDuracao(duracao)
+  // A estimativa é o que permite a tela Agora responder "cabe no tempo que eu
+  // tenho agora?" sem chutar — sem ela toda tarefa vale para qualquer vão.
+  if (min) partes.push(`min:${min}`)
   return `[${partes.join(' ')}] ${notes || ''}`.trim()
 }
 

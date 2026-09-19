@@ -68,6 +68,7 @@ describe('parseMeta', () => {
       contexto: null,
       projeto: null,
       aguardando: null,
+      duracao: null,
       notes: 'ligar para a escola',
     })
   })
@@ -78,8 +79,18 @@ describe('parseMeta', () => {
       contexto: 'ligar',
       projeto: null,
       aguardando: { quem: 'ana', desde: '2026-09-10' },
+      duracao: null,
       notes: 'retorno do laudo',
     })
+  })
+
+  it('lê a estimativa de duração', () => {
+    expect(parseMeta('[alta @ligar min:15] ligar para a escola').duracao).toBe(15)
+  })
+
+  it('ignora uma estimativa inválida em vez de quebrar a leitura', () => {
+    expect(parseMeta('[alta min:abc] x').duracao).toBe(null)
+    expect(parseMeta('[alta min:-5] x').duracao).toBe(null)
   })
 
   it('aceita espera sem data', () => {
@@ -92,6 +103,7 @@ describe('parseMeta', () => {
       contexto: null,
       projeto: null,
       aguardando: null,
+      duracao: null,
       notes: 'só um texto solto',
     })
   })
@@ -102,7 +114,14 @@ describe('parseMeta', () => {
   })
 
   it('não quebra com nota vazia, bloco vazio ou etiqueta desconhecida', () => {
-    expect(parseMeta('')).toEqual({ priority: null, contexto: null, projeto: null, aguardando: null, notes: '' })
+    expect(parseMeta('')).toEqual({
+      priority: null,
+      contexto: null,
+      projeto: null,
+      aguardando: null,
+      duracao: null,
+      notes: '',
+    })
     expect(parseMeta(null).notes).toBe('')
     expect(parseMeta('[] x').notes).toBe('x')
     expect(parseMeta('[xpto @ligar] x')).toMatchObject({ priority: null, contexto: 'ligar' })
@@ -135,6 +154,7 @@ describe('encodeMeta', () => {
       contexto: 'computador',
       projeto: 'caso-silva',
       aguardando: { quem: 'joao', desde: '2026-01-05' },
+      duracao: 30,
     }
     const lido = parseMeta(encodeMeta(original, 'texto livre'))
     expect(lido).toEqual({ ...original, notes: 'texto livre' })
@@ -142,6 +162,10 @@ describe('encodeMeta', () => {
 
   it('guarda o projeto', () => {
     expect(encodeMeta({ priority: 'alta', projeto: 'Caso Silva' }, 'texto')).toBe('[alta #caso-silva] texto')
+  })
+
+  it('guarda a estimativa de duração', () => {
+    expect(encodeMeta({ priority: 'alta', duracao: 15 }, 'texto')).toBe('[alta min:15] texto')
   })
 
   it('não deixa a nota vazia virar espaço sobrando', () => {

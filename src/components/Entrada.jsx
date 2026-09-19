@@ -31,6 +31,7 @@ export default function Entrada({
   const [contexto, setContexto] = useState('')
   const [novoContexto, setNovoContexto] = useState('')
   const [projeto, setProjeto] = useState('')
+  const [duracao, setDuracao] = useState('')
   const [quem, setQuem] = useState('')
   const [data, setData] = useState('')
   const [hora, setHora] = useState('')
@@ -48,6 +49,7 @@ export default function Entrada({
     setContexto('')
     setNovoContexto('')
     setProjeto('')
+    setDuracao('')
     setQuem('')
     setData(item?.due ? toDateInput(new Date(item.due)) : '')
     setHora('')
@@ -188,13 +190,28 @@ export default function Entrada({
             <option key={p} value={p} />
           ))}
         </datalist>
+        {/* Opcional, e só para quem quer: sem estimativa a tarefa continua
+            aparecendo na tela Agora, só não entra no filtro por tempo livre. */}
+        <input
+          type="number"
+          min="1"
+          placeholder="quanto tempo leva? em minutos (opcional)"
+          value={duracao}
+          onChange={(e) => setDuracao(e.target.value)}
+          style={{ width: '100%', marginBottom: 8 }}
+        />
         <button
           type="button"
           className="primary"
           disabled={!podeArquivar}
           onClick={() =>
             executar(() =>
-              onProximaAcao(item, { titulo: tituloLimpo, contexto: contextoFinal || null, projeto: projeto.trim() || null })
+              onProximaAcao(item, {
+                titulo: tituloLimpo,
+                contexto: contextoFinal || null,
+                projeto: projeto.trim() || null,
+                duracao: duracao ? Number(duracao) : null,
+              })
             )
           }
         >
