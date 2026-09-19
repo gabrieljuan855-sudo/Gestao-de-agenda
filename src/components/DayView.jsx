@@ -94,7 +94,6 @@ export default function DayView({
   tasks = [],
   onSelectEvent,
   onSelectTask,
-  onCompleteTask,
   occupies = () => true,
   isInfo = () => false,
   asksPresence = () => false,
@@ -195,40 +194,30 @@ export default function DayView({
         </div>
       )}
 
+      {/* Uma linha por tarefa, sem botão: o painel de trabalho ao lado mostra
+          estas mesmas tarefas com as ações completas, e repetir o cartão
+          inteiro aqui só fazia o mesmo item aparecer duas vezes na mesma
+          tela, com dois conjuntos de botões diferentes. Aqui o papel é outro
+          — dizer o que vence neste dia, junto da linha do tempo dele. */}
       {tarefasDoDia.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
+        <div className="day-tarefas">
+          <div className="muted" style={{ fontSize: 'var(--label-sm)', marginBottom: 2 }}>vence neste dia</div>
           {tarefasDoDia.map((task) => {
             const atrasada = isOverdueTask(task)
             return (
-              <div
+              <button
                 key={task.id}
+                type="button"
+                className="day-tarefa"
                 onClick={() => onSelectTask && onSelectTask(task)}
-                className="day-event"
-                style={{
-                  borderLeft: `3px solid ${atrasada ? 'var(--urgent)' : 'var(--border-strong)'}`,
-                  background: 'var(--surface-2)',
-                  cursor: onSelectTask ? 'pointer' : 'default',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                }}
               >
-                <div>
-                  <div style={{ fontSize: 'var(--body-md)' }}>{task.title}</div>
-                  <span className={`pill ${task.priority}`}>{PRIORITY_LABEL[task.priority]}</span>
-                  {task.contexto && (
-                    <span className="muted" style={{ marginLeft: 8, fontSize: 'var(--label-sm)' }}>@{task.contexto}</span>
-                  )}
-                  {atrasada && (
-                    <span style={{ marginLeft: 8, fontSize: 'var(--label-sm)', color: 'var(--urgent)' }}>atrasada</span>
-                  )}
-                </div>
-                {onCompleteTask && (
-                  <button type="button" onClick={(e) => { e.stopPropagation(); onCompleteTask(task) }}>
-                    Concluir
-                  </button>
-                )}
-              </div>
+                <span className={`day-tarefa-marca${atrasada ? ' is-atrasada' : ''}`} aria-hidden="true" />
+                <span className="day-tarefa-titulo">{task.title}</span>
+                <span className="muted" style={{ fontSize: 'var(--label-sm)', flexShrink: 0 }}>
+                  {atrasada ? 'atrasada' : PRIORITY_LABEL[task.priority]}
+                  {task.contexto && ` · @${task.contexto}`}
+                </span>
+              </button>
             )
           })}
         </div>

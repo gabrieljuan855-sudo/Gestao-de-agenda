@@ -6,6 +6,20 @@ A tela roda no navegador e fala direto com as APIs do Google; o Worker que
 serve o site cuida apenas do login e da interpretação por IA, que precisam de
 segredos e por isso não podem ficar no navegador.
 
+## Como o app se organiza
+
+Duas colunas e um trilho. À esquerda, **a agenda** (dia, semana ou mês). À
+direita, **o painel de trabalho**, com quatro abas que são os quatro momentos
+do método: *Entrada* (o que chegou e ainda não foi decidido), *Próximas* (o
+que dá para fazer), *Aguardando* (o que depende de outra pessoa) e *Revisão*
+(o olhar de fim de semana). No trilho, só ferramenta de verdade: capturar,
+buscar, pomodoro e anotações.
+
+A divisão que sustenta isso: **a agenda informa, o painel age**. Uma tarefa
+que vence hoje aparece na visão de Dia como uma linha, para você saber que ela
+existe ali no meio dos compromissos — mas os botões dela ficam num lugar só,
+no painel ao lado.
+
 ## Funcionalidades
 
 - **Captura sem atrito**: um campo e Enter. O texto cai como está na lista
@@ -24,22 +38,18 @@ segredos e por isso não podem ficar no navegador.
   Sair da Entrada é o que marca o item como resolvido.
 - **Próximas ações**: a lista principal, filtrável por contexto, com o prazo
   visível e a atrasada destacada — quem vence antes sobe dentro da mesma
-  prioridade.
+  prioridade. Quando há um vão livre agora, ela também responde à pergunta de
+  engajamento do GTD: mostra quanto tempo sobra até o próximo compromisso,
+  deixa filtrar só o que cabe nesse tempo (pela estimativa de duração da
+  tarefa) e agendar ali mesmo um bloco no Calendar (*time-blocking*).
 - **Aguardando & Algum dia**: o que depende de outra pessoa (com quem e desde
   quando, destacado depois de uma semana de espera) e o que não é para agora,
-  cada um na sua tela, com um botão para reativar quando deixar de fazer
-  sentido esperar.
+  com um botão para reativar quando deixar de fazer sentido esperar.
 - **Projeto sem próxima ação**: um aviso quando alguma etiqueta de projeto
   (`#caso-silva`) não tem nenhuma tarefa em Próximas ações — o sinal clássico
   de um projeto que parou de andar sem ninguém perceber.
-- **Agora**: a pergunta de engajamento do GTD — dado o contexto e o tempo que
-  sobra até o próximo compromisso, qual é a melhor próxima ação disponível?
-  Filtra por contexto e (opcionalmente) só o que cabe no vão livre real, e
-  deixa agendar ali mesmo um bloco no Calendar para a tarefa escolhida
-  (*time-blocking*). O horário de trabalho que decide o que é "vão livre" é
-  configurável nesta tela, por dia da semana.
-- **Tarefas na visão de Dia**: o que vence hoje aparece direto na tela onde
-  você já está olhando o dia, não só na lista lateral.
+- **Horário de trabalho configurável** (no cabeçalho, junto de *Agendas*): é
+  ele que decide o que conta como vão livre, por dia da semana.
 - **Revisão semanal**: sob demanda (com um convite às sextas) — entrada vazia,
   atrasadas, paradas, projetos sem próxima ação, quem está esperando há mais
   de uma semana, o que foi concluído e quanto tempo de foco a semana teve.

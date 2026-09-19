@@ -41,7 +41,8 @@ import Notes from './components/Notes.jsx'
 import useNotes from './lib/useNotes.js'
 import Entrada from './components/Entrada.jsx'
 import Aguardando from './components/Aguardando.jsx'
-import Agora from './components/Agora.jsx'
+import Trabalho from './components/Trabalho.jsx'
+import HorarioTrabalho from './components/HorarioTrabalho.jsx'
 import { loadWorkSchedule } from './lib/schedule.js'
 import ShortcutsOverlay from './components/ShortcutsOverlay.jsx'
 import useAtalhos from './lib/useAtalhos.js'
@@ -354,6 +355,11 @@ export default function App() {
   // os atalhos de teclado também precisam abrir e fechar esses painéis.
   const [railAberto, setRailAberto] = useState(null)
   const [mostrandoAtalhos, setMostrandoAtalhos] = useState(false)
+  // Qual face do trabalho está aberta no painel lateral. Começa em Próximas
+  // porque é a pergunta do dia a dia ("o que eu faço agora"); a Entrada se
+  // anuncia sozinha pelo contador na aba quando tem algo esperando.
+  const [abaTrabalho, setAbaTrabalho] = useState('proximas')
+  const [editandoHorario, setEditandoHorario] = useState(false)
 
   function abrirOuFechar(id) {
     setRailAberto((atual) => (atual === id ? null : id))
@@ -361,7 +367,13 @@ export default function App() {
 
   useAtalhos({
     criar: () => abrirOuFechar('add'),
-    entrada: () => abrirOuFechar('entrada'),
+    // Entrada, Próximas, Aguardando e Revisão deixaram de ser painéis que
+    // abrem e fecham: são abas do painel que já está aberto, então a tecla
+    // seleciona em vez de alternar.
+    entrada: () => setAbaTrabalho('entrada'),
+    proximas: () => setAbaTrabalho('proximas'),
+    aguardando: () => setAbaTrabalho('aguardando'),
+    revisao: () => setAbaTrabalho('revisao'),
     notas: () => abrirOuFechar('notes'),
     buscar: () => abrirOuFechar('search'),
     pomodoro: () => abrirOuFechar('focus'),
@@ -718,81 +730,6 @@ export default function App() {
       ),
     },
     {
-      id: 'entrada',
-      label: 'Entrada',
-      icon: (
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M4 13h4l1.5 3h5L16 13h4" />
-          <path d="M4 13l2.5-7h11L20 13v5H4z" />
-        </svg>
-      ),
-      tecla: 'e',
-      // O painel é largo: esclarecer é a tela onde a pessoa lê, reescreve o
-      // título e escolhe entre seis caminhos — não cabe numa coluna estreita.
-      wide: true,
-      // O contador é o convite: uma Entrada com itens parados é o sinal de
-      // que há coisa não decidida, e é o único número do app que pede ação.
-      badge: itensDaEntrada.length,
-      // Sem onDone: processar vem em lote, um item puxando o próximo.
-      render: () => (
-        <Entrada
-          itens={itensDaEntrada}
-          contextos={contextosUsados}
-          projetos={projetosUsados}
-          onProximaAcao={handleProximaAcao}
-          onAguardando={handleAguardando}
-          onAgendar={handleAgendarDaEntrada}
-          onAlgumDia={handleAlgumDia}
-          onReferencia={handleReferencia}
-          onConcluir={handleCompleteTask}
-          onExcluir={handleExcluirTarefa}
-        />
-      ),
-    },
-    {
-      id: 'agora',
-      label: 'Agora',
-      icon: (
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-          <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-        </svg>
-      ),
-      // A pergunta que esta tela responde ("o que eu faço com o tempo que
-      // tenho agora?") é sobre o momento presente — largura de coluna normal
-      // basta, sem o "wide" que a Entrada e as Anotações precisam.
-      render: () => (
-        <Agora
-          tasks={tarefasEsclarecidas}
-          events={events}
-          occupies={occupies}
-          schedule={workSchedule}
-          onSchedule={handleWorkSchedule}
-          onFocus={handleFocusTask}
-          onAgendar={handleAgendarBloco}
-        />
-      ),
-    },
-    {
-      id: 'aguardando',
-      label: 'Aguardando',
-      icon: (
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="12" cy="12" r="9" />
-          <path d="M12 7v5l3.5 2" />
-        </svg>
-      ),
-      // Sem tecla própria: as letras de uma mão só já foram todas para as
-      // ferramentas de uso diário, e esta é a que menos se abre no dia a dia.
-      render: () => (
-        <Aguardando
-          aguardando={tarefasAguardando}
-          algumDia={tarefasAlgumDia}
-          onReativar={handleReativar}
-          onConcluir={handleCompleteTask}
-        />
-      ),
-    },
-    {
       id: 'search',
       label: 'Buscar',
       tecla: 'b',
@@ -846,15 +783,69 @@ export default function App() {
         />
       ),
     },
+  ]
+
+  // As quatro faces do mesmo material, no painel que fica sempre aberto ao
+  // lado da agenda. A ordem é a do método: o que chegou, o que fazer, o que
+  // espera alguém, e o olhar de fim de semana por cima de tudo.
+  const abasDoTrabalho = [
+    {
+      id: 'entrada',
+      label: 'Entrada',
+      // O contador é o convite: uma Entrada com itens parados é o sinal de
+      // que há coisa não decidida, e é o único número do app que pede ação.
+      badge: itensDaEntrada.length,
+      render: () => (
+        <Entrada
+          itens={itensDaEntrada}
+          contextos={contextosUsados}
+          projetos={projetosUsados}
+          onProximaAcao={handleProximaAcao}
+          onAguardando={handleAguardando}
+          onAgendar={handleAgendarDaEntrada}
+          onAlgumDia={handleAlgumDia}
+          onReferencia={handleReferencia}
+          onConcluir={handleCompleteTask}
+          onExcluir={handleExcluirTarefa}
+        />
+      ),
+    },
+    {
+      id: 'proximas',
+      label: 'Próximas',
+      render: () => (
+        <Backlog
+          tasks={tarefasEsclarecidas}
+          events={events}
+          occupies={occupies}
+          schedule={workSchedule}
+          focusEvents={focusEvents}
+          activeTaskId={activeTask?.id}
+          focusingTaskId={focoEmAndamento() ? activeTask?.id : null}
+          onFocus={handleFocusTask}
+          onComplete={handleCompleteTask}
+          onEdit={setEditingTask}
+          onAgendar={handleAgendarBloco}
+          showCompleted={showCompleted}
+          onToggleShowCompleted={setShowCompleted}
+        />
+      ),
+    },
+    {
+      id: 'aguardando',
+      label: 'Aguardando',
+      render: () => (
+        <Aguardando
+          aguardando={tarefasAguardando}
+          algumDia={tarefasAlgumDia}
+          onReativar={handleReativar}
+          onConcluir={handleCompleteTask}
+        />
+      ),
+    },
     {
       id: 'revisao',
       label: 'Revisão',
-      icon: (
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M9 11l3 3L22 4" />
-          <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
-        </svg>
-      ),
       render: () => (
         <Revisao
           numeros={revisao.numeros}
@@ -876,8 +867,12 @@ export default function App() {
             <div className="muted app-head-sub">Gestão de agenda</div>
           </div>
         </div>
+        {/* As duas configurações do app ficam juntas, no lugar onde se procura
+            por configuração — o botão de horário estava no meio da lista de
+            tarefas, competindo por atenção com o trabalho de verdade. */}
         <div style={{ display: 'flex', gap: 8 }}>
           <button onClick={() => setShowCalendarSettings(true)}>Agendas</button>
+          <button onClick={() => setEditandoHorario(true)}>Horário</button>
           <button onClick={signOut}>Sair</button>
         </div>
       </div>
@@ -900,7 +895,6 @@ export default function App() {
               tasks={tarefasEsclarecidas}
               onSelectEvent={setEditingEvent}
               onSelectTask={setEditingTask}
-              onCompleteTask={handleCompleteTask}
               occupies={occupies}
               declined={declined}
               isInfo={(e) => isInformational(e, calendarPrefs)}
@@ -936,17 +930,7 @@ export default function App() {
             />
           )}
         </div>
-        <Backlog
-          tasks={tarefasEsclarecidas}
-          focusEvents={focusEvents}
-          activeTaskId={activeTask?.id}
-          focusingTaskId={focoEmAndamento() ? activeTask?.id : null}
-          onFocus={handleFocusTask}
-          onComplete={handleCompleteTask}
-          onEdit={setEditingTask}
-          showCompleted={showCompleted}
-          onToggleShowCompleted={setShowCompleted}
-        />
+        <Trabalho abas={abasDoTrabalho} abaAtiva={abaTrabalho} onAbaChange={setAbaTrabalho} />
 
         <Rail tools={tools} openId={railAberto} onOpenChange={setRailAberto} />
       </div>
@@ -1005,13 +989,21 @@ export default function App() {
         </Banner>
       )}
 
-      {new Date().getDay() === 5 && !revisao.numeros && railAberto !== 'revisao' && (
-        <Banner tone="info" actionLabel="Ver revisão" onAction={() => abrirOuFechar('revisao')}>
+      {new Date().getDay() === 5 && !revisao.numeros && abaTrabalho !== 'revisao' && (
+        <Banner tone="info" actionLabel="Ver revisão" onAction={() => setAbaTrabalho('revisao')}>
           É sexta — bom momento para revisar a semana.
         </Banner>
       )}
 
       {loading && <p className="muted">Atualizando...</p>}
+
+      {editandoHorario && (
+        <HorarioTrabalho
+          schedule={workSchedule}
+          onChange={handleWorkSchedule}
+          onClose={() => setEditandoHorario(false)}
+        />
+      )}
 
       {showCalendarSettings && (
         <CalendarSettings
@@ -1039,10 +1031,8 @@ export default function App() {
           onReopen={handleReopenTask}
           onComplete={() => handleCompleteTask(editingTask)}
           onClose={() => setEditingTask(null)}
-          calendars={calendars}
-          taskLists={taskLists}
-          onCreateEvent={handleCreateEvent}
-          onCreateTask={handleCreateTask}
+          contextos={contextosUsados}
+          projetos={projetosUsados}
         />
       )}
 

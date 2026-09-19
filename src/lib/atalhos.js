@@ -6,7 +6,13 @@
 // abaixo; sem ela, digitar "casa" numa anotação abriria três painéis.
 export const ATALHOS = [
   { tecla: 'c', acao: 'criar', descricao: 'Capturar' },
+  // As quatro faces do painel de trabalho. Elas eram painéis do trilho, e
+  // três ficaram sem atalho porque as letras de uma mão só tinham acabado —
+  // sinal de que o trilho estava carregando o que não era ferramenta.
   { tecla: 'e', acao: 'entrada', descricao: 'Entrada (esclarecer)' },
+  { tecla: 't', acao: 'proximas', descricao: 'Próximas ações' },
+  { tecla: 'a', acao: 'aguardando', descricao: 'Aguardando' },
+  { tecla: 'r', acao: 'revisao', descricao: 'Revisão da semana' },
   { tecla: 'n', acao: 'notas', descricao: 'Anotações' },
   { tecla: 'b', acao: 'buscar', descricao: 'Buscar', alias: '/' },
   { tecla: 'p', acao: 'pomodoro', descricao: 'Pomodoro' },
@@ -22,6 +28,9 @@ export const ATALHOS = [
 const POR_TECLA = {
   c: 'criar',
   e: 'entrada',
+  t: 'proximas',
+  a: 'aguardando',
+  r: 'revisao',
   n: 'notas',
   b: 'buscar',
   '/': 'buscar',

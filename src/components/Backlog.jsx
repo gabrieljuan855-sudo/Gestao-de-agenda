@@ -1,8 +1,11 @@
 import { useState } from 'react'
 import { PRIORITY_LABEL, priorityFromListTitle } from '../lib/priority.js'
 import { combinedFocusStats } from '../lib/focusStats.js'
-import { formatDuration, dateOnlyFromISO } from '../lib/dates.js'
-import { daysSince, isOverdueTask, compararPorPrioridadeEPrazo } from '../lib/tasks.js'
+import { formatDuration, formatTime, dateOnlyFromISO } from '../lib/dates.js'
+import { daysSince, isOverdueTask } from '../lib/tasks.js'
+import { acoesParaAgora } from '../lib/agora.js'
+import { findFreeGaps } from '../lib/events.js'
+import { workBlocksFor } from '../lib/schedule.js'
 
 // Botão de ação da linha, só ícone — o rótulo continua existindo para
 // leitor de tela e para quem passa o mouse (title).
@@ -37,18 +40,33 @@ function CheckIcon() {
   )
 }
 
+function AgendarIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="5" width="18" height="16" rx="2" />
+      <line x1="3" y1="10" x2="21" y2="10" />
+      <line x1="12" y1="13" x2="12" y2="18" />
+      <line x1="9.5" y1="15.5" x2="14.5" y2="15.5" />
+    </svg>
+  )
+}
+
 function prazoLabel(due) {
   return dateOnlyFromISO(due).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })
 }
 
 export default function Backlog({
   tasks,
+  events = [],
+  occupies = () => true,
+  schedule,
   focusEvents = [],
   activeTaskId,
   focusingTaskId,
   onFocus,
   onComplete,
   onEdit,
+  onAgendar,
   showCompleted,
   onToggleShowCompleted,
 }) {
@@ -56,10 +74,30 @@ export default function Backlog({
   // tarefa nenhuma na lista seria um filtro que não filtra nada.
   const contextos = [...new Set(tasks.map((t) => t.contexto).filter(Boolean))].sort()
   const [filtro, setFiltro] = useState(null)
+  const [usarTempoLivre, setUsarTempoLivre] = useState(false)
 
-  const pending = tasks.filter((t) => t.status !== 'completed' && (!filtro || t.contexto === filtro))
+  // Quanto tempo livre existe agora, de verdade: o vão entre os compromissos
+  // de hoje, dentro do expediente. Isto era uma tela à parte ("Agora"), que
+  // no fim mostrava esta mesma lista com dois filtros a mais — uma lente,
+  // não um lugar.
+  const agora = new Date()
+  const vaoAgora =
+    findFreeGaps(events, agora, workBlocksFor(agora, schedule), { occupies }).find(
+      (g) => g.start <= agora && g.end > agora
+    ) || null
+  const minutosLivres = vaoAgora ? Math.round((vaoAgora.end - agora) / 60000) : null
+
+  // Sem vão livre não há filtro de tempo para oferecer. A versão anterior
+  // deixava o "só o que cabe agora" marcado mesmo assim, sem tempo nenhum
+  // para comparar: a tela dizia "sem vão livre hoje" e listava tudo do mesmo
+  // jeito, contradizendo a si mesma.
+  const filtrandoPorTempo = Boolean(vaoAgora) && usarTempoLivre
+
+  const sorted = acoesParaAgora(tasks, {
+    contexto: filtro,
+    minutosDisponiveis: filtrandoPorTempo ? minutosLivres : null,
+  })
   const completed = tasks.filter((t) => t.status === 'completed')
-  const sorted = [...pending].sort(compararPorPrioridadeEPrazo)
 
   function renderTask(task, { done = false } = {}) {
     const age = daysSince(task.updated)
@@ -127,6 +165,14 @@ export default function Backlog({
               <FocusIcon />
             </IconButton>
           )}
+          {!done && vaoAgora && onAgendar && (
+            <IconButton
+              label="Agendar neste vão livre"
+              onClick={(e) => { e.stopPropagation(); onAgendar(task, { start: new Date(), end: vaoAgora.end }) }}
+            >
+              <AgendarIcon />
+            </IconButton>
+          )}
           {!done && (
             <IconButton label="Concluir" onClick={(e) => { e.stopPropagation(); onComplete(task) }}>
               <CheckIcon />
@@ -138,21 +184,15 @@ export default function Backlog({
   }
 
   return (
-    <div className="card">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-        <div className="muted">Próximas ações</div>
-        <label className="muted" style={{ fontSize: 'var(--label-md)', display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
-          <input
-            type="checkbox"
-            checked={showCompleted}
-            onChange={(e) => onToggleShowCompleted(e.target.checked)}
-          />
-          Mostrar concluídas
-        </label>
-      </div>
+    <div>
+      {vaoAgora && (
+        <div className="muted" style={{ fontSize: 'var(--label-md)', marginBottom: 8 }}>
+          Livre agora até {formatTime(vaoAgora.end)} · {formatDuration(minutosLivres)}
+        </div>
+      )}
 
       {contextos.length > 0 && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
           {contextos.map((c) => (
             <button
               key={c}
@@ -165,6 +205,23 @@ export default function Backlog({
           ))}
         </div>
       )}
+
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, marginBottom: 10 }}>
+        {vaoAgora && (
+          <label className="muted" style={{ fontSize: 'var(--label-md)', display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
+            <input type="checkbox" checked={usarTempoLivre} onChange={(e) => setUsarTempoLivre(e.target.checked)} />
+            Só o que cabe nesse tempo
+          </label>
+        )}
+        <label className="muted" style={{ fontSize: 'var(--label-md)', display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
+          <input
+            type="checkbox"
+            checked={showCompleted}
+            onChange={(e) => onToggleShowCompleted(e.target.checked)}
+          />
+          Mostrar concluídas
+        </label>
+      </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {sorted.length === 0 && (
