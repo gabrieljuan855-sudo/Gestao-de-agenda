@@ -386,14 +386,15 @@ textarea:focus-visible,
 }
 
 /* Chip de seleção: aqui o uso é o do MD3 mesmo — escolher um valor entre
-   vários —, diferente de navegar, que é trabalho de aba ou de botão. */
-.entrada-contextos .pill {
+   vários —, diferente de navegar, que é trabalho de aba ou de botão. Usado
+   nos contextos da Entrada e no filtro de contexto das Próximas ações. */
+.pill-filtro {
   cursor: pointer;
   border: 1px solid transparent;
   background: var(--surface-variant);
   color: var(--on-surface-variant);
 }
-.entrada-contextos .pill.is-escolhido {
+.pill-filtro.is-escolhido {
   border-color: var(--primary);
   background: var(--primary-container);
   color: var(--on-primary-container);
@@ -402,6 +403,22 @@ textarea:focus-visible,
 .entrada-contexto-novo {
   flex: 1;
   min-width: 120px;
+}
+
+.aguardando-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.aguardando-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--shape-sm);
 }
 
 .entrada-outros {

@@ -17,6 +17,7 @@ import { IA_DESLIGADA } from '../lib/aiCooldown.js'
 export default function Entrada({
   itens = [],
   contextos = [],
+  projetos = [],
   onProximaAcao,
   onAguardando,
   onAgendar,
@@ -29,6 +30,7 @@ export default function Entrada({
   const [titulo, setTitulo] = useState('')
   const [contexto, setContexto] = useState('')
   const [novoContexto, setNovoContexto] = useState('')
+  const [projeto, setProjeto] = useState('')
   const [quem, setQuem] = useState('')
   const [data, setData] = useState('')
   const [hora, setHora] = useState('')
@@ -45,6 +47,7 @@ export default function Entrada({
     setTitulo(item?.title || '')
     setContexto('')
     setNovoContexto('')
+    setProjeto('')
     setQuem('')
     setData(item?.due ? toDateInput(new Date(item.due)) : '')
     setHora('')
@@ -152,7 +155,7 @@ export default function Entrada({
             <button
               key={c}
               type="button"
-              className={`pill${contexto === c && !novoContexto.trim() ? ' is-escolhido' : ''}`}
+              className={`pill-filtro${contexto === c && !novoContexto.trim() ? ' is-escolhido' : ''}`}
               onClick={() => {
                 setContexto(contexto === c ? '' : c)
                 setNovoContexto('')
@@ -169,11 +172,31 @@ export default function Entrada({
             className="entrada-contexto-novo"
           />
         </div>
+        {/* Um projeto é só a mesma etiqueta repetida em mais de uma tarefa —
+            texto livre, não um cadastro à parte. Datalist sugere os que já
+            existem sem impedir criar um novo digitando. */}
+        <input
+          type="text"
+          placeholder="parte de um projeto? (opcional)"
+          value={projeto}
+          onChange={(e) => setProjeto(e.target.value)}
+          list="entrada-projetos"
+          style={{ width: '100%', marginBottom: 8 }}
+        />
+        <datalist id="entrada-projetos">
+          {projetos.map((p) => (
+            <option key={p} value={p} />
+          ))}
+        </datalist>
         <button
           type="button"
           className="primary"
           disabled={!podeArquivar}
-          onClick={() => executar(() => onProximaAcao(item, { titulo: tituloLimpo, contexto: contextoFinal || null }))}
+          onClick={() =>
+            executar(() =>
+              onProximaAcao(item, { titulo: tituloLimpo, contexto: contextoFinal || null, projeto: projeto.trim() || null })
+            )
+          }
         >
           É a próxima ação
         </button>
