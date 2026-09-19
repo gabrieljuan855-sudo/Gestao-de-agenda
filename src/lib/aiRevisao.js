@@ -1,9 +1,10 @@
 import { ensureToken } from './googleAuth.js'
 import { pausarIA } from './aiCooldown.js'
 
-// Manda um resumo já enxuto dos dados (nunca a lista completa e crua de
-// eventos/tarefas) para o Worker escrever o texto do briefing com o Gemini.
-export async function fetchBriefingFromAI(kind, context) {
+// Manda os números já calculados da semana (nunca a lista crua de eventos ou
+// tarefas) para o Worker escrever um comentário curto com o Gemini — a única
+// chamada de IA da revisão inteira, e só quando a pessoa pede.
+export async function fetchComentarioDaRevisao(context) {
   const token = await ensureToken()
   if (!token) throw new Error('Faça login primeiro.')
 
@@ -15,7 +16,6 @@ export async function fetchBriefingFromAI(kind, context) {
       Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify({
-      kind,
       context,
       today: now.toLocaleDateString('pt-BR'),
       weekday: now.toLocaleDateString('pt-BR', { weekday: 'long' }),
@@ -24,10 +24,7 @@ export async function fetchBriefingFromAI(kind, context) {
 
   const data = await res.json().catch(() => ({}))
   if (!res.ok) {
-    const err = new Error(data.error || `Falha ao gerar o briefing (${res.status}).`)
-    // Sobrecarga do Gemini é passageira, e a varredura tenta de novo sozinha
-    // enquanto a janela do horário não fecha. Quem trata o erro usa isto para
-    // não alarmar à toa (ver useBriefing.js).
+    const err = new Error(data.error || `Falha ao gerar a revisão (${res.status}).`)
     err.transiente = data.transiente === true
     pausarIA(data.motivo)
     throw err

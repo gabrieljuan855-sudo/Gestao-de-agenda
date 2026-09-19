@@ -2,10 +2,10 @@
 //
 // Ele continua servindo o site estático como antes; as rotas próprias usam
 // o Gemini para interpretar texto em português: POST /api/esclarecer (lê um
-// item da Entrada e propõe o que ele é), POST /api/briefing (resumo
-// automático do dia/semana), POST /api/analyze-note (sugestões a partir de
-// uma anotação) e POST /api/search-notes (responde uma pergunta usando as
-// anotações existentes).
+// item da Entrada e propõe o que ele é), POST /api/briefing (comenta os
+// números já calculados da revisão semanal, sob pedido), POST
+// /api/analyze-note (sugestões a partir de uma anotação) e POST
+// /api/search-notes (responde uma pergunta usando as anotações existentes).
 // A chave do Gemini fica como segredo do Cloudflare e nunca chega ao
 // navegador — é justamente por isso que essa parte roda no servidor.
 
@@ -212,34 +212,29 @@ async function handleEsclarecer(request, env) {
   }
 }
 
-const BRIEFING_KINDS = new Set(['dia_manha', 'dia_tarde', 'dia_recap', 'semana_inicio', 'semana_fim'])
+// Antes eram 5 tipos (manhã, tarde, recap, início e fim de semana), gerados
+// sozinhos 3x por dia. Um chat-agente ou um resumo automático que ninguém
+// pediu concorre com o que já é grátis e instantâneo (ver a análise que
+// tirou o agente na Fase 2) — e aqui a IA nem precisava contar nada: os
+// números (atrasada, parada, projeto sem próxima ação...) já saem certos do
+// próprio app, sem chutar. O que sobra para a IA é só comentar por cima
+// deles, uma vez por semana, sob pedido.
+function buildRevisaoPrompt({ today, weekday, context }) {
+  return `Escreva um comentário curto para a revisão semanal de alguém que trabalha com atendimento social/administrativo, em português do Brasil.
 
-const BRIEFING_INTRO = {
-  dia_manha: 'Escreva um briefing curto para o início do dia de alguém que trabalha com atendimento social/administrativo, olhando para os compromissos e tarefas de hoje.',
-  dia_tarde: 'Escreva um briefing curto para o início da tarde, olhando para o que ainda falta hoje (o que já passou da manhã não precisa ser repetido).',
-  dia_recap: 'Escreva um resumo curto do que essa pessoa fez ao longo do dia (tarefas concluídas, blocos de foco, compromissos).',
-  semana_inicio: 'Escreva um briefing curto do que está previsto para a semana inteira que está começando.',
-  semana_fim: 'Escreva um resumo curto (vai acompanhar um painel com números) do que aconteceu ao longo da semana que está terminando.',
-}
+Hoje é ${weekday}, ${today}. Fuso: America/Sao_Paulo.
 
-function buildBriefingPrompt({ kind, today, weekday, context }) {
-  const intro = BRIEFING_INTRO[kind] || BRIEFING_INTRO.dia_manha
-  return `${intro}
-
-Hoje é ${weekday}, ${today}. Fuso: America/Sao_Paulo. Em português do Brasil.
-
-Dados (JSON, já resumidos):
+Os números da semana já foram calculados sem você — não invente nem repita todos, comente o que mais importa:
 ${JSON.stringify(context ?? {})}
 
 Responda SOMENTE com JSON, sem comentários, neste formato:
-{ "text": "o briefing, em até 60 palavras" }
+{ "text": "o comentário, em até 60 palavras" }
 
 Regras:
 - Tom direto e acolhedor, não robótico.
-- Sem saudação ("bom dia", "boa tarde" etc.) — isso já aparece em outro lugar da tela.
-- Resuma, não liste item a item como uma agenda — quem quiser o detalhe abre a tela normal.
-- Se os dados trouxerem minutos ou blocos de foco (tempo de trabalho concentrado, sem interrupção), comente isso brevemente — é um número que a pessoa não vê em nenhum outro lugar do app.
-- Se os dados vierem vazios ou sem nada relevante, diga isso em uma frase curta, sem inventar compromisso ou tarefa nenhuma.`
+- Não liste os números um por um como uma tabela — a tela já mostra todos; comente o que se destaca (o que está parado, o que envelheceu esperando, o que foi bem na semana).
+- Se os números forem todos bons (nada atrasado, nada parado, nada esperando há muito), diga isso — não precisa inventar um problema para comentar.
+- Não invente compromisso, tarefa ou projeto que não esteja nos números.`
 }
 
 // Nada aqui é confiável por vir de um modelo — o texto é validado e cortado
@@ -264,13 +259,10 @@ async function handleBriefing(request, env) {
     return json({ error: 'Corpo inválido.' }, 400)
   }
 
-  const kind = BRIEFING_KINDS.has(body?.kind) ? body.kind : null
-  if (!kind) return json({ error: 'Tipo de briefing inválido.' }, 400)
-
   try {
     const parsed = await callGemini(
       env,
-      buildBriefingPrompt({ kind, today: body.today, weekday: body.weekday, context: body.context })
+      buildRevisaoPrompt({ today: body.today, weekday: body.weekday, context: body.context })
     )
     return json(normalizeBriefing(parsed))
   } catch (err) {

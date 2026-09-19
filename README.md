@@ -40,6 +40,12 @@ segredos e por isso não podem ficar no navegador.
   configurável nesta tela, por dia da semana.
 - **Tarefas na visão de Dia**: o que vence hoje aparece direto na tela onde
   você já está olhando o dia, não só na lista lateral.
+- **Revisão semanal**: sob demanda (com um convite às sextas) — entrada vazia,
+  atrasadas, paradas, projetos sem próxima ação, quem está esperando há mais
+  de uma semana, o que foi concluído e quanto tempo de foco a semana teve.
+  Todos os números saem calculados sem IA nenhuma; a única chamada de IA da
+  tela é um comentário de até 60 palavras por cima deles, uma vez por revisão.
+  Substitui os 3 briefings automáticos por dia que o app tinha antes.
 - **Cronômetro de foco (Pomodoro 25/5)**: ao focar numa tarefa, o app cria
   automaticamente um evento real no Calendar com o tempo gasto.
 - **Visões de dia, semana e mês**: dia mostra a linha do tempo; semana mostra

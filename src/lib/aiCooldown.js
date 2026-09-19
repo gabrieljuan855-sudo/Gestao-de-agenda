@@ -1,16 +1,17 @@
 // O freio de cota da IA.
 //
-// O app chama o Gemini sozinho, sem a pessoa pedir, num único lugar: os
-// briefings por horário (useBriefing.js). Eles tentam de novo quando falham —
-// e essa era a armadilha: quando a falha É o limite de uso estourado,
-// insistir de 5 em 5 minutos só queima mais cota e mantém o limite estourado.
-// O app comia a própria cota sem ninguém estar usando ele.
+// Nasceu para um tempo em que o app chamava o Gemini sozinho, sem a pessoa
+// pedir: os briefings por horário, 3x por dia. Eles tentavam de novo quando
+// falhavam — e essa era a armadilha: quando a falha É o limite de uso
+// estourado, insistir de 5 em 5 minutos só queima mais cota e mantém o
+// limite estourado. O app comia a própria cota sem ninguém estar usando ele.
 //
-// Então, quando o Google diz que o limite acabou, o briefing automático para
-// de tentar por um tempo. O que a pessoa pede na hora (o agente, analisar uma
-// anotação que ela acabou de escrever, buscar nas anotações) continua
-// passando: se falhar, ela vê a mensagem e decide se tenta de novo — quem
-// está esperando na frente da tela sabe o que quer.
+// O briefing automático não existe mais (virou a revisão semanal sob
+// demanda, ver useRevisao.js) — mas o freio continua valendo para qualquer
+// chamada futura que rode sozinha, sem a pessoa pedir. O que a pessoa pede na
+// hora (esclarecer um item, analisar uma anotação, buscar, a revisão) não
+// passa por aqui: se falhar, ela vê a mensagem e decide se tenta de novo —
+// quem está esperando na frente da tela sabe o que quer.
 const CHAVE = 'gestao-agenda:ia-pausada-ate'
 
 // A chave geral da IA: com `true`, nada neste app chama o Gemini.
@@ -61,15 +62,5 @@ export function pausarIA(motivo) {
   } catch {
     // Sem localStorage o freio não existe — pior caso é o comportamento
     // antigo, nunca uma tela travada.
-  }
-}
-
-// Quem chama é só o que roda sozinho (briefing e varredura). O que a pessoa
-// pediu na hora não passa por aqui.
-export function iaEmPausa() {
-  try {
-    return pausaAtiva(localStorage.getItem(CHAVE))
-  } catch {
-    return false
   }
 }
