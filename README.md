@@ -1,10 +1,11 @@
-# Gestão de agenda
+# Segundo Cérebro
 
-Site pessoal para gerenciar demandas, tarefas e compromissos usando o **Google
-Calendar** e o **Google Tasks** como base de dados — sem banco de dados próprio.
-A tela roda no navegador e fala direto com as APIs do Google; o Worker que
-serve o site cuida apenas do login e da interpretação por IA, que precisam de
-segredos e por isso não podem ficar no navegador.
+Site pessoal para capturar, organizar e revisar demandas, tarefas e
+compromissos pelo método GTD, usando o **Google Calendar** e o **Google
+Tasks** como base de dados — sem banco de dados próprio. A tela roda no
+navegador e fala direto com as APIs do Google; o Worker que serve o site
+cuida apenas do login e da interpretação por IA, que precisam de segredos e
+por isso não podem ficar no navegador.
 
 ## Como o app se organiza
 

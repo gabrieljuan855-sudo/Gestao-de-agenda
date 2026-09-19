@@ -25,7 +25,7 @@ export function ehRegistroDeConclusao(event) {
 export function montarEventoDeConclusao(task, quando = new Date()) {
   const titulo = (task?.title || '').trim() || '(sem título)'
   const prioridade = PRIORITY_LABEL[task?.priority]
-  const partes = ['Concluída pelo Gestão de Agenda.']
+  const partes = ['Concluída pelo Segundo Cérebro.']
   if (prioridade) partes.push(`Prioridade: ${prioridade}.`)
   if (task?.tasklistTitle) partes.push(`Lista: ${task.tasklistTitle}.`)
 

@@ -1,7 +1,7 @@
 {
-  "name": "Gestão de Agenda",
-  "short_name": "Agenda",
-  "description": "Sua agenda e suas tarefas do Google em uma tela só, com pomodoro e anotações.",
+  "name": "Segundo Cérebro",
+  "short_name": "2º Cérebro",
+  "description": "Sua agenda e suas tarefas do Google em uma tela só, organizadas pelo método GTD, com pomodoro e anotações.",
   "lang": "pt-BR",
   "start_url": "/",
   "display": "standalone",

@@ -1,4 +1,4 @@
-// Worker do Gestão de Agenda.
+// Worker do Segundo Cérebro.
 //
 // Ele continua servindo o site estático como antes; as rotas próprias usam
 // o Gemini para interpretar texto em português: POST /api/esclarecer (lê um

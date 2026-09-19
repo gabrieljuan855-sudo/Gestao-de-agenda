@@ -643,7 +643,7 @@ export default function App() {
       <div className="app-shell">
         <div className="card" style={{ textAlign: 'center' }}>
           <Logo size={72} />
-          <h2 style={{ marginTop: 12 }}>Gestão de agenda</h2>
+          <h2 style={{ marginTop: 12 }}>Segundo Cérebro</h2>
           <p className="muted">Conecte sua conta Google para ver sua agenda e tarefas.</p>
           {loginError && (
             <Banner tone="error">
@@ -864,7 +864,7 @@ export default function App() {
           <Logo size={30} />
           <div>
             <h2>{greeting()}</h2>
-            <div className="muted app-head-sub">Gestão de agenda</div>
+            <div className="muted app-head-sub">Segundo Cérebro</div>
           </div>
         </div>
         {/* As duas configurações do app ficam juntas, no lugar onde se procura

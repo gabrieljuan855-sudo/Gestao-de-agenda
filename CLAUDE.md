@@ -1,7 +1,8 @@
-# Gestão de Agenda
+# Segundo Cérebro
 
-App pessoal de agenda e tarefas, ligado ao Google Calendar e ao Google Tasks,
-com anotações sincronizadas pelo Drive e recursos de IA pelo Gemini.
+App pessoal de agenda e tarefas organizado pelo método GTD, ligado ao Google
+Calendar e ao Google Tasks, com anotações sincronizadas pelo Drive e recursos
+de IA pelo Gemini.
 
 ## Como trabalhar aqui
 
