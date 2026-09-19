@@ -19,10 +19,19 @@ segredos e por isso não podem ficar no navegador.
 - **Esclarecer a Entrada**: uma tela que mostra um item de cada vez e pergunta
   o que ele é. Você reescreve o título como uma ação de verdade ("Ligar para a
   escola sobre a vaga do João") e escolhe o destino: próxima ação (com
-  contexto: `@ligar`, `@computador`...), aguardando alguém, agendar, algum dia,
-  referência ou lixo. Sair da Entrada é o que marca o item como resolvido.
-- **Backlog priorizado**: tarefas organizadas por urgente / importante / pode
-  esperar, com aviso quando uma tarefa fica muito tempo parada.
+  contexto: `@ligar`, `@computador`... e, se fizer parte de um projeto, a
+  etiqueta dele), aguardando alguém, agendar, algum dia, referência ou lixo.
+  Sair da Entrada é o que marca o item como resolvido.
+- **Próximas ações**: a lista principal, filtrável por contexto, com o prazo
+  visível e a atrasada destacada — quem vence antes sobe dentro da mesma
+  prioridade.
+- **Aguardando & Algum dia**: o que depende de outra pessoa (com quem e desde
+  quando, destacado depois de uma semana de espera) e o que não é para agora,
+  cada um na sua tela, com um botão para reativar quando deixar de fazer
+  sentido esperar.
+- **Projeto sem próxima ação**: um aviso quando alguma etiqueta de projeto
+  (`#caso-silva`) não tem nenhuma tarefa em Próximas ações — o sinal clássico
+  de um projeto que parou de andar sem ninguém perceber.
 - **Cronômetro de foco (Pomodoro 25/5)**: ao focar numa tarefa, o app cria
   automaticamente um evento real no Calendar com o tempo gasto.
 - **Visões de dia, semana e mês**: dia mostra a linha do tempo; semana mostra
@@ -177,13 +186,18 @@ Tasks não tem campo livre para metadado (os eventos do Calendar têm; as
 tarefas, não):
 
 ```
-[alta @ligar ~ana desde:2026-09-10] texto livre da nota
+[alta @ligar #caso-silva ~ana desde:2026-09-10] texto livre da nota
 ```
 
-Prioridade sem marcador, contexto com `@`, de quem se espera com `~` e desde
-quando com `desde:`. Continua uma linha legível no app do Google Tasks — é o
-motivo de não ser JSON. As notas antigas, que só tinham `[urgente]`, seguem
-sendo lidas normalmente.
+Prioridade sem marcador, contexto com `@`, projeto com `#`, de quem se espera
+com `~` e desde quando com `desde:`. Continua uma linha legível no app do
+Google Tasks — é o motivo de não ser JSON. As notas antigas, que só tinham
+`[urgente]`, seguem sendo lidas normalmente.
+
+**Projeto não é um cadastro à parte** — é só a mesma etiqueta `#projeto`
+repetida em mais de uma tarefa. O app não guarda "projetos" em lugar nenhum;
+ele só conta quantas tarefas cada etiqueta tem em Próximas ações, e avisa
+quando esse número cai a zero.
 
 ## Próximos passos sugeridos
 

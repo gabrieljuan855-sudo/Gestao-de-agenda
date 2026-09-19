@@ -351,6 +351,7 @@ export async function listTasks({ tasklistId = '@default', tasklistTitle = '', s
       ...t,
       priority: meta.priority || fromList || DEFAULT_PRIORITY,
       contexto: meta.contexto,
+      projeto: meta.projeto,
       aguardando: meta.aguardando,
       notesClean: meta.notes,
       tasklistId,
@@ -381,6 +382,7 @@ export async function createTask({
   due,
   notes = '',
   contexto = null,
+  projeto = null,
   aguardando = null,
   tasklistId = '@default',
 }) {
@@ -388,7 +390,7 @@ export async function createTask({
     method: 'POST',
     body: JSON.stringify({
       title,
-      notes: encodeMeta({ priority, contexto, aguardando }, notes),
+      notes: encodeMeta({ priority, contexto, projeto, aguardando }, notes),
       due: due ? due.toISOString() : undefined,
     }),
   })
@@ -401,21 +403,32 @@ export async function completeTask(taskId, tasklistId = '@default') {
   })
 }
 
-export async function updateTask(task, { title, due, priority, notes, contexto, aguardando }) {
+export async function updateTask(task, { title, due, priority, notes, contexto, projeto, aguardando }) {
   const body = {}
   if (title !== undefined) body.title = title
   // O Google Tasks guarda só a data do prazo; a hora é ignorada pela API.
   if (due !== undefined) body.due = due ? due.toISOString() : null
-  if (priority !== undefined || notes !== undefined || contexto !== undefined || aguardando !== undefined) {
+  if (
+    priority !== undefined ||
+    notes !== undefined ||
+    contexto !== undefined ||
+    projeto !== undefined ||
+    aguardando !== undefined
+  ) {
     // O bloco é reescrito inteiro, então o que não veio no patch precisa vir
-    // da tarefa — senão mudar só a prioridade apagaria o contexto.
+    // da tarefa — senão mudar só a prioridade apagaria o contexto. `??`
+    // não serve aqui: ele trata `null` (a forma de *apagar* um campo, como
+    // "não está mais esperando ninguém") igual a `undefined` (a forma de
+    // "não mexi nisso"), e um reativar que manda `aguardando: null` para
+    // encerrar a espera veria o valor antigo voltar sozinho.
     body.notes = encodeMeta(
       {
-        priority: priority ?? task.priority,
-        contexto: contexto ?? task.contexto,
-        aguardando: aguardando ?? task.aguardando,
+        priority: priority !== undefined ? priority : task.priority,
+        contexto: contexto !== undefined ? contexto : task.contexto,
+        projeto: projeto !== undefined ? projeto : task.projeto,
+        aguardando: aguardando !== undefined ? aguardando : task.aguardando,
       },
-      notes ?? task.notesClean
+      notes !== undefined ? notes : task.notesClean
     )
   }
 
@@ -467,13 +480,16 @@ export async function moverTarefa(task, tasklistDestinoId, patch = {}) {
     // patch abaixo, um erro depois de a tarefa já ter mudado de lista faria
     // o plano B criar uma cópia — e a pessoa ficaria com a coisa duplicada.
     console.warn('Endpoint de mover não atendeu, recriando no destino:', err.message)
+    // `!== undefined`, não `??`: um patch que manda `aguardando: null` está
+    // encerrando a espera de propósito, e `??` devolveria o valor antigo.
     const nova = await createTask({
-      title: patch.title ?? task.title,
-      priority: patch.priority ?? task.priority,
+      title: patch.title !== undefined ? patch.title : task.title,
+      priority: patch.priority !== undefined ? patch.priority : task.priority,
       due: patch.due !== undefined ? patch.due : task.due ? new Date(task.due) : null,
-      notes: patch.notes ?? task.notesClean,
-      contexto: patch.contexto ?? task.contexto,
-      aguardando: patch.aguardando ?? task.aguardando,
+      notes: patch.notes !== undefined ? patch.notes : task.notesClean,
+      contexto: patch.contexto !== undefined ? patch.contexto : task.contexto,
+      projeto: patch.projeto !== undefined ? patch.projeto : task.projeto,
+      aguardando: patch.aguardando !== undefined ? patch.aguardando : task.aguardando,
       tasklistId: tasklistDestinoId,
     })
     await deleteTask(task)

@@ -25,6 +25,7 @@ import {
   LISTA_ALGUM_DIA,
   LISTAS_GTD,
   acharLista,
+  projetosSemProximaAcao,
 } from './lib/gtd.js'
 import { enfileirar, descarregar, quantasPendentes } from './lib/outbox.js'
 import { rangeForView, shiftReference, isSameDay, toDateInput } from './lib/dates.js'
@@ -39,6 +40,7 @@ import Backlog from './components/Backlog.jsx'
 import Notes from './components/Notes.jsx'
 import useNotes from './lib/useNotes.js'
 import Entrada from './components/Entrada.jsx'
+import Aguardando from './components/Aguardando.jsx'
 import ShortcutsOverlay from './components/ShortcutsOverlay.jsx'
 import useAtalhos from './lib/useAtalhos.js'
 import { montarEventoDeConclusao } from './lib/taskDoneEvent.js'
@@ -472,8 +474,17 @@ export default function App() {
     await reload()
   }
 
-  function handleProximaAcao(item, { titulo, contexto }) {
-    return moverEsclarecido(item, LISTA_PROXIMAS, { title: titulo, contexto })
+  function handleProximaAcao(item, { titulo, contexto, projeto }) {
+    return moverEsclarecido(item, LISTA_PROXIMAS, { title: titulo, contexto, projeto })
+  }
+
+  // Aguardando e Algum dia mandando de volta para o jogo: mesma lista de
+  // sempre, só que no sentido contrário. Contexto e projeto continuam
+  // valendo — reativar não é recomeçar do zero —, mas a espera (quem, desde
+  // quando) precisa sumir explicitamente: sem isso a tarefa voltaria para
+  // Próximas ações carregando uma etiqueta "~ana" que não faz mais sentido lá.
+  function handleReativar(task) {
+    return moverEsclarecido(task, LISTA_PROXIMAS, { aguardando: null })
   }
 
   function handleAguardando(item, { titulo, quem }) {
@@ -606,14 +617,31 @@ export default function App() {
   const naEntrada = (t) => Boolean(entradaId) && t.tasklistId === entradaId
   const itensDaEntrada = tasks.filter((t) => t.status !== 'completed' && naEntrada(t))
 
-  // A lista de tarefas mostra o que já foi decidido. O que ainda está cru tem
-  // tela e contador próprios — deixar os dois juntos devolveria exatamente o
-  // amontoado que a Entrada existe para desfazer.
-  const tarefasEsclarecidas = tasks.filter((t) => !naEntrada(t))
+  const idAguardando = idDaLista(LISTA_AGUARDANDO)
+  const idAlgumDia = idDaLista(LISTA_ALGUM_DIA)
+  const idProximas = idDaLista(LISTA_PROXIMAS)
+  const naAguardando = (t) => Boolean(idAguardando) && t.tasklistId === idAguardando
+  const noAlgumDia = (t) => Boolean(idAlgumDia) && t.tasklistId === idAlgumDia
 
-  // Os contextos que a pessoa já usa viram os botões da tela de esclarecer,
-  // em vez de uma lista inventada por mim: o vocabulário é dela.
+  // A lista de tarefas mostra o que já foi decidido como próxima ação — não
+  // tudo que não está na Entrada. Aguardando e Algum dia têm tela própria:
+  // deixar os três juntos devolveria exatamente o amontoado que separar em
+  // listas existe para desfazer. Tarefas fora do método (as antigas listas
+  // "Prioridade ...", de antes desta reforma) continuam aparecendo aqui —
+  // migrar é escolha de quem usa, não deste filtro.
+  const tarefasEsclarecidas = tasks.filter((t) => !naEntrada(t) && !naAguardando(t) && !noAlgumDia(t))
+  const tarefasAguardando = tasks.filter((t) => t.status !== 'completed' && naAguardando(t))
+  const tarefasAlgumDia = tasks.filter((t) => t.status !== 'completed' && noAlgumDia(t))
+
+  // Os contextos e os projetos que a pessoa já usa viram os botões da tela de
+  // esclarecer, em vez de uma lista inventada por mim: o vocabulário é dela.
   const contextosUsados = [...new Set(tasks.map((t) => t.contexto).filter(Boolean))].sort()
+  const projetosUsados = [...new Set(tasks.map((t) => t.projeto).filter(Boolean))].sort()
+
+  // Um projeto sem nenhuma tarefa em Próximas ações parou de andar sem
+  // ninguém perceber — é o único sinal do método que não aparece sozinho em
+  // lugar nenhum da tela (atraso já pula aos olhos; isto não).
+  const projetosParados = projetosSemProximaAcao(tasks, idProximas)
 
   const tools = [
     {
@@ -664,6 +692,7 @@ export default function App() {
         <Entrada
           itens={itensDaEntrada}
           contextos={contextosUsados}
+          projetos={projetosUsados}
           onProximaAcao={handleProximaAcao}
           onAguardando={handleAguardando}
           onAgendar={handleAgendarDaEntrada}
@@ -671,6 +700,26 @@ export default function App() {
           onReferencia={handleReferencia}
           onConcluir={handleCompleteTask}
           onExcluir={handleExcluirTarefa}
+        />
+      ),
+    },
+    {
+      id: 'aguardando',
+      label: 'Aguardando',
+      icon: (
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="9" />
+          <path d="M12 7v5l3.5 2" />
+        </svg>
+      ),
+      // Sem tecla própria: as letras de uma mão só já foram todas para as
+      // ferramentas de uso diário, e esta é a que menos se abre no dia a dia.
+      render: () => (
+        <Aguardando
+          aguardando={tarefasAguardando}
+          algumDia={tarefasAlgumDia}
+          onReativar={handleReativar}
+          onConcluir={handleCompleteTask}
         />
       ),
     },
@@ -827,6 +876,14 @@ export default function App() {
           {capturasPendentes === 1
             ? '1 captura ainda não subiu — está guardada neste aparelho e sobe sozinha quando a rede voltar.'
             : `${capturasPendentes} capturas ainda não subiram — estão guardadas neste aparelho e sobem sozinhas quando a rede voltar.`}
+        </Banner>
+      )}
+
+      {projetosParados.length > 0 && (
+        <Banner tone="warning">
+          {projetosParados.length === 1
+            ? `O projeto #${projetosParados[0]} não tem nenhuma próxima ação — parou de andar sem avisar.`
+            : `${projetosParados.length} projetos sem próxima ação nenhuma (${projetosParados.map((p) => `#${p}`).join(', ')}) — pararam de andar sem avisar.`}
         </Banner>
       )}
 

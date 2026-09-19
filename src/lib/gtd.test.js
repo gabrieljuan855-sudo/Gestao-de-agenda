@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { acharLista, temEntrada, parseMeta, encodeMeta, etiqueta, LISTA_ENTRADA } from './gtd.js'
+import { acharLista, temEntrada, parseMeta, encodeMeta, etiqueta, projetosSemProximaAcao, LISTA_ENTRADA } from './gtd.js'
 
 const listas = [
   { id: '1', title: 'Prioridade Máxima (menos de uma semana)' },
@@ -66,6 +66,7 @@ describe('parseMeta', () => {
     expect(parseMeta('[alta] ligar para a escola')).toEqual({
       priority: 'alta',
       contexto: null,
+      projeto: null,
       aguardando: null,
       notes: 'ligar para a escola',
     })
@@ -75,6 +76,7 @@ describe('parseMeta', () => {
     expect(parseMeta('[media @ligar ~ana desde:2026-09-10] retorno do laudo')).toEqual({
       priority: 'media',
       contexto: 'ligar',
+      projeto: null,
       aguardando: { quem: 'ana', desde: '2026-09-10' },
       notes: 'retorno do laudo',
     })
@@ -88,6 +90,7 @@ describe('parseMeta', () => {
     expect(parseMeta('só um texto solto')).toEqual({
       priority: null,
       contexto: null,
+      projeto: null,
       aguardando: null,
       notes: 'só um texto solto',
     })
@@ -99,7 +102,7 @@ describe('parseMeta', () => {
   })
 
   it('não quebra com nota vazia, bloco vazio ou etiqueta desconhecida', () => {
-    expect(parseMeta('')).toEqual({ priority: null, contexto: null, aguardando: null, notes: '' })
+    expect(parseMeta('')).toEqual({ priority: null, contexto: null, projeto: null, aguardando: null, notes: '' })
     expect(parseMeta(null).notes).toBe('')
     expect(parseMeta('[] x').notes).toBe('x')
     expect(parseMeta('[xpto @ligar] x')).toMatchObject({ priority: null, contexto: 'ligar' })
@@ -130,13 +133,63 @@ describe('encodeMeta', () => {
     const original = {
       priority: 'baixa',
       contexto: 'computador',
+      projeto: 'caso-silva',
       aguardando: { quem: 'joao', desde: '2026-01-05' },
     }
     const lido = parseMeta(encodeMeta(original, 'texto livre'))
     expect(lido).toEqual({ ...original, notes: 'texto livre' })
   })
 
+  it('guarda o projeto', () => {
+    expect(encodeMeta({ priority: 'alta', projeto: 'Caso Silva' }, 'texto')).toBe('[alta #caso-silva] texto')
+  })
+
   it('não deixa a nota vazia virar espaço sobrando', () => {
     expect(encodeMeta({ priority: 'alta' }, '')).toBe('[alta]')
+  })
+})
+
+describe('projetosSemProximaAcao', () => {
+  const PROXIMAS = 'lista-proximas'
+  const AGUARDANDO = 'lista-aguardando'
+
+  it('aponta o projeto que só tem tarefa fora de Próximas ações', () => {
+    // O caso que importa: o projeto existe (tem tarefa com a etiqueta), mas
+    // nenhuma delas está pronta para ser feita — ele parou de andar sem
+    // ninguém perceber, porque não vence nem cobra nada sozinho.
+    const tasks = [{ id: '1', projeto: 'caso-silva', tasklistId: AGUARDANDO, status: 'needsAction' }]
+    expect(projetosSemProximaAcao(tasks, PROXIMAS)).toEqual(['caso-silva'])
+  })
+
+  it('não aponta o projeto que já tem uma próxima ação', () => {
+    const tasks = [
+      { id: '1', projeto: 'caso-silva', tasklistId: AGUARDANDO, status: 'needsAction' },
+      { id: '2', projeto: 'caso-silva', tasklistId: PROXIMAS, status: 'needsAction' },
+    ]
+    expect(projetosSemProximaAcao(tasks, PROXIMAS)).toEqual([])
+  })
+
+  it('ignora tarefa concluída e tarefa sem projeto', () => {
+    // A tarefa concluída não conta como próxima ação viva, mas também não
+    // reabre o projeto sozinha — ela simplesmente não existe para esta regra.
+    const tasks = [
+      { id: '1', projeto: 'caso-silva', tasklistId: PROXIMAS, status: 'completed' },
+      { id: '2', projeto: 'caso-silva', tasklistId: AGUARDANDO, status: 'needsAction' },
+      { id: '3', tasklistId: AGUARDANDO, status: 'needsAction' },
+    ]
+    expect(projetosSemProximaAcao(tasks, PROXIMAS)).toEqual(['caso-silva'])
+  })
+
+  it('lista mais de um projeto parado, em ordem alfabética', () => {
+    const tasks = [
+      { id: '1', projeto: 'zebra', tasklistId: AGUARDANDO, status: 'needsAction' },
+      { id: '2', projeto: 'abelha', tasklistId: AGUARDANDO, status: 'needsAction' },
+    ]
+    expect(projetosSemProximaAcao(tasks, PROXIMAS)).toEqual(['abelha', 'zebra'])
+  })
+
+  it('não quebra com lista vazia', () => {
+    expect(projetosSemProximaAcao([], PROXIMAS)).toEqual([])
+    expect(projetosSemProximaAcao(undefined, PROXIMAS)).toEqual([])
   })
 })

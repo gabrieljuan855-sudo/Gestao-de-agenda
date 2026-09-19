@@ -55,7 +55,7 @@ export function etiqueta(texto) {
 }
 
 export function parseMeta(notes) {
-  const vazio = { priority: null, contexto: null, aguardando: null, notes: '' }
+  const vazio = { priority: null, contexto: null, projeto: null, aguardando: null, notes: '' }
   if (!notes) return vazio
 
   const match = notes.match(BLOCO_META)
@@ -63,11 +63,13 @@ export function parseMeta(notes) {
 
   let priority = null
   let contexto = null
+  let projeto = null
   let quem = null
   let desde = null
 
   for (const token of match[1].split(/\s+/).filter(Boolean)) {
     if (token.startsWith('@')) contexto = token.slice(1) || null
+    else if (token.startsWith('#')) projeto = token.slice(1) || null
     else if (token.startsWith('~')) quem = token.slice(1) || null
     else if (token.startsWith('desde:')) desde = token.slice('desde:'.length) || null
     // A prioridade é a única etiqueta sem marcador, por compatibilidade com
@@ -78,14 +80,16 @@ export function parseMeta(notes) {
   return {
     priority,
     contexto,
+    projeto,
     aguardando: quem ? { quem, desde } : null,
     notes: notes.replace(BLOCO_META, ''),
   }
 }
 
-export function encodeMeta({ priority, contexto, aguardando } = {}, notes) {
+export function encodeMeta({ priority, contexto, projeto, aguardando } = {}, notes) {
   const partes = [normalizePriority(priority) || DEFAULT_PRIORITY]
   if (contexto) partes.push(`@${etiqueta(contexto)}`)
+  if (projeto) partes.push(`#${etiqueta(projeto)}`)
   if (aguardando?.quem) {
     partes.push(`~${etiqueta(aguardando.quem)}`)
     // A data de quando a espera começou é o que permite dizer "parado há 12
@@ -93,4 +97,25 @@ export function encodeMeta({ priority, contexto, aguardando } = {}, notes) {
     if (aguardando.desde) partes.push(`desde:${aguardando.desde}`)
   }
   return `[${partes.join(' ')}] ${notes || ''}`.trim()
+}
+
+// ---------- Projetos ----------
+//
+// Um projeto não é um objeto à parte: é só o mesmo `#etiqueta` repetido em
+// várias tarefas. Isso evita inventar uma segunda entidade (com sua própria
+// tela de CRUD) para algo que o método já resolve com uma etiqueta — o
+// GTD trata "projeto" como qualquer resultado que precisa de mais de uma
+// ação, nada além disso.
+//
+// O problema que este método existe para pegar é o clássico do GTD: um
+// projeto sem nenhuma próxima ação nas mãos é um projeto que parou de andar
+// sem ninguém perceber, porque ele não aparece atrasado nem cobra nada — só
+// fica quieto.
+export function projetosSemProximaAcao(tasks, idListaProximas) {
+  const ativos = (tasks || []).filter((t) => t.status !== 'completed' && t.projeto)
+  const comProximaAcao = new Set(
+    ativos.filter((t) => t.tasklistId === idListaProximas).map((t) => t.projeto)
+  )
+  const todos = new Set(ativos.map((t) => t.projeto))
+  return [...todos].filter((p) => !comProximaAcao.has(p)).sort()
 }
