@@ -8,9 +8,14 @@ segredos e por isso não podem ficar no navegador.
 
 ## Funcionalidades
 
-- **Adição rápida inteligente**: digite em linguagem natural (ex: "reunião
-  quarta 14h" ou "ligar pra escola até sexta") e o app decide sozinho se vira
-  um evento no Calendar ou uma tarefa no Tasks, e sugere a prioridade.
+- **Captura sem atrito**: um campo e Enter. O texto cai como está na lista
+  **Entrada** do Google Tasks, sem exigir que você decida na hora se aquilo é
+  evento, tarefa ou qual prioridade — decidir é um segundo gesto, separado de
+  guardar. Se o texto tiver dia **e** hora marcados ("reunião quarta 14h"), o
+  app oferece um desvio para agendar direto no Calendar, que é o único caso em
+  que a decisão não pode esperar.
+- **Captura que não falha**: sem rede, o texto fica numa fila local e sobe
+  sozinho quando a conexão volta.
 - **Backlog priorizado**: tarefas organizadas por urgente / importante / pode
   esperar, com aviso quando uma tarefa fica muito tempo parada.
 - **Cronômetro de foco (Pomodoro 25/5)**: ao focar numa tarefa, o app cria
@@ -130,6 +135,20 @@ desconecta tudo de uma vez, se precisar.
 
 Mantenha o `VITE_GOOGLE_CLIENT_ID` do passo 2 como está: ele é a rede de
 segurança para o caso de o login pelo servidor sair do ar.
+
+## Capturar do celular sem abrir o app (iOS)
+
+O endereço `/?capturar=TEXTO` guarda o texto na Entrada e mostra a confirmação.
+É o caminho de captura rápida no iPhone, onde um PWA não aparece no
+compartilhamento do sistema.
+
+No app **Atalhos** do iPhone: novo atalho → *Pedir entrada* (texto, pergunta
+"O que está na sua cabeça?") → *Abrir URL* com
+`https://SEU-WORKER.workers.dev/?capturar=` + a entrada fornecida (use a ação
+*Codificar URL* no texto antes de juntar, para acento e espaço não quebrarem o
+endereço). Dê um nome curto ao atalho e ele passa a funcionar por voz ("Ei
+Siri, anotar") e no **Toque nas costas** (Ajustes > Acessibilidade > Toque >
+Toque nas costas).
 
 ## Convenção de dados
 

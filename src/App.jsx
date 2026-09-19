@@ -15,7 +15,10 @@ import {
   reopenTask,
   deleteTask,
   prefetchFocusEvents,
+  garantirLista,
 } from './lib/googleApi.js'
+import { LISTA_ENTRADA } from './lib/gtd.js'
+import { enfileirar, descarregar, quantasPendentes } from './lib/outbox.js'
 import { rangeForView, shiftReference, isSameDay } from './lib/dates.js'
 import QuickAdd from './components/QuickAdd.jsx'
 import Logo from './components/Logo.jsx'
@@ -106,6 +109,9 @@ export default function App() {
   const [editingTask, setEditingTask] = useState(null)
   const [calendars, setCalendars] = useState([])
   const [taskLists, setTaskLists] = useState([])
+  // Onde a captura cai. Vazio só até a primeira carga terminar.
+  const [entradaId, setEntradaId] = useState('')
+  const [capturasPendentes, setCapturasPendentes] = useState(0)
   const [calendarPrefs, setCalendarPrefs] = useState({})
   const [presence, setPresenceState] = useState(() => loadPresence())
   const [showCalendarSettings, setShowCalendarSettings] = useState(false)
@@ -121,14 +127,29 @@ export default function App() {
 
   // As agendas e listas mudam raramente: basta buscar uma vez por sessão,
   // para alimentar os seletores de onde gravar.
+  //
+  // A Entrada é garantida aqui: ela precisa existir antes da primeira
+  // captura, e criá-la sozinha evita que o app dependa de o usuário ter
+  // montado a lista à mão no Google Tasks (que é o que acontece hoje com as
+  // listas "Prioridade ...", e falha em silêncio quando não existem).
   useEffect(() => {
     if (!signedIn) return
     Promise.all([listCalendars(), listTaskLists()])
-      .then(([cals, lists]) => {
+      .then(async ([cals, lists]) => {
         const writable = cals.filter((c) => c.accessRole === 'owner' || c.accessRole === 'writer')
         setCalendars(writable)
         setCalendarPrefs(loadCalendarPrefs(cals))
-        setTaskLists(lists)
+        try {
+          const entrada = await garantirLista(lists, LISTA_ENTRADA)
+          setEntradaId(entrada.id)
+          setTaskLists(lists.some((l) => l.id === entrada.id) ? lists : [...lists, entrada])
+        } catch (err) {
+          // Sem a Entrada a captura ainda funciona: cai na lista padrão do
+          // Google. Melhor guardar no lugar errado do que perder o que a
+          // pessoa acabou de tirar da cabeça.
+          console.error('Não deu para garantir a lista Entrada:', err)
+          setTaskLists(lists)
+        }
       })
       .catch((err) => console.error('Não deu para carregar agendas e listas:', err))
   }, [signedIn])
@@ -227,6 +248,71 @@ export default function App() {
     })
     await reload()
   }
+
+  const gravarCaptura = useCallback(
+    (texto, due = null) =>
+      createTask({ title: texto, due, tasklistId: entradaId || '@default' }),
+    [entradaId]
+  )
+
+  // Capturar não pode falhar: é o gesto que sustenta a confiança no sistema
+  // inteiro. Se a rede não estiver lá (rua, elevador, prédio antigo), o texto
+  // fica na fila local e sobe depois — a tela pode dizer "guardado" sem
+  // mentir, porque está mesmo.
+  const handleCapture = useCallback(
+    async ({ texto, due }) => {
+      try {
+        await gravarCaptura(texto, due)
+        await reload()
+      } catch (err) {
+        console.error('Captura foi para a fila local:', err)
+        enfileirar(texto)
+        setCapturasPendentes(quantasPendentes())
+      }
+    },
+    [gravarCaptura, reload]
+  )
+
+  // A fila tenta esvaziar quando o app volta a ficar visível ou a rede
+  // reaparece — os dois momentos em que ela tem chance real de subir.
+  const descarregarFila = useCallback(async () => {
+    if (!signedIn || quantasPendentes() === 0) return
+    const { enviados, restantes } = await descarregar((texto) => gravarCaptura(texto))
+    setCapturasPendentes(restantes)
+    if (enviados > 0) await reload()
+  }, [signedIn, gravarCaptura, reload])
+
+  useEffect(() => {
+    setCapturasPendentes(quantasPendentes())
+    if (!signedIn) return
+    descarregarFila()
+    window.addEventListener('online', descarregarFila)
+    document.addEventListener('visibilitychange', descarregarFila)
+    return () => {
+      window.removeEventListener('online', descarregarFila)
+      document.removeEventListener('visibilitychange', descarregarFila)
+    }
+  }, [signedIn, descarregarFila])
+
+  // Captura por URL: abrir /?capturar=texto guarda na Entrada e pronto.
+  //
+  // É o que destrava a captura de verdade no iPhone, onde PWA não tem
+  // compartilhamento do sistema: dá para montar um Atalho ("Ei Siri, anotar")
+  // ou um toque nas costas do aparelho que abre esse endereço. Sem isso, a
+  // captura fora da mesa dependia de abrir o app, esperar carregar e achar o
+  // campo — tempo suficiente para a pessoa desistir e deixar na cabeça.
+  const [capturaDaUrl, setCapturaDaUrl] = useState(null)
+
+  useEffect(() => {
+    const texto = new URLSearchParams(window.location.search).get('capturar')
+    if (!texto || !texto.trim() || !signedIn || !entradaId) return
+    // Limpa a URL antes de gravar: se a pessoa recarregar a página depois,
+    // não pode capturar a mesma coisa de novo.
+    window.history.replaceState({}, '', window.location.pathname)
+    handleCapture({ texto: texto.trim(), due: null })
+      .then(() => setCapturaDaUrl(texto.trim()))
+      .catch(() => setCapturaDaUrl(texto.trim()))
+  }, [signedIn, entradaId, handleCapture])
 
   function openDay(day) {
     setReference(day)
@@ -501,9 +587,8 @@ export default function App() {
       render: (close) => (
         <QuickAdd
           calendars={calendars}
-          taskLists={taskLists}
+          onCapture={handleCapture}
           onCreateEvent={handleCreateEvent}
-          onCreateTask={handleCreateTask}
           onDone={close}
         />
       ),
@@ -663,6 +748,20 @@ export default function App() {
       </div>
 
       <FocusOverlay focus={focus} onCompleteTask={handleCompleteTask} />
+
+      {capturaDaUrl && (
+        <Banner tone="info" actionLabel="Entendi" onAction={() => setCapturaDaUrl(null)}>
+          Guardado na Entrada: "{capturaDaUrl}"
+        </Banner>
+      )}
+
+      {capturasPendentes > 0 && (
+        <Banner tone="warning" actionLabel="Tentar agora" onAction={descarregarFila}>
+          {capturasPendentes === 1
+            ? '1 captura ainda não subiu — está guardada neste aparelho e sobe sozinha quando a rede voltar.'
+            : `${capturasPendentes} capturas ainda não subiram — estão guardadas neste aparelho e sobem sozinhas quando a rede voltar.`}
+        </Banner>
+      )}
 
       {presenceError && (
         <Banner tone="warning" actionLabel="Entendi" onAction={() => setPresenceError(null)}>
