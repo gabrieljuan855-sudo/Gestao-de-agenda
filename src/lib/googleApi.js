@@ -4,6 +4,7 @@ import { toDateInput, addDays } from './dates.js'
 import { PRESENCE_PROP, TO_RSVP } from './calendarPrefs.js'
 import { semAcento } from './texto.js'
 import { FOCUS_TASK_PROP } from './focusStats.js'
+import { acharLista } from './gtd.js'
 
 const CAL_BASE = 'https://www.googleapis.com/calendar/v3'
 const TASKS_BASE = 'https://www.googleapis.com/tasks/v1'
@@ -332,6 +333,23 @@ function encodeNotes(priority, notes) {
 export async function listTaskLists() {
   const data = await request(`${TASKS_BASE}/users/@me/lists`)
   return data.items || []
+}
+
+export async function criarListaDeTarefas(titulo) {
+  return request(`${TASKS_BASE}/users/@me/lists`, {
+    method: 'POST',
+    body: JSON.stringify({ title: titulo }),
+  })
+}
+
+// Devolve a lista com esse nome, criando-a só se ainda não existir. É o que
+// permite a Entrada nascer sozinha no primeiro login, sem o usuário precisar
+// criar nada à mão no app do Google (diferente das listas "Prioridade ...",
+// que até hoje precisavam existir de antemão para o app funcionar direito).
+export async function garantirLista(taskLists, titulo) {
+  const existente = acharLista(taskLists, titulo)
+  if (existente) return existente
+  return criarListaDeTarefas(titulo)
 }
 
 export async function listTasks({ tasklistId = '@default', tasklistTitle = '', showCompleted = false } = {}) {

@@ -338,6 +338,21 @@ textarea:focus-visible,
   gap: 10px;
 }
 
+/* A saída para agendar: discreta de propósito. Capturar continua sendo o
+   caminho padrão, e este é o desvio de um caso só — compromisso com dia e
+   hora marcados. */
+.quickadd-desvio {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--shape-sm);
+  font-size: var(--label-md);
+}
+
 .field select,
 .field input[type="date"],
 .field input[type="time"] {

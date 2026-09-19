@@ -5,6 +5,7 @@ import SuggestionCard from './SuggestionCard.jsx'
 import { toDateInput, fromInputs, dateOnlyFromISO } from '../lib/dates.js'
 import { PRIORITIES, DEFAULT_PRIORITY } from '../lib/priority.js'
 import { analyzeNoteWithAI } from '../lib/aiAnalyzeNote.js'
+import { APENAS_AGENTE_ATIVO } from '../lib/aiCooldown.js'
 
 // Uma tarefa é curta demais para valer a pena mandar para a IA (ex: só
 // "Ligar" sem mais nada) — mesmo piso usado nas anotações.
@@ -130,32 +131,37 @@ export default function TaskEditor({
           <textarea rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} />
         </label>
 
-        <div style={{ marginBottom: 10 }}>
-          <button type="button" onClick={handleAnalyze} disabled={analyzing || !podeAnalisar}>
-            {analyzing ? 'Analisando...' : '✨ Analisar com IA'}
-          </button>
-          {analyzeError && <div className="form-error" style={{ marginTop: 6 }}>{analyzeError}</div>}
-          {suggestions && (
-            suggestions.length === 0 ? (
-              <div className="muted" style={{ fontSize: 'var(--label-sm)', marginTop: 6 }}>
-                Nada de especial notado nesta tarefa.
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
-                {suggestions.map((s, i) => (
-                  <SuggestionCard
-                    key={i}
-                    suggestion={s}
-                    calendars={calendars}
-                    taskLists={taskLists}
-                    onCreateEvent={onCreateEvent}
-                    onCreateTask={onCreateTask}
-                  />
-                ))}
-              </div>
-            )
-          )}
-        </div>
+        {/* Ver APENAS_AGENTE_ATIVO em aiCooldown.js — este botão escapava do
+            interruptor, e o teste de limite de cota acabava medindo duas
+            superfícies de IA em vez de uma. */}
+        {!APENAS_AGENTE_ATIVO && (
+          <div style={{ marginBottom: 10 }}>
+            <button type="button" onClick={handleAnalyze} disabled={analyzing || !podeAnalisar}>
+              {analyzing ? 'Analisando...' : '✨ Analisar com IA'}
+            </button>
+            {analyzeError && <div className="form-error" style={{ marginTop: 6 }}>{analyzeError}</div>}
+            {suggestions && (
+              suggestions.length === 0 ? (
+                <div className="muted" style={{ fontSize: 'var(--label-sm)', marginTop: 6 }}>
+                  Nada de especial notado nesta tarefa.
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
+                  {suggestions.map((s, i) => (
+                    <SuggestionCard
+                      key={i}
+                      suggestion={s}
+                      calendars={calendars}
+                      taskLists={taskLists}
+                      onCreateEvent={onCreateEvent}
+                      onCreateTask={onCreateTask}
+                    />
+                  ))}
+                </div>
+              )
+            )}
+          </div>
+        )}
 
         {task.tasklistTitle && (
           <div className="muted" style={{ fontSize: 'var(--label-sm)' }}>Lista: {task.tasklistTitle}</div>
