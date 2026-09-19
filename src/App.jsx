@@ -46,9 +46,8 @@ import { loadWorkSchedule } from './lib/schedule.js'
 import ShortcutsOverlay from './components/ShortcutsOverlay.jsx'
 import useAtalhos from './lib/useAtalhos.js'
 import { montarEventoDeConclusao } from './lib/taskDoneEvent.js'
-import useBriefing from './lib/useBriefing.js'
-import BriefingCard from './components/BriefingCard.jsx'
-import BriefingOverlay from './components/BriefingOverlay.jsx'
+import useRevisao from './lib/useRevisao.js'
+import Revisao from './components/Revisao.jsx'
 import SearchPanel from './components/SearchPanel.jsx'
 import PeriodBar from './components/PeriodBar.jsx'
 import DayView from './components/DayView.jsx'
@@ -351,7 +350,6 @@ export default function App() {
     },
   })
   const notesState = useNotes({ signedIn })
-  const briefingState = useBriefing({ signedIn, calendarPrefs, presence })
   // Qual painel do trilho está aberto. Mora aqui, e não dentro do Rail, porque
   // os atalhos de teclado também precisam abrir e fechar esses painéis.
   const [railAberto, setRailAberto] = useState(null)
@@ -473,6 +471,19 @@ export default function App() {
     (titulo) => acharLista(taskLists, titulo)?.id || '',
     [taskLists]
   )
+
+  // A revisão semanal é sob demanda (useRevisao), mas o hook ainda precisa
+  // ser chamado sempre na mesma posição do render — por isso mora aqui, antes
+  // dos retornos antecipados de login, mesmo que os dados que ela usa só
+  // fiquem completos depois que a conta carrega.
+  const entradaVaziaAgora = !tasks.some(
+    (t) => t.status !== 'completed' && Boolean(entradaId) && t.tasklistId === entradaId
+  )
+  const revisao = useRevisao({
+    idProximas: idDaLista(LISTA_PROXIMAS),
+    idAguardando: idDaLista(LISTA_AGUARDANDO),
+    entradaVazia: entradaVaziaAgora,
+  })
 
   async function moverEsclarecido(item, listaTitulo, patch) {
     const destino = idDaLista(listaTitulo)
@@ -835,6 +846,24 @@ export default function App() {
         />
       ),
     },
+    {
+      id: 'revisao',
+      label: 'Revisão',
+      icon: (
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M9 11l3 3L22 4" />
+          <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+        </svg>
+      ),
+      render: () => (
+        <Revisao
+          numeros={revisao.numeros}
+          comentario={revisao.comentario}
+          carregando={revisao.carregando}
+          onGerar={revisao.gerar}
+        />
+      ),
+    },
   ]
 
   return (
@@ -846,9 +875,6 @@ export default function App() {
             <h2>{greeting()}</h2>
             <div className="muted app-head-sub">Gestão de agenda</div>
           </div>
-          {briefingState.showCard && briefingState.briefing && (
-            <BriefingCard onOpen={briefingState.openOverlay} onDismiss={briefingState.dismissCard} />
-          )}
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button onClick={() => setShowCalendarSettings(true)}>Agendas</button>
@@ -973,9 +999,15 @@ export default function App() {
         </Banner>
       )}
 
-      {briefingState.error && (
-        <Banner tone="warning" actionLabel="Entendi" onAction={briefingState.dismissError}>
-          {briefingState.error}
+      {revisao.error && (
+        <Banner tone="warning" actionLabel="Entendi" onAction={revisao.dismissError}>
+          {revisao.error}
+        </Banner>
+      )}
+
+      {new Date().getDay() === 5 && !revisao.numeros && railAberto !== 'revisao' && (
+        <Banner tone="info" actionLabel="Ver revisão" onAction={() => abrirOuFechar('revisao')}>
+          É sexta — bom momento para revisar a semana.
         </Banner>
       )}
 
@@ -1027,10 +1059,6 @@ export default function App() {
           }}
           onCancel={() => setPendingSwitch(null)}
         />
-      )}
-
-      {briefingState.overlayOpen && (
-        <BriefingOverlay briefing={briefingState.briefing} onClose={briefingState.closeOverlay} />
       )}
 
       {mostrandoAtalhos && <ShortcutsOverlay onClose={() => setMostrandoAtalhos(false)} />}
