@@ -18,17 +18,20 @@ function Item({ task, subtitulo, onReativar, onConcluir }) {
         {subtitulo && <div className="muted" style={{ fontSize: 'var(--label-sm)' }}>{subtitulo}</div>}
       </div>
       <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-        <button type="button" onClick={() => onConcluir(task)}>Já fiz</button>
+        <button type="button" onClick={() => onConcluir(task)}>Concluir</button>
         <button type="button" onClick={() => onReativar(task)}>Reativar</button>
       </div>
     </div>
   )
 }
 
+// Sem um título "Aguardando" aqui dentro: a aba do painel já diz isso, e
+// repetir o nome logo abaixo dele era a mesma palavra duas vezes em dois
+// dedos de tela. "Algum dia", mais abaixo, fica — ali o título não repete
+// nada, marca a troca de assunto.
 export default function Aguardando({ aguardando = [], algumDia = [], onReativar, onConcluir }) {
   return (
     <div>
-      <h3 className="t-title" style={{ marginTop: 0 }}>Aguardando</h3>
       {aguardando.length === 0 ? (
         <p className="muted" style={{ fontSize: 'var(--body-sm)' }}>Ninguém te devendo nada, por enquanto.</p>
       ) : (

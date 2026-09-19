@@ -59,12 +59,9 @@ export default function Entrada({
 
   if (!item) {
     return (
-      <div>
-        <h3 className="t-title" style={{ marginTop: 0 }}>Entrada</h3>
-        <p className="muted" style={{ fontSize: 'var(--body-sm)' }}>
-          Vazia. Tudo que você anotou já virou alguma coisa.
-        </p>
-      </div>
+      <p className="muted" style={{ fontSize: 'var(--body-sm)', margin: 0 }}>
+        Vazia. Tudo que você anotou já virou alguma coisa.
+      </p>
     )
   }
 
@@ -115,13 +112,8 @@ export default function Entrada({
 
   return (
     <div>
-      <div className="entrada-topo">
-        <h3 className="t-title" style={{ margin: 0 }}>Entrada</h3>
-        <span className="muted" style={{ fontSize: 'var(--label-sm)' }}>
-          {itens.length === 1 ? '1 item' : `${itens.length} itens`}
-        </span>
-      </div>
-
+      {/* Sem título aqui: a aba do painel já diz "Entrada", e o contador dela
+          já diz quantos itens esperam decisão. */}
       <label className="field">
         <span>O que é isso, em uma frase?</span>
         <textarea rows={2} value={titulo} onChange={(e) => setTitulo(e.target.value)} />

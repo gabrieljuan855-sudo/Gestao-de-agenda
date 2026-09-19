@@ -1,15 +1,8 @@
 import { useState } from 'react'
 import Modal from './Modal.jsx'
 import ConfirmDialog from './ConfirmDialog.jsx'
-import SuggestionCard from './SuggestionCard.jsx'
 import { toDateInput, fromInputs, dateOnlyFromISO } from '../lib/dates.js'
 import { PRIORITIES, DEFAULT_PRIORITY } from '../lib/priority.js'
-import { analyzeNoteWithAI } from '../lib/aiAnalyzeNote.js'
-import { IA_DESLIGADA } from '../lib/aiCooldown.js'
-
-// Uma tarefa é curta demais para valer a pena mandar para a IA (ex: só
-// "Ligar" sem mais nada) — mesmo piso usado nas anotações.
-const AI_MIN_LENGTH = 10
 
 export default function TaskEditor({
   task,
@@ -18,27 +11,24 @@ export default function TaskEditor({
   onReopen,
   onComplete,
   onClose,
-  calendars = [],
-  taskLists = [],
-  onCreateEvent,
-  onCreateTask,
+  contextos = [],
+  projetos = [],
 }) {
   const [title, setTitle] = useState(task.title || '')
   // dateOnlyFromISO, não `new Date(task.due)`: o prazo vem do Google como
   // meia-noite UTC, e o fuso do Brasil mostrava sempre um dia antes do real.
   const [due, setDue] = useState(task.due ? toDateInput(dateOnlyFromISO(task.due)) : '')
   const [priority, setPriority] = useState(task.priority || DEFAULT_PRIORITY)
+  // Contexto, projeto e duração nasceram só na tela da Entrada, e quem errasse
+  // ali ficava sem conserto: a tarefa guardava a etiqueta para sempre, sem
+  // nenhum caminho na interface para mexer nela. Editar é aqui.
+  const [contexto, setContexto] = useState(task.contexto || '')
+  const [projeto, setProjeto] = useState(task.projeto || '')
+  const [duracao, setDuracao] = useState(task.duracao ? String(task.duracao) : '')
   const [notes, setNotes] = useState(task.notesClean || '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
-  // Sugestões da IA para esta tarefa: vivem só nesta sessão de edição — o
-  // Google Tasks não tem um campo próprio para guardar isso junto da tarefa
-  // (diferente das anotações, que têm o arquivo JSON no Drive só delas), e
-  // pedir de novo é barato o bastante para não precisar persistir.
-  const [analyzing, setAnalyzing] = useState(false)
-  const [suggestions, setSuggestions] = useState(null)
-  const [analyzeError, setAnalyzeError] = useState(null)
 
   const done = task.status === 'completed'
 
@@ -62,6 +52,11 @@ export default function TaskEditor({
         due: due ? fromInputs(due) : null,
         priority,
         notes,
+        // `null`, e não string vazia: é assim que se apaga uma etiqueta que
+        // não faz mais sentido (ver o merge por `!== undefined` em updateTask).
+        contexto: contexto.trim() || null,
+        projeto: projeto.trim() || null,
+        duracao: duracao ? Number(duracao) : null,
       })
     )
   }
@@ -69,23 +64,6 @@ export default function TaskEditor({
   function handleDelete() {
     run(onDelete)
   }
-
-  async function handleAnalyze() {
-    setAnalyzing(true)
-    setAnalyzeError(null)
-    try {
-      const texto = `${title}\n${notes}`.trim()
-      const { suggestions: novas } = await analyzeNoteWithAI(texto)
-      setSuggestions(novas)
-    } catch (err) {
-      console.error('Não foi possível analisar a tarefa:', err)
-      setAnalyzeError('Não deu para analisar agora — tente de novo em instantes.')
-    } finally {
-      setAnalyzing(false)
-    }
-  }
-
-  const podeAnalisar = `${title}${notes}`.trim().length >= AI_MIN_LENGTH
 
   return (
     <>
@@ -101,10 +79,22 @@ export default function TaskEditor({
           <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} />
         </label>
 
-        <label className="field">
-          <span>Prazo</span>
-          <input type="date" value={due} onChange={(e) => setDue(e.target.value)} />
-        </label>
+        <div className="field-row">
+          <label className="field">
+            <span>Prazo</span>
+            <input type="date" value={due} onChange={(e) => setDue(e.target.value)} />
+          </label>
+          <label className="field">
+            <span>Duração (min)</span>
+            <input
+              type="number"
+              min="1"
+              placeholder="opcional"
+              value={duracao}
+              onChange={(e) => setDuracao(e.target.value)}
+            />
+          </label>
+        </div>
 
         <div className="field">
           <span>Prioridade</span>
@@ -126,42 +116,45 @@ export default function TaskEditor({
           </div>
         </div>
 
+        {/* Datalist, e não uma lista de botões: o que já existe fica a um
+            toque, mas continua dando para digitar um novo — e para apagar. */}
+        <div className="field-row">
+          <label className="field">
+            <span>Contexto</span>
+            <input
+              type="text"
+              placeholder="ligar, computador..."
+              value={contexto}
+              onChange={(e) => setContexto(e.target.value)}
+              list="editor-contextos"
+            />
+            <datalist id="editor-contextos">
+              {contextos.map((c) => (
+                <option key={c} value={c} />
+              ))}
+            </datalist>
+          </label>
+          <label className="field">
+            <span>Projeto</span>
+            <input
+              type="text"
+              placeholder="caso-silva..."
+              value={projeto}
+              onChange={(e) => setProjeto(e.target.value)}
+              list="editor-projetos"
+            />
+            <datalist id="editor-projetos">
+              {projetos.map((p) => (
+                <option key={p} value={p} />
+              ))}
+            </datalist>
+          </label>
+        </div>
+
         <label className="field">
           <span>Anotações</span>
           <textarea rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} />
         </label>
-
-        {/* Ver IA_DESLIGADA em aiCooldown.js: a chave geral da IA. Este botão
-            já escapou dela uma vez, e o app acabou gastando cota por um
-            caminho que ninguém achava que estava ligado. */}
-        {!IA_DESLIGADA && (
-          <div style={{ marginBottom: 10 }}>
-            <button type="button" onClick={handleAnalyze} disabled={analyzing || !podeAnalisar}>
-              {analyzing ? 'Analisando...' : '✨ Analisar com IA'}
-            </button>
-            {analyzeError && <div className="form-error" style={{ marginTop: 6 }}>{analyzeError}</div>}
-            {suggestions && (
-              suggestions.length === 0 ? (
-                <div className="muted" style={{ fontSize: 'var(--label-sm)', marginTop: 6 }}>
-                  Nada de especial notado nesta tarefa.
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
-                  {suggestions.map((s, i) => (
-                    <SuggestionCard
-                      key={i}
-                      suggestion={s}
-                      calendars={calendars}
-                      taskLists={taskLists}
-                      onCreateEvent={onCreateEvent}
-                      onCreateTask={onCreateTask}
-                    />
-                  ))}
-                </div>
-              )
-            )}
-          </div>
-        )}
 
         {task.tasklistTitle && (
           <div className="muted" style={{ fontSize: 'var(--label-sm)' }}>Lista: {task.tasklistTitle}</div>

@@ -340,13 +340,6 @@ textarea:focus-visible,
 
 /* A tela de esclarecer. Cada decisão possível é um bloco com nome, para a
    escolha ser de olhar e não de lembrar — é o oposto do campo em branco. */
-.entrada-topo {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  margin-bottom: 10px;
-}
-
 .entrada-dois-minutos {
   display: flex;
   align-items: center;
@@ -1143,6 +1136,120 @@ button.danger:hover { background: var(--urgent-bg); }
    a agenda ocupa a linha toda e a lista de tarefas desce para baixo dela. */
 .workspace--wide { grid-template-columns: minmax(0, 1fr) 48px; }
 .workspace--wide .workspace-main { grid-column: 1 / -1; }
+
+/* ---------- tarefas que vencem no dia, na visão de Dia ---------- */
+
+.day-tarefas {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 10px;
+}
+
+.day-tarefa {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 32px;
+  padding: 4px 8px;
+  border: none;
+  border-radius: var(--shape-sm);
+  background: transparent;
+  color: var(--on-surface);
+  font-size: var(--body-md);
+  text-align: left;
+  cursor: pointer;
+}
+
+.day-tarefa-titulo {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* O pontinho ocupa o lugar que a barra colorida do compromisso ocupa nos
+   cartões abaixo, para as duas colunas de conteúdo começarem alinhadas. */
+.day-tarefa-marca {
+  width: 6px;
+  height: 6px;
+  flex-shrink: 0;
+  border-radius: var(--shape-full);
+  background: var(--outline);
+}
+
+.day-tarefa-marca.is-atrasada { background: var(--urgent); }
+
+/* ---------- painel de trabalho e suas abas ---------- */
+
+/* As abas encostam nas bordas do cartão (as margens negativas comem o padding
+   de 16px), para a linha divisória atravessar o painel inteiro como manda o
+   MD3 — uma linha que para antes da borda parece um traço solto. */
+.trabalho .tabs {
+  display: flex;
+  margin: -16px -16px 12px;
+  border-bottom: 1px solid var(--outline-variant);
+}
+
+/* 48px é a altura de aba do MD3 e também o alvo de toque mínimo. */
+.tab {
+  position: relative;
+  flex: 1;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 8px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--on-surface-variant);
+  font-size: var(--body-md);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.tab.is-ativa { color: var(--primary); }
+
+/* O indicador: barra de 3dp, arredondada em cima, colada na linha de baixo.
+   É ele que liga a aba ao conteúdo — sem isso a aba ativa vira só um texto
+   de cor diferente, e a barra inteira passa a parecer um grupo de botões. */
+.tab.is-ativa::before {
+  content: '';
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 0;
+  height: 3px;
+  border-radius: 3px 3px 0 0;
+  background: var(--primary);
+}
+
+/* Contador de itens esperando decisão na Entrada. Some sozinho quando zera
+   (ver Trabalho.jsx): um "0" permanente é ruído, não informação. */
+.tab-badge {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: var(--shape-full);
+  background: var(--primary);
+  color: var(--on-primary);
+  font-size: var(--label-sm);
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@media (max-width: 700px) {
+  /* No celular o rótulo encolhe antes de sumir: quatro abas ainda cabem, e
+     um ícone só não diria a diferença entre "Aguardando" e "Revisão". */
+  .tab { font-size: var(--label-md); padding: 0 4px; }
+  .tab.is-ativa::before { left: 8px; right: 8px; }
+}
 
 /* ---------- trilho lateral ---------- */
 
