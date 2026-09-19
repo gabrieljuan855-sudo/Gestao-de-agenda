@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { listAllEvents, listAllTasks, prefetchFocusEvents } from './googleApi.js'
 import { fetchBriefingFromAI } from './aiBriefing.js'
-import { iaEmPausa, APENAS_AGENTE_ATIVO } from './aiCooldown.js'
+import { iaEmPausa, IA_DESLIGADA } from './aiCooldown.js'
 import { isWorkday } from './schedule.js'
 import { occupiesTime, isDeclined } from './calendarPrefs.js'
 import { eventStart, eventEnd, tasksDueOn } from './events.js'
@@ -186,9 +186,9 @@ export default function useBriefing({ signedIn, calendarPrefs, presence }) {
   }, [calendarPrefs, presence])
 
   useEffect(() => {
-    // Ver APENAS_AGENTE_ATIVO em aiCooldown.js — teste de limite de cota em
-    // andamento, só o agente deve chamar o Gemini por enquanto.
-    if (!signedIn || APENAS_AGENTE_ATIVO) return
+    // Ver IA_DESLIGADA em aiCooldown.js. O briefing automático é a única
+    // coisa que chamava a IA sozinha, sem ninguém pedir.
+    if (!signedIn || IA_DESLIGADA) return
 
     async function gerar(kind) {
       const { calendarPrefs: prefs, presence: pres } = prefsRef.current

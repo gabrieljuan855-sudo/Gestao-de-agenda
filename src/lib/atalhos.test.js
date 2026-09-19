@@ -8,7 +8,7 @@ function tecla(key, extra = {}) {
 describe('atalhoDoEvento', () => {
   it('reconhece cada atalho', () => {
     expect(atalhoDoEvento(tecla('c'))).toBe('criar')
-    expect(atalhoDoEvento(tecla('a'))).toBe('agente')
+    expect(atalhoDoEvento(tecla('e'))).toBe('entrada')
     expect(atalhoDoEvento(tecla('n'))).toBe('notas')
     expect(atalhoDoEvento(tecla('b'))).toBe('buscar')
     expect(atalhoDoEvento(tecla('/'))).toBe('buscar')
@@ -27,10 +27,10 @@ describe('atalhoDoEvento', () => {
 
   it('não dispara enquanto a pessoa digita num campo', () => {
     // O teste que importa: todo painel do trilho abre com o cursor dentro de
-    // um campo. Sem esta guarda, escrever "casa" numa anotação abriria o
-    // criar, o agente e a busca.
+    // um campo. Sem esta guarda, escrever "cena" numa anotação abriria o
+    // capturar, a entrada e as notas.
     expect(atalhoDoEvento(tecla('c', { target: { tagName: 'INPUT' } }))).toBe(null)
-    expect(atalhoDoEvento(tecla('a', { target: { tagName: 'TEXTAREA' } }))).toBe(null)
+    expect(atalhoDoEvento(tecla('e', { target: { tagName: 'TEXTAREA' } }))).toBe(null)
     expect(atalhoDoEvento(tecla('n', { target: { tagName: 'SELECT' } }))).toBe(null)
     expect(atalhoDoEvento(tecla('b', { target: { tagName: 'DIV', isContentEditable: true } }))).toBe(null)
   })

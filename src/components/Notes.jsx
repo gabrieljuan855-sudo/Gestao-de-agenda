@@ -3,7 +3,7 @@ import ConfirmDialog from './ConfirmDialog.jsx'
 import Banner from './Banner.jsx'
 import SuggestionCard from './SuggestionCard.jsx'
 import { AI_MIN_LENGTH, descreverSincronizacao } from '../lib/useNotes.js'
-import { APENAS_AGENTE_ATIVO } from '../lib/aiCooldown.js'
+import { IA_DESLIGADA } from '../lib/aiCooldown.js'
 
 // Tempo parado depois da última tecla para considerar que a anotação foi
 // "finalizada" e vale a pena gastar uma chamada de IA nela. Bem mais longo
@@ -88,9 +88,9 @@ function NoteEditor({ note, onChange, onAnalyze, analyzing, syncStatus, calendar
     clearTimeout(saveTimer.current)
     saveTimer.current = setTimeout(() => onChange({ title, body }), 500)
 
-    // Ver APENAS_AGENTE_ATIVO em aiCooldown.js — teste de limite de cota em
-    // andamento, só o agente deve chamar o Gemini por enquanto.
-    if (!APENAS_AGENTE_ATIVO) {
+    // Ver IA_DESLIGADA em aiCooldown.js: a chave geral da IA está desligada,
+    // e as anotações funcionam sem ela.
+    if (!IA_DESLIGADA) {
       clearTimeout(aiTimer.current)
       aiTimer.current = setTimeout(() => maybeAnalyze(body), AI_IDLE_MS)
     }
@@ -321,9 +321,9 @@ export default function Notes({ notesState, calendars = [], taskLists = [], onCr
 
   return (
     <div>
-      {/* Ver APENAS_AGENTE_ATIVO em aiCooldown.js — teste de limite de cota em
-          andamento, só o agente deve chamar o Gemini por enquanto. */}
-      {notes.length > 0 && !APENAS_AGENTE_ATIVO && (
+      {/* Ver IA_DESLIGADA em aiCooldown.js: com a IA desligada esta busca
+          não aparece — a busca do trilho (SearchPanel) continua valendo. */}
+      {notes.length > 0 && !IA_DESLIGADA && (
         <NoteSearch
           onSearch={searchInNotes}
           searching={searching}

@@ -4,7 +4,7 @@ import { toDateInput, addDays } from './dates.js'
 import { PRESENCE_PROP, TO_RSVP } from './calendarPrefs.js'
 import { semAcento } from './texto.js'
 import { FOCUS_TASK_PROP } from './focusStats.js'
-import { acharLista } from './gtd.js'
+import { acharLista, parseMeta, encodeMeta } from './gtd.js'
 
 const CAL_BASE = 'https://www.googleapis.com/calendar/v3'
 const TASKS_BASE = 'https://www.googleapis.com/tasks/v1'
@@ -309,26 +309,9 @@ export async function deleteEvent(event) {
 
 // ---------- Tasks ----------
 
-// Convenção usada por este app para guardar a prioridade dentro do Google Tasks:
-// a nota da tarefa começa com uma tag entre colchetes, ex: "[alta] texto livre".
-// Os ids antigos ficam na expressão porque já existem tarefas gravadas assim.
-const PRIORITY_TAG = /^\[(alta|media|baixa|urgente|importante|pode_esperar)\]\s*/i
-
-// Devolve a prioridade escrita na nota, ou null quando não há tag — aí quem
-// decide é o nome da lista (ver priorityFromListTitle).
-export function parsePriorityFromNotes(notes) {
-  if (!notes) return { priority: null, notes: '' }
-  const match = notes.match(PRIORITY_TAG)
-  if (!match) return { priority: null, notes }
-  return {
-    priority: normalizePriority(match[1]),
-    notes: notes.replace(PRIORITY_TAG, ''),
-  }
-}
-
-function encodeNotes(priority, notes) {
-  return `[${normalizePriority(priority) || DEFAULT_PRIORITY}] ${notes || ''}`.trim()
-}
+// A convenção de guardar metadado no começo da nota da tarefa mora em
+// gtd.js (parseMeta/encodeMeta), que é lógica pura e tem teste. Aqui só se
+// usa.
 
 export async function listTaskLists() {
   const data = await request(`${TASKS_BASE}/users/@me/lists`)
@@ -363,11 +346,13 @@ export async function listTasks({ tasklistId = '@default', tasklistTitle = '', s
   // ("Prioridade Máxima (menos de uma semana)"); sem os dois, o padrão.
   const fromList = priorityFromListTitle(tasklistTitle)
   return (data.items || []).map((t) => {
-    const { priority, notes } = parsePriorityFromNotes(t.notes)
+    const meta = parseMeta(t.notes)
     return {
       ...t,
-      priority: priority || fromList || DEFAULT_PRIORITY,
-      notesClean: notes,
+      priority: meta.priority || fromList || DEFAULT_PRIORITY,
+      contexto: meta.contexto,
+      aguardando: meta.aguardando,
+      notesClean: meta.notes,
       tasklistId,
     }
   })
@@ -390,12 +375,20 @@ export async function listAllTasks({ showCompleted = false } = {}) {
   return perList.flat()
 }
 
-export async function createTask({ title, priority = DEFAULT_PRIORITY, due, notes = '', tasklistId = '@default' }) {
+export async function createTask({
+  title,
+  priority = DEFAULT_PRIORITY,
+  due,
+  notes = '',
+  contexto = null,
+  aguardando = null,
+  tasklistId = '@default',
+}) {
   return request(`${TASKS_BASE}/lists/${encodeURIComponent(tasklistId)}/tasks`, {
     method: 'POST',
     body: JSON.stringify({
       title,
-      notes: encodeNotes(priority, notes),
+      notes: encodeMeta({ priority, contexto, aguardando }, notes),
       due: due ? due.toISOString() : undefined,
     }),
   })
@@ -408,13 +401,22 @@ export async function completeTask(taskId, tasklistId = '@default') {
   })
 }
 
-export async function updateTask(task, { title, due, priority, notes }) {
+export async function updateTask(task, { title, due, priority, notes, contexto, aguardando }) {
   const body = {}
   if (title !== undefined) body.title = title
   // O Google Tasks guarda só a data do prazo; a hora é ignorada pela API.
   if (due !== undefined) body.due = due ? due.toISOString() : null
-  if (priority !== undefined || notes !== undefined) {
-    body.notes = encodeNotes(priority ?? task.priority, notes ?? task.notesClean)
+  if (priority !== undefined || notes !== undefined || contexto !== undefined || aguardando !== undefined) {
+    // O bloco é reescrito inteiro, então o que não veio no patch precisa vir
+    // da tarefa — senão mudar só a prioridade apagaria o contexto.
+    body.notes = encodeMeta(
+      {
+        priority: priority ?? task.priority,
+        contexto: contexto ?? task.contexto,
+        aguardando: aguardando ?? task.aguardando,
+      },
+      notes ?? task.notesClean
+    )
   }
 
   return request(`${TASKS_BASE}/lists/${encodeURIComponent(task.tasklistId || '@default')}/tasks/${task.id}`, {
@@ -434,4 +436,50 @@ export async function deleteTask(task) {
   return request(`${TASKS_BASE}/lists/${encodeURIComponent(task.tasklistId || '@default')}/tasks/${task.id}`, {
     method: 'DELETE',
   })
+}
+
+// Mover de lista é o gesto central do esclarecer: sair da Entrada e virar
+// próxima ação, espera ou algum dia.
+//
+// A API tem um endpoint próprio para isso, que preserva o id da tarefa — mas
+// `destinationTasklist` é recente e nem toda conta responde a ele. Quando não
+// responde, o caminho é recriar no destino e apagar na origem. Isso troca o
+// id, e por isso a ordem importa: **cria primeiro**. Se apagasse antes e a
+// criação falhasse, o item sumiria — e perder o que a pessoa capturou é o
+// único erro que este app não pode cometer.
+export async function moverTarefa(task, tasklistDestinoId, patch = {}) {
+  const origem = task.tasklistId || '@default'
+  const temPatch = Object.keys(patch).length > 0
+
+  if (origem === tasklistDestinoId) {
+    return temPatch ? updateTask(task, patch) : task
+  }
+
+  let movida = null
+  try {
+    movida = await request(
+      `${TASKS_BASE}/lists/${encodeURIComponent(origem)}/tasks/${task.id}/move` +
+        `?destinationTasklist=${encodeURIComponent(tasklistDestinoId)}`,
+      { method: 'POST' }
+    )
+  } catch (err) {
+    // Só a falha do *mover* leva ao plano B. Se o catch envolvesse também o
+    // patch abaixo, um erro depois de a tarefa já ter mudado de lista faria
+    // o plano B criar uma cópia — e a pessoa ficaria com a coisa duplicada.
+    console.warn('Endpoint de mover não atendeu, recriando no destino:', err.message)
+    const nova = await createTask({
+      title: patch.title ?? task.title,
+      priority: patch.priority ?? task.priority,
+      due: patch.due !== undefined ? patch.due : task.due ? new Date(task.due) : null,
+      notes: patch.notes ?? task.notesClean,
+      contexto: patch.contexto ?? task.contexto,
+      aguardando: patch.aguardando ?? task.aguardando,
+      tasklistId: tasklistDestinoId,
+    })
+    await deleteTask(task)
+    return nova
+  }
+
+  if (!temPatch) return movida
+  return updateTask({ ...task, ...movida, tasklistId: tasklistDestinoId }, patch)
 }

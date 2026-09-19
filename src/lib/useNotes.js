@@ -90,10 +90,11 @@ function newNote() {
 }
 
 // Resolve a referência curta que o Worker devolveu ("n1", "n2"...) contra a
-// mesma lista de outras anotações que foi mandada no pedido de análise —
-// mesmo esquema de referência do agente (ver resolverRef em
-// agentActions.js). Devolve null quando a referência não bate com nada da
-// lista, em vez de aceitar de olhos fechados o que o modelo mandou de volta.
+// mesma lista de outras anotações que foi mandada no pedido de análise.
+// Devolve null quando a referência não bate com nada da lista, em vez de
+// aceitar de olhos fechados o que o modelo mandou de volta — o id real nunca
+// é pedido ao modelo, justamente para um caractere trocado não virar a
+// anotação errada aberta na tela.
 export function resolverNotaRelacionada(ref, outras) {
   if (typeof ref !== 'string' || !ref.startsWith('n')) return null
   const indice = Number(ref.slice(1)) - 1
@@ -241,8 +242,12 @@ export default function useNotes({ signedIn }) {
     setError(descreverFalha(err, 'A última alteração ficou salva só neste aparelho'))
   }
 
-  function createNote() {
-    const note = newNote()
+  // `inicial` existe para quando a anotação já nasce com conteúdo — é o caso
+  // do item da Entrada que a pessoa decide que é só referência, e vira nota
+  // em vez de tarefa. Criar vazia e editar logo em seguida não serviria: o
+  // updateNote seguinte ainda enxergaria a lista antiga e desfaria a criação.
+  function createNote(inicial = {}) {
+    const note = { ...newNote(), ...inicial }
     persist([note, ...notes])
     setSelectedId(note.id)
     return note

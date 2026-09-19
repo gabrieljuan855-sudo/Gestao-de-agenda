@@ -66,6 +66,10 @@ export default function Rail({ tools, openId, onOpenChange }) {
               {tool.tecla && <kbd className="rail-btn-tecla">{tool.tecla.toUpperCase()}</kbd>}
             </span>
             <span className="rail-btn-icon">{tool.icon}</span>
+            {/* O contador fica no ícone, e não no rótulo, porque o rótulo só
+                aparece no hover — e um número que só aparece quando se passa
+                o mouse não serve para lembrar de nada. */}
+            {tool.badge > 0 && <span className="rail-btn-badge">{tool.badge > 99 ? '99+' : tool.badge}</span>}
           </button>
         ))}
       </div>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { normalizeAnalysis, normalizeBriefing, normalizeAgent, normalizeSearch } from './index.js'
+import { normalizeAnalysis, normalizeBriefing, normalizeEsclarecer, normalizeSearch } from './index.js'
 
 describe('normalizeAnalysis', () => {
   it('mantém sugestões válidas e usa o texto como título quando a IA não sugere um', () => {
@@ -88,8 +88,7 @@ describe('normalizeAnalysis', () => {
     expect(valida.notaRelacionadaRef).toBe('n2')
 
     // O caso que importa: o modelo apontou uma referência fora da lista que
-    // foi realmente oferecida no prompt — igual ao que normalizeAgent faz
-    // para referências de evento/tarefa.
+    // foi realmente oferecida no prompt.
     const foraDoIntervalo = normalizeAnalysis({ notaRelacionadaRef: 'n5' }, { notasCount: 3 })
     expect(foraDoIntervalo.notaRelacionadaRef).toBe(null)
 
@@ -143,92 +142,67 @@ describe('normalizeBriefing', () => {
   })
 })
 
-describe('normalizeAgent', () => {
-  const refs = ['e1', 'e2', 't1']
-
-  it('aceita as ações bem formadas e numera os ids no servidor', () => {
-    const r = normalizeAgent(
-      {
-        reply: 'Posso fazer isso.',
-        actions: [
-          { id: 'inventado', action: 'excluir_evento', ref: 'e1', resumo: 'Cancela a reunião' },
-          { action: 'criar_tarefa', title: 'Ligar para a Ana', date: '2026-03-12', priority: 'alta' },
-        ],
-      },
-      { refs }
-    )
-    expect(r.reply).toBe('Posso fazer isso.')
-    expect(r.actions.map((a) => a.id)).toEqual(['a1', 'a2'])
-    expect(r.actions[0].ref).toBe('e1')
-    expect(r.actions[1].ref).toBe(null)
-    expect(r.actions[1].priority).toBe('alta')
-    expect(r.descartadas).toBe(0)
+describe('normalizeEsclarecer', () => {
+  it('mantém uma proposta bem formada', () => {
+    expect(
+      normalizeEsclarecer({
+        tipo: 'acao',
+        titulo: 'Ligar para a escola sobre a vaga do João',
+        contexto: 'ligar',
+        quem: null,
+        date: null,
+        time: null,
+      })
+    ).toEqual({
+      tipo: 'acao',
+      titulo: 'Ligar para a escola sobre a vaga do João',
+      contexto: 'ligar',
+      quem: null,
+      date: null,
+      time: null,
+    })
   })
 
-  it('descarta ação que aponta para uma referência que nunca foi mostrada', () => {
-    // O caso que importa: o modelo inventou um alvo. Executar isso significaria
-    // mexer num compromisso que ninguém escolheu.
-    const r = normalizeAgent({ actions: [{ action: 'excluir_evento', ref: 'e99' }] }, { refs })
-    expect(r.actions).toEqual([])
-    expect(r.descartadas).toBe(1)
+  it('normaliza o contexto para uma etiqueta gravável', () => {
+    // O contexto vira "@algo" dentro da nota, onde espaço é separador e
+    // acento criaria dois contextos para a mesma coisa.
+    expect(normalizeEsclarecer({ tipo: 'acao', contexto: 'No Computador' }).contexto).toBe('no-computador')
+    expect(normalizeEsclarecer({ tipo: 'acao', contexto: 'Ligação' }).contexto).toBe('ligacao')
+    expect(normalizeEsclarecer({ tipo: 'acao', contexto: '   ' }).contexto).toBe(null)
   })
 
-  it('descarta ação de tarefa que veio com referência de evento', () => {
-    const r = normalizeAgent({ actions: [{ action: 'editar_tarefa', ref: 'e1', title: 'x' }] }, { refs })
-    expect(r.actions).toEqual([])
-    expect(r.descartadas).toBe(1)
+  it('descarta tipo que não existe', () => {
+    expect(normalizeEsclarecer({ tipo: 'inventado' }).tipo).toBe(null)
   })
 
-  it('exige referência em tudo que não for criar', () => {
-    const r = normalizeAgent({ actions: [{ action: 'concluir_tarefa' }] }, { refs })
-    expect(r.actions).toEqual([])
-    expect(r.descartadas).toBe(1)
+  it('só aceita "quem" quando o tipo é aguardando', () => {
+    // Um nome de pessoa colado numa ação comum viraria uma espera falsa na
+    // lista de Aguardando.
+    expect(normalizeEsclarecer({ tipo: 'aguardando', quem: 'Ana' }).quem).toBe('Ana')
+    expect(normalizeEsclarecer({ tipo: 'acao', quem: 'Ana' }).quem).toBe(null)
   })
 
-  it('descarta ação de nome desconhecido e criação sem título', () => {
-    const r = normalizeAgent(
-      { actions: [{ action: 'formatar_disco' }, { action: 'criar_evento', title: '  ' }] },
-      { refs }
-    )
-    expect(r.actions).toEqual([])
-    expect(r.descartadas).toBe(2)
+  it('valida data e hora no formato esperado', () => {
+    expect(normalizeEsclarecer({ tipo: 'agendar', date: '2026-09-20', time: '14:00' })).toMatchObject({
+      date: '2026-09-20',
+      time: '14:00',
+    })
+    expect(normalizeEsclarecer({ tipo: 'agendar', date: '20/09/2026', time: '25:00' })).toMatchObject({
+      date: null,
+      time: null,
+    })
   })
 
-  it('valida os campos dentro de cada ação, como as outras rotas', () => {
-    const r = normalizeAgent(
-      {
-        actions: [
-          {
-            action: 'editar_evento',
-            ref: 'e2',
-            date: '12/03/2026',
-            time: '25:00',
-            durationMinutes: 20 * 60,
-            priority: 'urgentíssima',
-            presence: 'talvez',
-          },
-        ],
-      },
-      { refs }
-    )
-    const a = r.actions[0]
-    expect(a.date).toBe(null)
-    expect(a.time).toBe(null)
-    expect(a.durationMinutes).toBe(null)
-    expect(a.priority).toBe(null)
-    expect(a.presence).toBe(null)
-  })
-
-  it('corta em 8 ações', () => {
-    const actions = Array.from({ length: 12 }, () => ({ action: 'criar_tarefa', title: 'x' }))
-    expect(normalizeAgent({ actions }, { refs }).actions.length).toBe(8)
-  })
-
-  it('nunca quebra com uma resposta vazia ou malformada', () => {
-    expect(normalizeAgent({}, { refs })).toEqual({ reply: '', actions: [], descartadas: 0 })
-    expect(normalizeAgent(null, { refs })).toEqual({ reply: '', actions: [], descartadas: 0 })
-    expect(normalizeAgent({ actions: 'não é lista' }, { refs }).actions).toEqual([])
-    // Sem contexto nenhum, nada que mexa em item existente pode passar.
-    expect(normalizeAgent({ actions: [{ action: 'excluir_evento', ref: 'e1' }] }).actions).toEqual([])
+  it('corta título absurdamente longo e nunca quebra com resposta vazia', () => {
+    expect(normalizeEsclarecer({ tipo: 'acao', titulo: 'x'.repeat(500) }).titulo.length).toBe(300)
+    expect(normalizeEsclarecer({})).toEqual({
+      tipo: null,
+      titulo: '',
+      contexto: null,
+      quem: null,
+      date: null,
+      time: null,
+    })
+    expect(normalizeEsclarecer(null).tipo).toBe(null)
   })
 })

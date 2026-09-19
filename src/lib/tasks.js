@@ -35,3 +35,18 @@ export function isOverdueTask(task, now = new Date()) {
 export function overdueTasks(tasks, now = new Date()) {
   return tasks.filter((t) => isOverdueTask(t, now))
 }
+
+// Prazo mais próximo primeiro; quem não tem prazo vai para o fim.
+//
+// O "sem prazo por último" não é detalhe de estética: sempre que esta lista é
+// cortada (um teto de itens na tela ou num prompt), a tarefa que está mesmo
+// para vencer não pode ficar de fora só porque a API do Google devolveu uma
+// dúzia de tarefas sem data antes dela.
+export function ordenarTarefasPorPrazo(tasks) {
+  return tasks.slice().sort((a, b) => {
+    if (!a.due && !b.due) return 0
+    if (!a.due) return 1
+    if (!b.due) return -1
+    return new Date(a.due) - new Date(b.due)
+  })
+}

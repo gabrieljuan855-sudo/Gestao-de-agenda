@@ -16,6 +16,11 @@ segredos e por isso não podem ficar no navegador.
   que a decisão não pode esperar.
 - **Captura que não falha**: sem rede, o texto fica numa fila local e sobe
   sozinho quando a conexão volta.
+- **Esclarecer a Entrada**: uma tela que mostra um item de cada vez e pergunta
+  o que ele é. Você reescreve o título como uma ação de verdade ("Ligar para a
+  escola sobre a vaga do João") e escolhe o destino: próxima ação (com
+  contexto: `@ligar`, `@computador`...), aguardando alguém, agendar, algum dia,
+  referência ou lixo. Sair da Entrada é o que marca o item como resolvido.
 - **Backlog priorizado**: tarefas organizadas por urgente / importante / pode
   esperar, com aviso quando uma tarefa fica muito tempo parada.
 - **Cronômetro de foco (Pomodoro 25/5)**: ao focar numa tarefa, o app cria
@@ -152,10 +157,33 @@ Toque nas costas).
 
 ## Convenção de dados
 
-Para guardar a prioridade de cada tarefa sem precisar de banco de dados
-próprio, o app grava uma tag no início da nota da tarefa no Google Tasks, por
-exemplo: `[urgente] texto da nota`. Isso é só uma convenção interna — a nota
-continua legível e editável normalmente no app do Google Tasks.
+O app não tem banco próprio, então tudo mora no Google — e isso é de
+propósito: o que você capturou continua existindo no app oficial do Google
+Tasks, no Gmail e na Siri, mesmo que este site saia do ar.
+
+**As listas são os estados.** Uma tarefa está em exatamente uma delas, e
+mover de lista é o ato de decidir. O app cria sozinho, no primeiro login, as
+que faltarem:
+
+| Lista | O que significa |
+| --- | --- |
+| `Entrada` | Capturado, ainda não decidido |
+| `Próximas ações` | Você que faz, assim que der |
+| `Aguardando` | Depende de outra pessoa |
+| `Algum dia` | Faria sentido um dia, sem prazo |
+
+**O resto vai numa etiqueta no começo da nota da tarefa**, já que o Google
+Tasks não tem campo livre para metadado (os eventos do Calendar têm; as
+tarefas, não):
+
+```
+[alta @ligar ~ana desde:2026-09-10] texto livre da nota
+```
+
+Prioridade sem marcador, contexto com `@`, de quem se espera com `~` e desde
+quando com `desde:`. Continua uma linha legível no app do Google Tasks — é o
+motivo de não ser JSON. As notas antigas, que só tinham `[urgente]`, seguem
+sendo lidas normalmente.
 
 ## Próximos passos sugeridos
 
