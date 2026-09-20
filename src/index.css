@@ -228,7 +228,8 @@ button.primary {
   border-color: var(--solid);
 }
 
-input[type="text"] {
+input[type="text"],
+input[type="number"] {
   border: 1px solid var(--outline);
   border-radius: var(--shape-md);
   padding: 10px 12px;
@@ -237,6 +238,7 @@ input[type="text"] {
 }
 
 input[type="text"]:focus-visible,
+input[type="number"]:focus-visible,
 textarea:focus-visible,
 .field select:focus-visible,
 .field input:focus-visible {
@@ -322,7 +324,14 @@ textarea:focus-visible,
 .field { display: flex; flex-direction: column; gap: 4px; }
 .field > span { font-size: var(--label-md); color: var(--text-secondary); }
 .field-row { display: flex; gap: 10px; }
-.field-row .field { flex: 1; }
+/* `min-width: 0` é o que falta para um item flex poder encolher além da
+   largura intrínseca do próprio conteúdo — sem isso, um <input type="date">
+   (que pede uns 150px só para o próprio calendário nativo) recusava
+   encolher, o par de campos ficava mais largo que o modal, o modal ficava
+   mais largo que a tela, e o Safari "zoomava" a página inteira para caber
+   nesse layout largo demais — o que parecia um bug de zoom era, na raiz,
+   um overflow horizontal escondido dentro do modal. */
+.field-row .field { flex: 1; min-width: 0; }
 
 .quickadd-fields {
   display: grid;
@@ -1698,9 +1707,14 @@ button.danger:hover { background: var(--urgent-bg); }
      translúcida do iOS realmente entra em jogo. */
   .app-shell { padding: calc(16px + env(safe-area-inset-top, 0px)) 12px calc(88px + env(safe-area-inset-bottom, 0px)); }
 
-  /* Agenda, tarefas e trilho lado a lado não cabem num celular. */
+  /* Agenda, tarefas e trilho lado a lado não cabem num celular.
+     `minmax(0, 1fr)`, não `1fr` puro — sem o 0 mínimo explícito, a coluna
+     não encolhe abaixo do conteúdo mais largo que tiver dentro (uma tarefa
+     de título longo, um evento comprido), e o card acaba forçando a página
+     inteira a ficar mais larga que a tela. O desktop já usa esse `minmax`;
+     esta era a única cópia do grid que tinha ficado para trás. */
   .workspace,
-  .workspace--wide { grid-template-columns: 1fr; }
+  .workspace--wide { grid-template-columns: minmax(0, 1fr); }
 
   /* Sem hover no toque, o trilho vira uma barra flutuante: uma pílula solta
      perto do rodapé, não mais grudada de ponta a ponta na borda da tela. Só
