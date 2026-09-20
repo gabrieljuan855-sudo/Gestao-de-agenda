@@ -1,68 +1,77 @@
 :root {
   /* ====================================================================
-     Fundação de design, organizada pelos papéis do Material Design 3.
-
-     A paleta é a mesma de sempre — quente, sóbria, de papel. O que o MD3
-     traz aqui não é uma cara nova: é o vocabulário. Antes cada tela
-     escolhia o seu tamanho de fonte (dez valores diferentes no CSS e mais
-     vinte e nove embutidos nos componentes) e o seu raio de canto (oito
-     valores). Com papéis nomeados, escolher vira consultar.
+     Fundação de design, migrada para a paleta e os tokens do tema
+     "Chocolate" do Astryx (astryx.atmeta.com), o design system open source
+     da Meta. Os nomes dos papéis continuam os do Material Design 3 — é o
+     vocabulário que o resto do CSS usa —, mas os valores por trás de cada
+     papel agora vêm da paleta quente do Chocolate (base #8C5927 / #FFFCF7),
+     que é a versão "de verdade" do papel quente e sóbrio que este app
+     sempre teve. Raio de canto, sombra e as duas famílias tipográficas
+     (Fraunces nos títulos, Albert Sans no corpo) também vêm de lá.
      ==================================================================== */
+
+  /* ---------- tipografia: as duas famílias do tema Chocolate ---------- */
+  --font-body: 'Albert Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-heading: 'Fraunces', Georgia, "Times New Roman", Times, serif;
 
   /* ---------- cor: pares fundo/conteúdo ---------- */
   /* Todo par vem junto de propósito: quem usa --primary sabe que o texto
      por cima é --on-primary, e não sobra combinação ilegível por descuido. */
-  --primary: #3a6ea5;
+  --primary: #8c5927;
   --on-primary: #ffffff;
-  --primary-container: #e6eef7;
-  --on-primary-container: #24466a;
+  --primary-container: #ede4d4;
+  --on-primary-container: #4a3520;
 
-  /* O "sólido" é o preto do botão principal e do dia de hoje no mês. Tem
-     papel próprio porque no escuro ele inverte: reaproveitar a cor do texto
-     faria um botão claro com texto branco. */
-  --solid: #1f1e1c;
-  --on-solid: #ffffff;
+  /* O "sólido" é o marrom quase preto do botão principal e do dia de hoje no
+     mês. Tem papel próprio porque no escuro ele inverte: reaproveitar a cor
+     do texto faria um botão claro com texto branco. */
+  --solid: #4a3520;
+  --on-solid: #fffcf7;
 
-  /* Superfícies. Neste app o cartão é mais claro que a página (aparência de
-     papel sobre mesa), o inverso do tema claro padrão do MD3 — os nomes
-     seguem o papel, não o tom. */
-  --surface: #f4f3ef;
-  --surface-container: #ffffff;
-  --surface-variant: #fbfaf7;
-  --on-surface: #1f1e1c;
-  --on-surface-variant: #605e57;
-  --on-surface-muted: #939085;
+  /* Superfícies. --surface é a mesa (o fundo da página), --surface-container
+     é o cartão por cima dela — no Chocolate o cartão é um tom mais quente e
+     acastanhado que a página, não mais branco. */
+  --surface: #fffcf7;
+  --surface-container: #ede4d4;
+  --surface-variant: #f6f0e6;
+  --on-surface: #4a3520;
+  --on-surface-variant: #b88859;
+  --on-surface-muted: #c4ac95;
 
-  --outline: #c9c6ba;
-  --outline-variant: #e3e1d9;
+  --outline: #b88859;
+  --outline-variant: #c4ac95;
 
-  /* Prioridades e erro, também em pares. */
-  --urgent: #b3441f;
-  --urgent-container: #f7e6df;
-  --important: #92650b;
-  --important-container: #faeeda;
-  --low: #4c6b2b;
-  --low-container: #eaf3de;
+  /* Prioridades e erro, também em pares — derivados das cores categóricas
+     do Chocolate (vermelho/laranja/verde) tingindo a própria superfície. */
+  --urgent: #cc0000;
+  --urgent-container: #ffcac6;
+  --important: #a06018;
+  --important-container: #f3e1cc;
+  --low: #5a7a00;
+  --low-container: #e2e8c6;
 
   /* A tela cheia do foco é escura nos dois temas de propósito: ela existe
-     para tirar o resto do mundo da frente. */
-  --focus-surface: #111110;
-  --focus-on-surface: #f4f3ef;
-  --focus-on-surface-variant: #c9c6ba;
-  --focus-outline: #46443f;
-  --focus-state: #1d1c1a;
-  --focus-muted: #8f8c83;
+     para tirar o resto do mundo da frente. Usa o marrom quase preto do
+     Chocolate, não um cinza neutro. */
+  --focus-surface: #1c1610;
+  --focus-on-surface: #fffcf7;
+  --focus-on-surface-variant: #c4ac95;
+  --focus-outline: #6b5540;
+  --focus-state: #2a2018;
+  --focus-muted: #b88859;
 
-  --shadow: rgba(31, 30, 28, 0.13);
-  --shadow-weak: rgba(31, 30, 28, 0.07);
+  --shadow: rgba(74, 53, 32, 0.16);
+  --shadow-weak: rgba(74, 53, 32, 0.08);
 
   /* ---------- forma ---------- */
-  /* Escala de seis degraus, no lugar dos oito valores soltos de antes. */
-  --shape-xs: 4px;
-  --shape-sm: 8px;
+  /* Escala de seis degraus, calibrada pelos raios do tema Chocolate
+     ("soft and rounded" — o próprio tema arredonda mais que o padrão do
+     Astryx, inclusive deixando os botões em pílula por padrão). */
+  --shape-xs: 6px;
+  --shape-sm: 10px;
   --shape-md: 12px;
   --shape-lg: 16px;
-  --shape-xl: 28px;
+  --shape-xl: 24px;
   --shape-full: 999px;
 
   /* ---------- tipografia ---------- */
@@ -122,42 +131,42 @@
      o CSS não pinta sozinho (barra de rolagem, o seletor nativo de <input
      type="date">) seguirem o mesmo lado escolhido pelo sistema. */
   color-scheme: light dark;
-  font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-family: var(--font-body);
 }
 
 /* O ajuste é só por preferência do sistema (Windows, celular): sem alternador
-   dentro do app. Mesma lógica do claro — fundo quente, texto quase preto vira
-   quase branco — só invertida, com os tons de prioridade um pouco mais claros
+   dentro do app. Mesmos pares do tema Chocolate no modo escuro — fundo
+   marrom quase preto, texto creme, tons de prioridade um pouco mais claros
    para continuar legíveis sobre fundo escuro. */
 @media (prefers-color-scheme: dark) {
   :root {
-    --primary: #7aa9de;
-    --on-primary: #10243a;
-    --primary-container: #1f2c3b;
-    --on-primary-container: #cfe0f4;
+    --primary: #d4a06a;
+    --on-primary: #4a3520;
+    --primary-container: #2a2018;
+    --on-primary-container: #ede4d4;
 
-    --solid: #f2f0ec;
-    --on-solid: #18171a;
+    --solid: #ede4d4;
+    --on-solid: #1c1610;
 
-    --surface: #18171a;
-    --surface-container: #242321;
-    --surface-variant: #2c2b28;
-    --on-surface: #f2f0ec;
-    --on-surface-variant: #c7c3ba;
-    --on-surface-muted: #8f8b82;
+    --surface: #141010;
+    --surface-container: #2a2018;
+    --surface-variant: #1f1814;
+    --on-surface: #ede4d4;
+    --on-surface-variant: #c4a882;
+    --on-surface-muted: #6b5540;
 
-    --outline: #504d46;
-    --outline-variant: #38362f;
+    --outline: #6b5540;
+    --outline-variant: #38302a;
 
-    --urgent: #e2826a;
-    --urgent-container: #3a241c;
-    --important: #d9a94a;
-    --important-container: #362b16;
-    --low: #8ab86a;
-    --low-container: #1f2b18;
+    --urgent: #ff7a7a;
+    --urgent-container: #431f1f;
+    --important: #e0a04a;
+    --important-container: #3a2a18;
+    --low: #a8d43a;
+    --low-container: #2e3315;
 
-    --shadow: rgba(0, 0, 0, 0.4);
-    --shadow-weak: rgba(0, 0, 0, 0.22);
+    --shadow: rgba(0, 0, 0, 0.45);
+    --shadow-weak: rgba(0, 0, 0, 0.25);
   }
 }
 
@@ -167,6 +176,13 @@ body {
   margin: 0;
   background: var(--surface-0);
   color: var(--text-primary);
+}
+
+/* Fraunces nos títulos, Albert Sans (herdado do body) em tudo mais — a dupla
+   tipográfica do tema Chocolate. */
+h1, h2, h3, .app-head-title h2 {
+  font-family: var(--font-heading);
+  font-weight: 600;
 }
 
 button, input, textarea {
@@ -190,14 +206,17 @@ textarea {
    servir para qualquer fundo — inclusive o botão principal, que é escuro, e
    os botões da tela cheia, que ficam sobre preto. Antes cada um precisava do
    seu :hover com uma cor fixa, e o da tela cheia tinha três. */
+/* Botão em pílula: o tema Chocolate arredonda o botão por completo em vez de
+   usar o mesmo raio médio dos cartões — é a assinatura visual mais visível
+   do tema. */
 button {
   position: relative;
   cursor: pointer;
-  border-radius: var(--shape-md);
+  border-radius: var(--shape-full);
   border: 1px solid var(--outline);
   background: var(--surface-container);
   color: var(--on-surface);
-  padding: 8px 12px;
+  padding: 8px 14px;
 }
 
 button::after {
@@ -292,7 +311,7 @@ textarea:focus-visible,
   position: fixed;
   inset: 0;
   z-index: 40;
-  background: rgba(31, 30, 28, 0.45);
+  background: rgba(74, 53, 32, 0.45);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -450,7 +469,7 @@ textarea:focus-visible,
   width: 100%;
 }
 
-button.danger { color: var(--urgent); border-color: var(--urgent-bg); }
+button.danger { color: var(--urgent); border-color: var(--urgent); }
 button.danger:hover { background: var(--urgent-bg); }
 
 /* Botão só ícone das linhas de lista (editar/focar/concluir tarefa): 40px,
