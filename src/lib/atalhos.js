@@ -11,6 +11,7 @@ export const ATALHOS = [
   // sinal de que o trilho estava carregando o que não era ferramenta.
   { tecla: 'e', acao: 'entrada', descricao: 'Entrada (esclarecer)' },
   { tecla: 't', acao: 'proximas', descricao: 'Próximas ações' },
+  { tecla: 'p', acao: 'projetos', descricao: 'Projetos' },
   { tecla: 'a', acao: 'aguardando', descricao: 'Aguardando' },
   { tecla: 'r', acao: 'revisao', descricao: 'Revisão da semana' },
   { tecla: 'n', acao: 'notas', descricao: 'Anotações' },
@@ -28,6 +29,7 @@ const POR_TECLA = {
   c: 'criar',
   e: 'entrada',
   t: 'proximas',
+  p: 'projetos',
   a: 'aguardando',
   r: 'revisao',
   n: 'notas',
