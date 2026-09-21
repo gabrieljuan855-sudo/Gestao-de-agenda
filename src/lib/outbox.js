@@ -35,8 +35,10 @@ function novoId() {
   return `captura-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 }
 
-export function enfileirar(texto) {
-  const item = { id: novoId(), texto, em: new Date().toISOString() }
+export function enfileirar(texto, due = null) {
+  // `due` chega como Date (mesmo formato que createTask espera) e precisa
+  // virar string para sobreviver ao JSON.stringify do localStorage.
+  const item = { id: novoId(), texto, due: due ? due.toISOString() : null, em: new Date().toISOString() }
   gravar([...ler(), item])
   return item
 }
@@ -53,8 +55,8 @@ function remover(id) {
   gravar(ler().filter((item) => item.id !== id))
 }
 
-// Tenta gravar de verdade o que está na fila. `enviar(texto)` é injetado por
-// quem chama (e nos testes) — este módulo não conhece o Google.
+// Tenta gravar de verdade o que está na fila. `enviar(texto, due)` é injetado
+// por quem chama (e nos testes) — este módulo não conhece o Google.
 //
 // Em sequência, e parando no primeiro erro: se a rede caiu, insistir com os
 // outros só repete a mesma falha; e manter a ordem é o que faz a Entrada
@@ -63,7 +65,7 @@ export async function descarregar(enviar) {
   let enviados = 0
   for (const item of ler()) {
     try {
-      await enviar(item.texto)
+      await enviar(item.texto, item.due ? new Date(item.due) : null)
       // Só sai da fila depois de gravado: um erro entre o envio e a remoção
       // deixa o item para a próxima rodada. Repetir é melhor que sumir.
       remover(item.id)

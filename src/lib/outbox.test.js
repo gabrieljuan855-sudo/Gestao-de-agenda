@@ -23,6 +23,17 @@ describe('enfileirar', () => {
     const b = enfileirar('x')
     expect(a.id).not.toBe(b.id)
   })
+
+  it('guarda o prazo reconhecido no texto, se houver', () => {
+    const amanha = new Date('2026-09-22T00:00:00.000Z')
+    enfileirar('atualizar PLANCOM amanhã', amanha)
+    expect(pendentes()[0].due).toBe(amanha.toISOString())
+  })
+
+  it('sem prazo reconhecido, guarda null', () => {
+    enfileirar('ligar para a Ana')
+    expect(pendentes()[0].due).toBeNull()
+  })
 })
 
 describe('descarregar', () => {
@@ -64,6 +75,19 @@ describe('descarregar', () => {
 
   it('não quebra com a fila vazia', async () => {
     expect(await descarregar(async () => {})).toEqual({ enviados: 0, restantes: 0 })
+  })
+
+  it('devolve o prazo como Date, não como string', async () => {
+    const amanha = new Date('2026-09-22T00:00:00.000Z')
+    enfileirar('atualizar PLANCOM amanhã', amanha)
+
+    let recebido
+    await descarregar(async (_texto, due) => {
+      recebido = due
+    })
+
+    expect(recebido).toBeInstanceOf(Date)
+    expect(recebido.toISOString()).toBe(amanha.toISOString())
   })
 
   it('sobrevive a uma recarga da página: o que ficou na fila continua lá', async () => {

@@ -1234,12 +1234,21 @@ button.danger:hover { background: var(--urgent-bg); }
   display: flex;
   margin: -16px -16px 12px;
   border-bottom: 1px solid var(--outline-variant);
+  /* Salvaguarda: numa largura intermediária (nem desktop confortável, nem o
+     trilho já virou pílula), a barra ainda pode não caber mesmo com o
+     min-width: 0 abaixo — aqui ela rola em vez de vazar para fora do cartão. */
+  overflow-x: auto;
 }
 
 /* 48px é a altura de aba do MD3 e também o alvo de toque mínimo. */
 .tab {
   position: relative;
   flex: 1;
+  /* Sem isso, um filho flex nunca encolhe abaixo da largura do próprio texto
+     ("Aguardando", "Revisão") — numa coluna estreita a barra de abas inteira
+     se recusava a encolher e vazava por cima do trilho ao lado, em vez de
+     comprimir os rótulos como as outras três colunas do layout já fazem. */
+  min-width: 0;
   min-height: 48px;
   display: flex;
   align-items: center;
@@ -1256,6 +1265,11 @@ button.danger:hover { background: var(--urgent-bg); }
 }
 
 .tab.is-ativa { color: var(--primary); }
+
+/* Título de tarefa ou etiqueta de projeto, sem espaço, pode ser mais longo
+   que a coluna do painel Trabalho — sem isso, um texto assim estourava a
+   largura do cartão em vez de quebrar linha. */
+.revisao-lista { overflow-wrap: anywhere; }
 
 /* O indicador: barra de 3dp, arredondada em cima, colada na linha de baixo.
    É ele que liga a aba ao conteúdo — sem isso a aba ativa vira só um texto
