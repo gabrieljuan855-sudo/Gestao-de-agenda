@@ -274,6 +274,17 @@ export async function updateEvent(event, { title, start, end, description, allDa
   )
 }
 
+// Move o evento inteiro para outra agenda. É uma chamada própria do Calendar
+// (diferente de um PATCH comum): o id do evento não muda, só o dono dele —
+// ao contrário de moverTarefa (tarefas não têm essa operação e precisam do
+// caminho criar+apagar), aqui a API do Google já resolve isso de uma vez.
+export async function moveEvent(event, destinationCalendarId) {
+  return request(
+    `${CAL_BASE}/calendars/${encodeURIComponent(event.calendarId || 'primary')}/events/${event.id}/move?destination=${encodeURIComponent(destinationCalendarId)}`,
+    { method: 'POST' }
+  )
+}
+
 // Grava no Google a escolha de ir ou não a um compromisso, para ela valer em
 // todos os aparelhos em vez de ficar presa no navegador onde foi feita.
 //

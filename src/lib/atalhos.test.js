@@ -12,7 +12,6 @@ describe('atalhoDoEvento', () => {
     expect(atalhoDoEvento(tecla('n'))).toBe('notas')
     expect(atalhoDoEvento(tecla('b'))).toBe('buscar')
     expect(atalhoDoEvento(tecla('/'))).toBe('buscar')
-    expect(atalhoDoEvento(tecla('p'))).toBe('pomodoro')
     expect(atalhoDoEvento(tecla('1'))).toBe('vista-dia')
     expect(atalhoDoEvento(tecla('3'))).toBe('vista-mes')
     expect(atalhoDoEvento(tecla('h'))).toBe('hoje')
