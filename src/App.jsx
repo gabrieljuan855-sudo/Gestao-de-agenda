@@ -27,6 +27,7 @@ import {
   LISTAS_GTD,
   acharLista,
   projetosSemProximaAcao,
+  agruparPorProjeto,
 } from './lib/gtd.js'
 import { enfileirar, descarregar, quantasPendentes } from './lib/outbox.js'
 import { parseQuickAdd } from './lib/nlp.js'
@@ -42,6 +43,7 @@ import Notes from './components/Notes.jsx'
 import useNotes from './lib/useNotes.js'
 import Entrada from './components/Entrada.jsx'
 import Aguardando from './components/Aguardando.jsx'
+import Projetos from './components/Projetos.jsx'
 import Trabalho from './components/Trabalho.jsx'
 import HorarioTrabalho from './components/HorarioTrabalho.jsx'
 import { loadWorkSchedule } from './lib/schedule.js'
@@ -380,6 +382,7 @@ export default function App() {
     // seleciona em vez de alternar.
     entrada: () => setAbaTrabalho('entrada'),
     proximas: () => setAbaTrabalho('proximas'),
+    projetos: () => setAbaTrabalho('projetos'),
     aguardando: () => setAbaTrabalho('aguardando'),
     revisao: () => setAbaTrabalho('revisao'),
     notas: () => abrirOuFechar('notes'),
@@ -831,6 +834,17 @@ export default function App() {
           onAgendar={handleAgendarBloco}
           showCompleted={showCompleted}
           onToggleShowCompleted={setShowCompleted}
+        />
+      ),
+    },
+    {
+      id: 'projetos',
+      label: 'Projetos',
+      render: () => (
+        <Projetos
+          grupos={agruparPorProjeto(tasks, idProximas)}
+          onEdit={setEditingTask}
+          onComplete={handleCompleteTask}
         />
       ),
     },

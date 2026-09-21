@@ -9,6 +9,7 @@ describe('atalhoDoEvento', () => {
   it('reconhece cada atalho', () => {
     expect(atalhoDoEvento(tecla('c'))).toBe('criar')
     expect(atalhoDoEvento(tecla('e'))).toBe('entrada')
+    expect(atalhoDoEvento(tecla('p'))).toBe('projetos')
     expect(atalhoDoEvento(tecla('n'))).toBe('notas')
     expect(atalhoDoEvento(tecla('b'))).toBe('buscar')
     expect(atalhoDoEvento(tecla('/'))).toBe('buscar')

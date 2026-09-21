@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { acharLista, temEntrada, parseMeta, encodeMeta, etiqueta, projetosSemProximaAcao, LISTA_ENTRADA } from './gtd.js'
+import {
+  acharLista,
+  temEntrada,
+  parseMeta,
+  encodeMeta,
+  etiqueta,
+  projetosSemProximaAcao,
+  agruparPorProjeto,
+  LISTA_ENTRADA,
+} from './gtd.js'
 
 const listas = [
   { id: '1', title: 'Prioridade Máxima (menos de uma semana)' },
@@ -215,5 +224,47 @@ describe('projetosSemProximaAcao', () => {
   it('não quebra com lista vazia', () => {
     expect(projetosSemProximaAcao([], PROXIMAS)).toEqual([])
     expect(projetosSemProximaAcao(undefined, PROXIMAS)).toEqual([])
+  })
+})
+
+describe('agruparPorProjeto', () => {
+  const PROXIMAS = 'lista-proximas'
+  const AGUARDANDO = 'lista-aguardando'
+
+  it('agrupa as tarefas do mesmo projeto, em ordem alfabética de projeto', () => {
+    const tasks = [
+      { id: '1', projeto: 'zebra', tasklistId: PROXIMAS, status: 'needsAction', priority: 'media' },
+      { id: '2', projeto: 'abelha', tasklistId: PROXIMAS, status: 'needsAction', priority: 'media' },
+      { id: '3', projeto: 'abelha', tasklistId: AGUARDANDO, status: 'needsAction', priority: 'alta' },
+    ]
+    const grupos = agruparPorProjeto(tasks, PROXIMAS)
+    expect(grupos.map((g) => g.projeto)).toEqual(['abelha', 'zebra'])
+    expect(grupos[0].tarefas.map((t) => t.id)).toEqual(['3', '2'])
+  })
+
+  it('marca semProximaAcao quando nenhuma tarefa do projeto está em Próximas ações', () => {
+    const tasks = [{ id: '1', projeto: 'caso-silva', tasklistId: AGUARDANDO, status: 'needsAction', priority: 'media' }]
+    expect(agruparPorProjeto(tasks, PROXIMAS)[0].semProximaAcao).toBe(true)
+  })
+
+  it('não marca semProximaAcao quando há tarefa em Próximas ações', () => {
+    const tasks = [
+      { id: '1', projeto: 'caso-silva', tasklistId: AGUARDANDO, status: 'needsAction', priority: 'media' },
+      { id: '2', projeto: 'caso-silva', tasklistId: PROXIMAS, status: 'needsAction', priority: 'media' },
+    ]
+    expect(agruparPorProjeto(tasks, PROXIMAS)[0].semProximaAcao).toBe(false)
+  })
+
+  it('ignora tarefa concluída e tarefa sem projeto', () => {
+    const tasks = [
+      { id: '1', projeto: 'caso-silva', tasklistId: PROXIMAS, status: 'completed', priority: 'media' },
+      { id: '2', tasklistId: AGUARDANDO, status: 'needsAction', priority: 'media' },
+    ]
+    expect(agruparPorProjeto(tasks, PROXIMAS)).toEqual([])
+  })
+
+  it('não quebra com lista vazia', () => {
+    expect(agruparPorProjeto([], PROXIMAS)).toEqual([])
+    expect(agruparPorProjeto(undefined, PROXIMAS)).toEqual([])
   })
 })

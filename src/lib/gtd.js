@@ -1,5 +1,6 @@
 import { semAcento } from './texto.js'
 import { normalizePriority, DEFAULT_PRIORITY } from './priority.js'
+import { compararPorPrioridadeEPrazo } from './tasks.js'
 
 // As listas do Google Tasks são os baldes do método: um item está em
 // exatamente uma delas, e mover de lista É o ato de decidir o que aquilo é.
@@ -133,4 +134,23 @@ export function projetosSemProximaAcao(tasks, idListaProximas) {
   )
   const todos = new Set(ativos.map((t) => t.projeto))
   return [...todos].filter((p) => !comProximaAcao.has(p)).sort()
+}
+
+// A aba Projetos não inventa uma visão nova: é a mesma etiqueta acima,
+// só virada do avesso — em vez de "quais projetos não têm próxima ação"
+// (uma lista de nomes), aqui é "o que cada projeto tem, e falta o quê".
+export function agruparPorProjeto(tasks, idListaProximas) {
+  const ativos = (tasks || []).filter((t) => t.status !== 'completed' && t.projeto)
+  const porProjeto = new Map()
+  for (const t of ativos) {
+    if (!porProjeto.has(t.projeto)) porProjeto.set(t.projeto, [])
+    porProjeto.get(t.projeto).push(t)
+  }
+  return [...porProjeto.entries()]
+    .map(([projeto, tarefas]) => ({
+      projeto,
+      tarefas: tarefas.slice().sort(compararPorPrioridadeEPrazo),
+      semProximaAcao: !tarefas.some((t) => t.tasklistId === idListaProximas),
+    }))
+    .sort((a, b) => a.projeto.localeCompare(b.projeto))
 }
