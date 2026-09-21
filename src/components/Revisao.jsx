@@ -23,7 +23,10 @@ export default function Revisao({ numeros, comentario, carregando, onGerar }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {comentario && <p style={{ fontSize: 'var(--body-md)', margin: 0 }}>{comentario}</p>}
 
-          <ul style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 6, fontSize: 'var(--body-sm)' }}>
+          <ul
+            className="revisao-lista"
+            style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 6, fontSize: 'var(--body-sm)' }}
+          >
             <li>
               {numeros.entradaVazia
                 ? 'Entrada vazia — nada esperando ser esclarecido.'

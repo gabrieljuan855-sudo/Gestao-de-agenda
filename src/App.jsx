@@ -29,6 +29,7 @@ import {
   projetosSemProximaAcao,
 } from './lib/gtd.js'
 import { enfileirar, descarregar, quantasPendentes } from './lib/outbox.js'
+import { parseQuickAdd } from './lib/nlp.js'
 import { rangeForView, shiftReference, isSameDay, toDateInput } from './lib/dates.js'
 import { findDefaultCalendar } from './lib/defaults.js'
 import QuickAdd from './components/QuickAdd.jsx'
@@ -54,6 +55,7 @@ import PeriodBar from './components/PeriodBar.jsx'
 import DayView from './components/DayView.jsx'
 import WeekView from './components/WeekView.jsx'
 import MonthView from './components/MonthView.jsx'
+import ErrorBoundary from './components/ErrorBoundary.jsx'
 import EventEditor from './components/EventEditor.jsx'
 import TaskEditor from './components/TaskEditor.jsx'
 import CalendarSettings from './components/CalendarSettings.jsx'
@@ -290,7 +292,7 @@ export default function App() {
         await reload()
       } catch (err) {
         console.error('Captura foi para a fila local:', err)
-        enfileirar(texto)
+        enfileirar(texto, due)
         setCapturasPendentes(quantasPendentes())
       }
     },
@@ -301,7 +303,7 @@ export default function App() {
   // reaparece — os dois momentos em que ela tem chance real de subir.
   const descarregarFila = useCallback(async () => {
     if (!signedIn || quantasPendentes() === 0) return
-    const { enviados, restantes } = await descarregar((texto) => gravarCaptura(texto))
+    const { enviados, restantes } = await descarregar((texto, due) => gravarCaptura(texto, due))
     setCapturasPendentes(restantes)
     if (enviados > 0) await reload()
   }, [signedIn, gravarCaptura, reload])
@@ -333,9 +335,15 @@ export default function App() {
     // Limpa a URL antes de gravar: se a pessoa recarregar a página depois,
     // não pode capturar a mesma coisa de novo.
     window.history.replaceState({}, '', window.location.pathname)
-    handleCapture({ texto: texto.trim(), due: null })
-      .then(() => setCapturaDaUrl(texto.trim()))
-      .catch(() => setCapturaDaUrl(texto.trim()))
+    const textoLimpo = texto.trim()
+    // Mesmo reconhecimento de data do QuickAdd: "atualizar PLANCOM amanhã"
+    // vindo de um Atalho do iOS também vira prazo, não só quando digitado
+    // dentro do app. Um evento (dia+hora certos) não faz sentido aqui — a
+    // captura por URL sempre vira tarefa, então só a data importa.
+    const preview = parseQuickAdd(textoLimpo)
+    handleCapture({ texto: textoLimpo, due: preview.type === 'task' ? preview.due : null })
+      .then(() => setCapturaDaUrl(textoLimpo))
+      .catch(() => setCapturaDaUrl(textoLimpo))
   }, [signedIn, entradaId, handleCapture])
 
   function openDay(day) {
@@ -875,6 +883,9 @@ export default function App() {
 
       <div className={view === 'day' ? 'workspace' : 'workspace workspace--wide'}>
         <div className="workspace-main">
+          {/* `key={view}` reseta o limite de erro ao trocar de aba: um erro na
+              Semana não deve continuar bloqueando depois de voltar para o Dia. */}
+          <ErrorBoundary key={view}>
           {view === 'day' && (
             <DayView
               date={reference}
@@ -916,6 +927,7 @@ export default function App() {
               declined={declined}
             />
           )}
+          </ErrorBoundary>
         </div>
         <Trabalho abas={abasDoTrabalho} abaAtiva={abaTrabalho} onAbaChange={setAbaTrabalho} />
 
