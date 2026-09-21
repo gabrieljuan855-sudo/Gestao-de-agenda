@@ -33,7 +33,7 @@ export function numerosDaRevisao(
 
   const aguardandoAtivos = pendentes.filter((t) => idAguardando && t.tasklistId === idAguardando && t.aguardando)
   const aguardandoEnvelhecendo = aguardandoAtivos
-    .map((t) => ({ title: t.title, dias: daysSince(t.aguardando.desde) }))
+    .map((t) => ({ title: t.title, dias: daysSince(t.aguardando.desde, now) }))
     .filter((a) => a.dias !== null && a.dias >= DIAS_AGUARDANDO_ENVELHECIDA)
     .sort((a, b) => b.dias - a.dias)
 

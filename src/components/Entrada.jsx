@@ -113,7 +113,13 @@ export default function Entrada({
   return (
     <div>
       {/* Sem título aqui: a aba do painel já diz "Entrada", e o contador dela
-          já diz quantos itens esperam decisão. */}
+          já diz quantos itens esperam decisão. A posição só aparece com mais
+          de um item — com um só, "item 1 de 1" não informa nada. */}
+      {itens.length > 1 && (
+        <div className="muted" style={{ fontSize: 'var(--label-sm)', marginBottom: 6 }}>
+          Item {indice + 1} de {itens.length}
+        </div>
+      )}
       <label className="field">
         <span>O que é isso, em uma frase?</span>
         <textarea rows={2} value={titulo} onChange={(e) => setTitulo(e.target.value)} />
@@ -126,7 +132,13 @@ export default function Entrada({
       )}
 
       {!IA_DESLIGADA && (
-        <button type="button" onClick={pedirAjuda} disabled={esclarecendo || salvando} style={{ marginBottom: 12 }}>
+        <button
+          type="button"
+          onClick={pedirAjuda}
+          disabled={esclarecendo || salvando}
+          style={{ marginBottom: 12 }}
+          title="Pede pra IA sugerir contexto, prazo ou tipo — você ainda confirma antes de arquivar."
+        >
           {esclarecendo ? 'Pensando...' : '✨ Não sei o que fazer com isso'}
         </button>
       )}
@@ -135,7 +147,12 @@ export default function Entrada({
           para resolver agora, organizar aquilo custa mais caro que fazer. */}
       <div className="entrada-dois-minutos">
         <span>Dá para resolver em 2 minutos?</span>
-        <button type="button" onClick={() => executar(() => onConcluir(item))} disabled={salvando}>
+        <button
+          type="button"
+          onClick={() => executar(() => onConcluir(item))}
+          disabled={salvando}
+          title="Marca como concluída agora, sem virar próxima ação nem aparecer em nenhuma lista."
+        >
           Já fiz
         </button>
       </div>
@@ -154,6 +171,7 @@ export default function Entrada({
                 setContexto(contexto === c ? '' : c)
                 setNovoContexto('')
               }}
+              title={`Marca o contexto @${c} nesta próxima ação.`}
             >
               @{c}
             </button>
@@ -164,6 +182,7 @@ export default function Entrada({
             value={novoContexto}
             onChange={(e) => setNovoContexto(e.target.value)}
             className="entrada-contexto-novo"
+            title="Cria um contexto novo, se nenhum dos acima servir."
           />
         </div>
         {/* Um projeto é só a mesma etiqueta repetida em mais de uma tarefa —
@@ -176,6 +195,7 @@ export default function Entrada({
           onChange={(e) => setProjeto(e.target.value)}
           list="entrada-projetos"
           style={{ width: '100%', marginBottom: 8 }}
+          title="Agrupa esta ação com outras do mesmo projeto (etiqueta livre, ex.: caso-maria)."
         />
         <datalist id="entrada-projetos">
           {projetos.map((p) => (
@@ -191,6 +211,7 @@ export default function Entrada({
           value={duracao}
           onChange={(e) => setDuracao(e.target.value)}
           style={{ width: '100%', marginBottom: 8 }}
+          title="Ajuda o filtro de tempo livre a sugerir esta ação quando você tiver esse tempo de sobra."
         />
         <button
           type="button"
@@ -206,6 +227,7 @@ export default function Entrada({
               })
             )
           }
+          title="Vira uma ação sua, na lista Próximas — some da Entrada."
         >
           É a próxima ação
         </button>
@@ -219,11 +241,13 @@ export default function Entrada({
           value={quem}
           onChange={(e) => setQuem(e.target.value)}
           style={{ width: '100%', marginBottom: 8 }}
+          title="Nome de quem precisa responder ou entregar algo antes de você continuar."
         />
         <button
           type="button"
           disabled={!podeArquivar || !quem.trim()}
           onClick={() => executar(() => onAguardando(item, { titulo: tituloLimpo, quem: quem.trim() }))}
+          title="Vira um item em Aguardando, com quem e desde quando — some da Entrada."
         >
           Estou esperando
         </button>
@@ -234,11 +258,11 @@ export default function Entrada({
         <div className="field-row">
           <label className="field">
             <span>Dia</span>
-            <input type="date" value={data} onChange={(e) => setData(e.target.value)} />
+            <input type="date" value={data} onChange={(e) => setData(e.target.value)} title="Data do compromisso." />
           </label>
           <label className="field">
             <span>Hora</span>
-            <input type="time" value={hora} onChange={(e) => setHora(e.target.value)} />
+            <input type="time" value={hora} onChange={(e) => setHora(e.target.value)} title="Hora do compromisso." />
           </label>
         </div>
         <button
@@ -248,6 +272,7 @@ export default function Entrada({
           onClick={() =>
             executar(() => onAgendar(item, { titulo: tituloLimpo, start: fromInputs(data, hora) }))
           }
+          title="Vira um evento no Google Calendar, no dia e hora escolhidos — some da Entrada."
         >
           Pôr na agenda
         </button>
@@ -258,6 +283,7 @@ export default function Entrada({
           type="button"
           disabled={!podeArquivar}
           onClick={() => executar(() => onAlgumDia(item, { titulo: tituloLimpo }))}
+          title="Guarda para reconsiderar depois, fora das listas ativas — some da Entrada."
         >
           Algum dia
         </button>
@@ -265,16 +291,32 @@ export default function Entrada({
           type="button"
           disabled={!podeArquivar}
           onClick={() => executar(() => onReferencia(item, { titulo: tituloLimpo }))}
+          title="Vira uma anotação (sem virar ação) — some da Entrada."
         >
           É só referência
         </button>
-        <button type="button" className="danger" disabled={salvando} onClick={() => executar(() => onExcluir(item))}>
+        <button
+          type="button"
+          className="danger"
+          disabled={salvando}
+          onClick={() => executar(() => onExcluir(item))}
+          title="Exclui de vez. Não tem desfazer."
+        >
           Lixo
         </button>
         <button
           type="button"
           disabled={salvando || itens.length < 2}
+          onClick={() => setIndice((i) => (i - 1 + itens.length) % itens.length)}
+          title="Mostra o item anterior da Entrada, sem decidir nada sobre este ainda."
+        >
+          Anterior
+        </button>
+        <button
+          type="button"
+          disabled={salvando || itens.length < 2}
           onClick={() => setIndice((i) => (i + 1) % itens.length)}
+          title="Mostra o próximo item da Entrada, sem decidir nada sobre este ainda."
         >
           Depois
         </button>

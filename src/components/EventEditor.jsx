@@ -4,7 +4,7 @@ import ConfirmDialog from './ConfirmDialog.jsx'
 import { toDateInput, toTimeInput, fromInputs } from '../lib/dates.js'
 import { isAllDay, eventStart, eventEnd } from '../lib/events.js'
 
-export default function EventEditor({ event, onSave, onDelete, onClose }) {
+export default function EventEditor({ event, calendars = [], onSave, onDelete, onClose }) {
   const allDay = isAllDay(event)
   const start = eventStart(event)
   const end = eventEnd(event)
@@ -14,6 +14,7 @@ export default function EventEditor({ event, onSave, onDelete, onClose }) {
   const [endDate, setEndDate] = useState(toDateInput(end))
   const [startTime, setStartTime] = useState(allDay ? '09:00' : toTimeInput(start))
   const [endTime, setEndTime] = useState(allDay ? '10:00' : toTimeInput(end))
+  const [calendarId, setCalendarId] = useState(event.calendarId || 'primary')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
@@ -30,7 +31,7 @@ export default function EventEditor({ event, onSave, onDelete, onClose }) {
     setSaving(true)
     setError(null)
     try {
-      await onSave({ title: title.trim(), start: nextStart, end: nextEnd, allDay })
+      await onSave({ title: title.trim(), start: nextStart, end: nextEnd, allDay, calendarId })
       onClose()
     } catch (err) {
       setError(`Não deu para salvar: ${err.message}`)
@@ -93,10 +94,22 @@ export default function EventEditor({ event, onSave, onDelete, onClose }) {
           </>
         )}
 
-        {event.calendarSummary && (
-          <div className="muted" style={{ fontSize: 'var(--label-sm)' }}>
-            Agenda: {event.calendarSummary}
-          </div>
+        {calendars.length > 0 && (
+          <label className="field">
+            <span>Agenda</span>
+            <select value={calendarId} onChange={(e) => setCalendarId(e.target.value)}>
+              {/* A agenda de origem pode não estar entre as graváveis (ex.: uma
+                  agenda que virou só-leitura depois que o evento foi criado
+                  nela) — sem esta opção extra, o <select> cairia na primeira
+                  da lista sozinho e moveria o evento sem ninguém escolher. */}
+              {!calendars.some((cal) => cal.id === calendarId) && (
+                <option value={calendarId}>{event.calendarSummary || 'Agenda atual'}</option>
+              )}
+              {calendars.map((cal) => (
+                <option key={cal.id} value={cal.id}>{cal.summaryOverride || cal.summary}</option>
+              ))}
+            </select>
+          </label>
         )}
 
         {error && <div className="form-error">{error}</div>}

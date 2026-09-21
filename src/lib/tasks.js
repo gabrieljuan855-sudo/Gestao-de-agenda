@@ -2,11 +2,13 @@ import { startOfDay, dateOnlyFromISO } from './dates.js'
 import { PRIORITY_ORDER } from './priority.js'
 
 // Quantos dias desde a última mudança na tarefa — usado tanto pelo aviso
-// "parado há N dias" do Backlog quanto pelo briefing do topo.
-export function daysSince(dateString) {
+// "parado há N dias" do Backlog quanto pelo briefing do topo. `now` é
+// opcional (some chamadas, como a revisão semanal, precisam de uma data de
+// referência fixa para o cálculo não mudar sozinho a cada dia que passa).
+export function daysSince(dateString, now = new Date()) {
   if (!dateString) return null
   const created = new Date(dateString)
-  const diff = Date.now() - created.getTime()
+  const diff = now.getTime() - created.getTime()
   return Math.floor(diff / (1000 * 60 * 60 * 24))
 }
 

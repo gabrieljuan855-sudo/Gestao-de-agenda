@@ -701,6 +701,29 @@ button.danger:hover { background: var(--urgent-bg); }
 .app-head-title h2 { margin: 0; font-size: var(--headline-sm); line-height: 1.1; }
 .app-head-sub { font-size: var(--label-md); }
 
+/* Configuração e sair, discretos no rodapé — mesmo espírito do
+   .notes-print-btn: texto sem borda, cor apagada, só ganha destaque no
+   hover. Fica sempre no fim do fluxo normal da página (depois de todo
+   banner/aviso condicional), para não pular de lugar conforme o que está
+   visível no momento. */
+.app-footer {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 24px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--outline-variant);
+}
+.app-footer button {
+  border: none;
+  background: transparent;
+  color: var(--on-surface-variant);
+  font-size: var(--label-sm);
+  padding: 4px 6px;
+  min-height: 0;
+}
+.app-footer button:hover { color: var(--on-surface); }
+
 /* Cartão "veja o briefing aqui", ao lado do cumprimento — some sozinho depois
    de 30 minutos (ver useBriefing.js), ou ao tocar no ✕. */
 .briefing-card {

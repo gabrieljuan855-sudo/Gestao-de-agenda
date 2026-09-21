@@ -4,6 +4,7 @@ import {
   listAllEvents,
   createEvent,
   updateEvent,
+  moveEvent,
   deleteEvent,
   setEventPresence,
   listAllTasks,
@@ -33,7 +34,6 @@ import { findDefaultCalendar } from './lib/defaults.js'
 import QuickAdd from './components/QuickAdd.jsx'
 import Logo from './components/Logo.jsx'
 import Rail from './components/Rail.jsx'
-import FocusPanel from './components/FocusPanel.jsx'
 import FocusOverlay from './components/FocusOverlay.jsx'
 import useFocusTimer from './lib/useFocusTimer.js'
 import Backlog from './components/Backlog.jsx'
@@ -376,7 +376,6 @@ export default function App() {
     revisao: () => setAbaTrabalho('revisao'),
     notas: () => abrirOuFechar('notes'),
     buscar: () => abrirOuFechar('search'),
-    pomodoro: () => abrirOuFechar('focus'),
     'vista-dia': () => setView('day'),
     'vista-semana': () => setView('week'),
     'vista-mes': () => setView('month'),
@@ -581,7 +580,15 @@ export default function App() {
   }
 
   async function handleSaveEvent(patch) {
-    await updateEvent(editingEvent, patch)
+    // Mudar de agenda é uma chamada própria do Calendar (moveEvent), separada
+    // do PATCH normal — e precisa vir primeiro: depois de mover, o evento só
+    // existe na agenda de destino, então o PATCH dos outros campos já precisa
+    // mirar lá, não na origem.
+    const destino = patch.calendarId && patch.calendarId !== editingEvent.calendarId
+      ? patch.calendarId
+      : null
+    if (destino) await moveEvent(editingEvent, destino)
+    await updateEvent({ ...editingEvent, calendarId: destino || editingEvent.calendarId }, patch)
     await reload()
   }
 
@@ -749,18 +756,6 @@ export default function App() {
       ),
     },
     {
-      id: 'focus',
-      label: 'Pomodoro',
-      tecla: 'p',
-      // O botão mostra o tempo correndo, então dá para acompanhar o ciclo sem
-      // abrir nada — era o que o cartão fixo fazia, ocupando a página inteira.
-      // Em 'done' não há contagem correndo: mostra o rótulo de novo, mas segue
-      // destacado, porque há um ciclo esperando decisão.
-      icon: focus.phase === 'idle' || focus.phase === 'done' ? '25m' : focus.clock,
-      highlight: focus.phase !== 'idle',
-      render: () => <FocusPanel focus={focus} onCompleteTask={handleCompleteTask} events={events} occupies={occupies} />,
-    },
-    {
       id: 'notes',
       label: 'Anotações',
       // Anotação de caso é texto longo: precisa de largura para ser lida.
@@ -866,14 +861,6 @@ export default function App() {
             <h2>{greeting()}</h2>
             <div className="muted app-head-sub">Segundo Cérebro</div>
           </div>
-        </div>
-        {/* As duas configurações do app ficam juntas, no lugar onde se procura
-            por configuração — o botão de horário estava no meio da lista de
-            tarefas, competindo por atenção com o trabalho de verdade. */}
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={() => setShowCalendarSettings(true)}>Agendas</button>
-          <button onClick={() => setEditandoHorario(true)}>Horário</button>
-          <button onClick={signOut}>Sair</button>
         </div>
       </div>
 
@@ -1017,6 +1004,7 @@ export default function App() {
       {editingEvent && (
         <EventEditor
           event={editingEvent}
+          calendars={calendars}
           onSave={handleSaveEvent}
           onDelete={handleDeleteEvent}
           onClose={() => setEditingEvent(null)}
@@ -1052,6 +1040,15 @@ export default function App() {
       )}
 
       {mostrandoAtalhos && <ShortcutsOverlay onClose={() => setMostrandoAtalhos(false)} />}
+
+      {/* Configuração e sair não competem por atenção com o trabalho: ficam no
+          rodapé, discretos, onde se procura por configuração quando se
+          precisa — não no cabeçalho, ao lado do que importa todo dia. */}
+      <div className="app-footer">
+        <button onClick={() => setShowCalendarSettings(true)}>Agendas</button>
+        <button onClick={() => setEditandoHorario(true)}>Horário</button>
+        <button onClick={signOut}>Sair</button>
+      </div>
     </div>
   )
 }
