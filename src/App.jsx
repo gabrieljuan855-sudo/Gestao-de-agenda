@@ -30,6 +30,7 @@ import {
   agruparPorProjeto,
 } from './lib/gtd.js'
 import { enfileirar, descarregar, quantasPendentes } from './lib/outbox.js'
+import { lerCacheDeAgenda, gravarCacheDeAgenda } from './lib/agendaCache.js'
 import { parseQuickAdd } from './lib/nlp.js'
 import { rangeForView, shiftReference, isSameDay, toDateInput } from './lib/dates.js'
 import { findDefaultCalendar } from './lib/defaults.js'
@@ -115,15 +116,18 @@ export default function App() {
   // renovação disparar um recarregamento inteiro da agenda.
   const [signedIn, setSignedIn] = useState(false)
   const [view, setView] = useState('day')
-  const [events, setEvents] = useState([])
-  const [tasks, setTasks] = useState([])
+  // Nasce do que sobrou da última sessão, não vazio: sem isso, abrir o app
+  // sem rede (ou antes de listAllEvents/listAllTasks responderem) mostrava
+  // uma agenda em branco indistinguível de "não tem nada marcado".
+  const [events, setEvents] = useState(() => lerCacheDeAgenda().events)
+  const [tasks, setTasks] = useState(() => lerCacheDeAgenda().tasks)
   const [activeTask, setActiveTask] = useState(null)
   const [loading, setLoading] = useState(false)
   const [showCompleted, setShowCompleted] = useState(false)
   const [reference, setReference] = useState(() => new Date())
   const [editingEvent, setEditingEvent] = useState(null)
   const [editingTask, setEditingTask] = useState(null)
-  const [calendars, setCalendars] = useState([])
+  const [calendars, setCalendars] = useState(() => lerCacheDeAgenda().calendars)
   const [taskLists, setTaskLists] = useState([])
   // Onde a captura cai. Vazio só até a primeira carga terminar.
   const [entradaId, setEntradaId] = useState('')
@@ -159,6 +163,7 @@ export default function App() {
       .then(async ([cals, lists]) => {
         const writable = cals.filter((c) => c.accessRole === 'owner' || c.accessRole === 'writer')
         setCalendars(writable)
+        gravarCacheDeAgenda({ calendars: writable })
         setCalendarPrefs(loadCalendarPrefs(cals))
         try {
           // Em sequência, não em paralelo: criar quatro listas de uma vez é
@@ -194,6 +199,7 @@ export default function App() {
       ])
       setEvents(evts)
       setTasks(tks)
+      gravarCacheDeAgenda({ events: evts, tasks: tks })
     } catch (err) {
       // Engolir o erro deixava a tela com a agenda vazia, como se o dia não
       // tivesse nada marcado — indistinguível de estar tudo certo.
