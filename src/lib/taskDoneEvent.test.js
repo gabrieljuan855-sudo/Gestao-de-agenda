@@ -5,10 +5,10 @@ import { occupiesTime } from './calendarPrefs.js'
 const quando = new Date(2026, 8, 17, 14, 37)
 
 describe('montarEventoDeConclusao', () => {
-  it('marca a hora em que a tarefa foi concluída, num bloco de 15 minutos', () => {
+  it('marca a hora em que a tarefa foi concluída, num bloco de 1 minuto', () => {
     const evento = montarEventoDeConclusao({ id: 'x', title: 'Relatório' }, quando)
     expect(evento.start).toBe(quando)
-    expect((evento.end - evento.start) / 60000).toBe(15)
+    expect((evento.end - evento.start) / 60000).toBe(1)
   })
 
   it('marca o título e guarda o id da tarefa para reconhecer depois', () => {
