@@ -23,10 +23,12 @@ export default function Trabalho({ abas, abaAtiva, onAbaChange }) {
             id={`aba-${aba.id}`}
             aria-selected={atual.id === aba.id}
             aria-controls={`painel-${aba.id}`}
+            aria-label={aba.label}
+            title={aba.label}
             className={`tab${atual.id === aba.id ? ' is-ativa' : ''}`}
             onClick={() => onAbaChange(aba.id)}
           >
-            {aba.label}
+            {aba.icon}
             {aba.badge > 0 && <span className="tab-badge">{aba.badge}</span>}
           </button>
         ))}
