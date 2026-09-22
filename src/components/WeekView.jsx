@@ -8,13 +8,13 @@ const MAX_EVENTS = 6
 
 // A carga é relativa ao expediente daquele dia: 2h numa sexta (6h de
 // expediente) pesam mais do que 2h numa segunda (8h30).
-function loadLevel(busyMinutes, day) {
-  if (!isWorkday(day)) {
+function loadLevel(busyMinutes, day, schedule) {
+  if (!isWorkday(day, schedule)) {
     return busyMinutes > 0
       ? { label: 'folga', className: 'media' }
       : { label: 'folga', className: 'baixa' }
   }
-  const ratio = workloadRatio(busyMinutes, day)
+  const ratio = workloadRatio(busyMinutes, day, schedule)
   if (ratio >= 0.75) return { label: 'lotado', className: 'alta' }
   if (ratio >= 0.4) return { label: 'médio', className: 'media' }
   return { label: 'livre', className: 'baixa' }
@@ -30,6 +30,7 @@ export default function WeekView({
   occupies = () => true,
   declined = () => false,
   isInfo = () => false,
+  schedule,
 }) {
   const start = startOfWeek(reference)
   const allDays = Array.from({ length: 7 }, (_, i) => addDays(start, i))
@@ -37,11 +38,21 @@ export default function WeekView({
   // vazios ("folga —"): tirá-los da grade dá mais espaço pros cinco dias que
   // importam. Um compromisso que caia no fim de semana não desaparece, só
   // sai da grade e vira uma linha de aviso embaixo.
-  const days = allDays.filter(isWorkday)
-  const weekendDays = allDays.filter((d) => !isWorkday(d))
+  //
+  // `schedule` precisa ser o mesmo horário que o resto do app já carregou
+  // (App.jsx) — sem passar adiante, cada chamada de isWorkday/workMinutes
+  // cairia no próprio valor padrão e leria o localStorage por conta
+  // própria, uma segunda fonte de verdade que podia divergir da tela
+  // Horário sem nenhum aviso.
+  const diasUteis = allDays.filter((d) => isWorkday(d, schedule))
+  // Se por algum motivo não sobrar nenhum dia útil (ex.: horário ainda não
+  // carregou), mostrar os 7 dias em vez de uma grade vazia — sem essa
+  // salvaguarda, a semana inteira desaparecia sem nenhuma pista visível.
+  const days = diasUteis.length > 0 ? diasUteis : allDays
+  const weekendDays = allDays.filter((d) => !days.includes(d))
 
   const weekMinutes = days.reduce((sum, day) => sum + busyMinutesOn(events, day, occupies), 0)
-  const weekCapacity = days.reduce((sum, day) => sum + workMinutes(day), 0)
+  const weekCapacity = days.reduce((sum, day) => sum + workMinutes(day, schedule), 0)
   const weekTasks = allDays.reduce((sum, day) => sum + tasksDueOn(tasks, day).length, 0)
 
   const weekendItems = weekendDays.flatMap((day) =>
@@ -58,7 +69,7 @@ export default function WeekView({
       <div className="week-grid">
         {days.map((day) => {
           const dayEvents = eventsOfDay(events, day)
-          const level = loadLevel(busyMinutesOn(events, day, occupies), day)
+          const level = loadLevel(busyMinutesOn(events, day, occupies), day, schedule)
           const dueToday = tasksDueOn(tasks, day)
           const shown = dayEvents.slice(0, MAX_EVENTS)
           const hasConflict = findConflicts(dayEvents, occupies).length > 0

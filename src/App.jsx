@@ -933,6 +933,7 @@ export default function App() {
               occupies={occupies}
               declined={declined}
               isInfo={(e) => isInformational(e, calendarPrefs)}
+              schedule={workSchedule}
             />
           )}
           {view === 'month' && (
