@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { toDateInput, fromInputs } from '../lib/dates.js'
 import { esclarecerItem } from '../lib/aiEsclarecer.js'
 import { IA_DESLIGADA } from '../lib/aiCooldown.js'
+import { PRIORITIES, DEFAULT_PRIORITY } from '../lib/priority.js'
 
 // O passo que faltava entre capturar e fazer.
 //
@@ -32,6 +33,7 @@ export default function Entrada({
   const [novoContexto, setNovoContexto] = useState('')
   const [projeto, setProjeto] = useState('')
   const [duracao, setDuracao] = useState('')
+  const [priority, setPriority] = useState(DEFAULT_PRIORITY)
   const [quem, setQuem] = useState('')
   const [data, setData] = useState('')
   const [hora, setHora] = useState('')
@@ -50,6 +52,7 @@ export default function Entrada({
     setNovoContexto('')
     setProjeto('')
     setDuracao('')
+    setPriority(DEFAULT_PRIORITY)
     setQuem('')
     setData(item?.due ? toDateInput(new Date(item.due)) : '')
     setHora('')
@@ -161,6 +164,23 @@ export default function Entrada({
 
       <div className="entrada-bloco">
         <div className="entrada-bloco-titulo">Próxima ação — eu que faço</div>
+        {/* Prioridade decidida aqui, antes de arquivar: sem isso a tarefa
+            nascia sempre em "Média" e só ganhava a prioridade certa numa
+            segunda passada pelo editor. */}
+        <div className="entrada-contextos" style={{ marginBottom: 8 }}>
+          {PRIORITIES.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              className={`pill ${p.id}`}
+              style={{ border: priority === p.id ? '2px solid var(--text-primary)' : '1px solid transparent' }}
+              onClick={() => setPriority(p.id)}
+              title={`Prioridade ${p.label} para esta próxima ação.`}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
         <div className="entrada-contextos">
           {contextos.map((c) => (
             <button
@@ -224,6 +244,7 @@ export default function Entrada({
                 contexto: contextoFinal || null,
                 projeto: projeto.trim() || null,
                 duracao: duracao ? Number(duracao) : null,
+                priority,
               })
             )
           }

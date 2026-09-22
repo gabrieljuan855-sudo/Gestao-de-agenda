@@ -520,8 +520,8 @@ export default function App() {
     await reload()
   }
 
-  function handleProximaAcao(item, { titulo, contexto, projeto, duracao }) {
-    return moverEsclarecido(item, LISTA_PROXIMAS, { title: titulo, contexto, projeto, duracao })
+  function handleProximaAcao(item, { titulo, contexto, projeto, duracao, priority }) {
+    return moverEsclarecido(item, LISTA_PROXIMAS, { title: titulo, contexto, projeto, duracao, priority })
   }
 
   // Aguardando e Algum dia mandando de volta para o jogo: mesma lista de
@@ -712,6 +712,11 @@ export default function App() {
   // "Prioridade ...", de antes desta reforma) continuam aparecendo aqui —
   // migrar é escolha de quem usa, não deste filtro.
   const tarefasEsclarecidas = tasks.filter((t) => !naEntrada(t) && !naAguardando(t) && !noAlgumDia(t))
+  // Uma tarefa com projeto já tem casa própria na aba Projetos — deixá-la
+  // também em Próximas ações duplicava a mesma tarefa nas duas telas. O Dia e
+  // a Semana continuam mostrando `tarefasEsclarecidas` inteira: ali o que
+  // importa é o prazo, não em qual aba a tarefa mora.
+  const tarefasSemProjeto = tarefasEsclarecidas.filter((t) => !t.projeto)
   const tarefasAguardando = tasks.filter((t) => t.status !== 'completed' && naAguardando(t))
   const tarefasAlgumDia = tasks.filter((t) => t.status !== 'completed' && noAlgumDia(t))
 
@@ -840,7 +845,7 @@ export default function App() {
       ),
       render: () => (
         <Backlog
-          tasks={tarefasEsclarecidas}
+          tasks={tarefasSemProjeto}
           events={events}
           occupies={occupies}
           schedule={workSchedule}
