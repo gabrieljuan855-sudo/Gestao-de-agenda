@@ -1,122 +1,157 @@
 import { useEffect, useRef, useState } from 'react'
-import { parseQuickAdd } from '../lib/nlp.js'
-import { formatDuration, toTimeInput, fromInputs, toDateInput } from '../lib/dates.js'
+import { parseQuickAdd, decidirDestino } from '../lib/nlp.js'
+import { toTimeInput, toDateInput } from '../lib/dates.js'
 import { findDefaultCalendar } from '../lib/defaults.js'
+import { PRIORITY_LABEL } from '../lib/priority.js'
 
-const DURATION_OPTIONS = [20, 30, 45, 50, 60, 90, 120]
+// Capturar e organizar são dois gestos diferentes — mas quando o texto já diz
+// sozinho o que ele é (hora certa = compromisso; prazo, prioridade,
+// @contexto ou #projeto = próxima ação), pedir uma segunda decisão manual só
+// deixa o app mais lento sem ganhar nada em troca. O Enter faz a coisa certa
+// direto; o "Desfazer" que aparece depois é o preço de um parser que às
+// vezes erra o palpite.
+//
+// Só o que sobra sem nenhum sinal claro — um pensamento cru — ainda vai para
+// a Entrada, que é o único caso em que a triagem separada vale o tempo.
+// `decidirDestino` (nlp.js) é quem decide isso, testado à parte.
+function formatarDataBR(date) {
+  return toDateInput(date).split('-').reverse().slice(0, 2).join('/')
+}
 
-// Capturar e organizar são dois gestos diferentes, e misturá-los era o que
-// encarecia o mais importante dos dois.
-//
-// Antes, toda captura obrigava a decidir na hora: é evento ou tarefa? qual
-// prioridade? qual lista? Três decisões para guardar um pensamento de cinco
-// segundos — e é exatamente por isso que as coisas continuavam na cabeça (ou
-// no papel). Agora o caminho padrão é um campo e Enter: o texto cai na
-// Entrada como está, e o que aquilo *é* fica para depois, no momento próprio
-// de decidir.
-//
-// O parser local (parseQuickAdd) continua rodando a cada tecla, mas mudou de
-// papel: ele não decide mais nada, só enriquece. Achou um prazo? vai junto,
-// de graça. Achou dia E hora certos? aí é quase sempre um compromisso de
-// verdade — o único caso que vale o desvio, porque compromisso marcado é o
-// que precisa entrar no calendário na hora, não depois.
+function descreverDestino(destino, preview) {
+  if (destino === 'evento') {
+    return `Enter agenda: ${formatarDataBR(preview.start)} às ${toTimeInput(preview.start)}`
+  }
+  if (destino === 'tarefa') {
+    const partes = []
+    if (preview.due) partes.push(`prazo ${formatarDataBR(preview.due)}`)
+    if (preview.priority) partes.push(`prioridade ${PRIORITY_LABEL[preview.priority]}`)
+    if (preview.contexto) partes.push(`@${preview.contexto}`)
+    if (preview.projeto) partes.push(`#${preview.projeto}`)
+    return `Enter cria próxima ação${partes.length ? ' — ' + partes.join(', ') : ''}`
+  }
+  return null
+}
+
+const ROTULO_BOTAO = { evento: 'Agendar', tarefa: 'Criar tarefa', entrada: 'Capturar' }
+const ROTULO_SALVANDO = { evento: 'Agendando...', tarefa: 'Criando...', entrada: 'Capturando...' }
+
 export default function QuickAdd({
   calendars = [],
+  proximasTasklistId,
   onCapture,
   onCreateEvent,
-  onDone,
+  onCreateTask,
+  onDesfazerEvento,
+  onDesfazerTarefa,
 }) {
   const [text, setText] = useState('')
   const [preview, setPreview] = useState(null)
-  // 'capturar' é o caminho de sempre; 'agendar' só quando a pessoa pede.
-  const [modo, setModo] = useState('capturar')
-  const [calendarId, setCalendarId] = useState('')
-  const [minutes, setMinutes] = useState(60)
-  const [startTime, setStartTime] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
   const [capturado, setCapturado] = useState(false)
+  // O que fazer se o palpite estiver errado: guarda como desfazer o que acaba
+  // de ser criado, e o texto original, para o caso de "isso não devia ter
+  // pulado a Entrada".
+  const [confirmacao, setConfirmacao] = useState(null)
+  const [desfazendo, setDesfazendo] = useState(false)
   const inputRef = useRef(null)
-
-  // As agendas chegam depois do primeiro render (vêm da API), por isso o padrão
-  // é aplicado aqui e não no useState.
-  useEffect(() => {
-    if (calendarId) return
-    const preferred = findDefaultCalendar(calendars) || calendars[0]
-    if (preferred) setCalendarId(preferred.id)
-  }, [calendars, calendarId])
 
   function handleChange(value) {
     setText(value)
     setError(null)
     setCapturado(false)
-    const parsed = value.trim() ? parseQuickAdd(value) : null
-    setPreview(parsed)
-    if (parsed?.type === 'event') {
-      setMinutes(parsed.durationMinutes || 60)
-      setStartTime(toTimeInput(parsed.start))
-    }
-    // Voltar a digitar desfaz o desvio: o padrão é sempre capturar.
-    if (modo === 'agendar' && parsed?.type !== 'event') setModo('capturar')
+    setConfirmacao(null)
+    setPreview(value.trim() ? parseQuickAdd(value) : null)
   }
 
-  // O texto vai cru para a Entrada, e é de propósito: o título limpo pelo
-  // parser é um palpite, e palpite errado na captura perde informação que a
-  // pessoa não vai lembrar depois. O prazo, esse sim, vai junto quando o
-  // parser achou — é de graça e não apaga nada do texto.
-  async function capturar() {
+  const destino = decidirDestino(preview)
+
+  async function handleSubmit(e) {
+    e.preventDefault()
     const limpo = text.trim()
-    if (!limpo) return
+    if (!limpo || saving) return
     setSaving(true)
     setError(null)
+    setConfirmacao(null)
     try {
-      await onCapture({ texto: limpo, due: preview?.type === 'task' ? preview.due : null })
+      if (destino === 'evento') {
+        const calendario = findDefaultCalendar(calendars) || calendars[0]
+        const calendarId = calendario?.id || 'primary'
+        const criado = await onCreateEvent({
+          title: preview.title,
+          start: preview.start,
+          end: preview.end,
+          calendarId,
+        })
+        setConfirmacao({
+          resumo: `✓ Compromisso "${preview.title}" em ${formatarDataBR(preview.start)} às ${toTimeInput(preview.start)}.`,
+          desfazer: () => onDesfazerEvento({ id: criado.id, calendarId }),
+          textoOriginal: limpo,
+        })
+      } else if (destino === 'tarefa') {
+        const criada = await onCreateTask({
+          title: preview.title,
+          priority: preview.priority,
+          due: preview.due,
+          contexto: preview.contexto,
+          projeto: preview.projeto,
+          tasklistId: proximasTasklistId,
+        })
+        setConfirmacao({
+          resumo: `✓ Próxima ação "${preview.title}"${preview.due ? `, prazo ${formatarDataBR(preview.due)}` : ''}.`,
+          desfazer: () => onDesfazerTarefa({ id: criada.id, tasklistId: proximasTasklistId }),
+          textoOriginal: limpo,
+        })
+      } else {
+        await onCapture({ texto: limpo, due: null })
+        setCapturado(true)
+      }
       setText('')
       setPreview(null)
-      setCapturado(true)
       // O campo continua aberto e com o cursor dentro: esvaziar a cabeça
       // costuma vir em rajada, uma coisa puxando a outra.
       inputRef.current?.focus()
     } catch (err) {
-      setError(`Não deu para capturar: ${err.message}`)
+      setError(`Não deu certo: ${err.message}`)
     } finally {
       setSaving(false)
     }
   }
 
-  async function agendar() {
-    if (!preview) return
-    setSaving(true)
+  async function desfazer() {
+    if (!confirmacao) return
+    setDesfazendo(true)
     setError(null)
     try {
-      const start = fromInputs(toDateInput(preview.start), startTime)
-      const end = new Date(start.getTime() + minutes * 60000)
-      await onCreateEvent({ ...preview, start, end, calendarId })
-      setText('')
-      setPreview(null)
-      setModo('capturar')
-      const preferred = findDefaultCalendar(calendars)
-      setCalendarId(preferred ? preferred.id : '')
-      onDone && onDone()
+      await confirmacao.desfazer()
+      setConfirmacao(null)
     } catch (err) {
-      setError(`Não deu para salvar: ${err.message}`)
+      setError(`Não deu para desfazer: ${err.message}`)
     } finally {
-      setSaving(false)
+      setDesfazendo(false)
     }
   }
 
-  const pareceCompromisso = preview?.type === 'event'
-  const agendando = modo === 'agendar' && pareceCompromisso
-  const precisaAgenda = agendando && calendars.length > 0 && !calendarId
+  async function mandarParaEntrada() {
+    if (!confirmacao) return
+    setDesfazendo(true)
+    setError(null)
+    try {
+      await confirmacao.desfazer()
+      await onCapture({ texto: confirmacao.textoOriginal, due: null })
+      setConfirmacao(null)
+    } catch (err) {
+      setError(`Não deu para mover para a Entrada: ${err.message}`)
+    } finally {
+      setDesfazendo(false)
+    }
+  }
+
+  const dica = preview ? descreverDestino(destino, preview) : null
 
   return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault()
-        if (agendando) agendar()
-        else capturar()
-      }}
-    >
+    <form onSubmit={handleSubmit}>
       <input
         ref={inputRef}
         type="text"
@@ -127,88 +162,39 @@ export default function QuickAdd({
         style={{ width: '100%' }}
       />
 
-      {!agendando && (
-        <>
-          <button type="submit" className="primary" style={{ marginTop: 10 }} disabled={saving || !text.trim()}>
-            {saving ? 'Capturando...' : 'Capturar'}
-          </button>
-
-          {capturado && !text && (
-            <div className="muted" style={{ fontSize: 'var(--label-sm)', marginTop: 8 }}>
-              ✓ Guardado na Entrada. Pode mandar a próxima.
-            </div>
-          )}
-
-          {/* O único desvio que vale: compromisso com dia e hora marcados
-              precisa entrar no calendário agora, não na próxima triagem. */}
-          {pareceCompromisso && (
-            <div className="quickadd-desvio">
-              <span className="muted">
-                Parece compromisso: {toDateInput(preview.start).split('-').reverse().slice(0, 2).join('/')} às{' '}
-                {toTimeInput(preview.start)}
-              </span>
-              <button type="button" onClick={() => setModo('agendar')}>
-                Agendar
-              </button>
-            </div>
-          )}
-        </>
+      {/* A dica só aparece quando o Enter vai fazer mais que capturar — é
+          o aviso de que o texto vai pular a Entrada, para não surpreender. */}
+      {dica && (
+        <div className="muted" style={{ fontSize: 'var(--label-sm)', marginTop: 6 }}>
+          {dica}
+        </div>
       )}
 
-      {agendando && (
-        <div style={{ marginTop: 10, fontSize: 'var(--body-sm)' }}>
-          <div style={{ marginBottom: 10 }}>
-            <strong>{preview.title}</strong>
-          </div>
+      <button type="submit" className="primary" style={{ marginTop: 10 }} disabled={saving || !text.trim()}>
+        {saving ? ROTULO_SALVANDO[destino] : ROTULO_BOTAO[destino]}
+      </button>
 
-          <div className="quickadd-fields">
-            <label className="field">
-              <span>Dia</span>
-              <input
-                type="date"
-                value={toDateInput(preview.start)}
-                onChange={(e) => setPreview({ ...preview, start: fromInputs(e.target.value, startTime) })}
-              />
-            </label>
-            <label className="field">
-              <span>Início</span>
-              <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} />
-            </label>
-            <label className="field">
-              <span>Duração</span>
-              <select value={minutes} onChange={(e) => setMinutes(Number(e.target.value))}>
-                {[...new Set([...DURATION_OPTIONS, minutes])]
-                  .sort((a, b) => a - b)
-                  .map((m) => (
-                    <option key={m} value={m}>{formatDuration(m)}</option>
-                  ))}
-              </select>
-            </label>
-            <label className="field">
-              <span>Agenda</span>
-              <select value={calendarId} onChange={(e) => setCalendarId(e.target.value)}>
-                <option value="">Escolha a agenda...</option>
-                {calendars.map((cal) => (
-                  <option key={cal.id} value={cal.id}>{cal.summaryOverride || cal.summary}</option>
-                ))}
-              </select>
-            </label>
-          </div>
+      {capturado && !text && (
+        <div className="muted" style={{ fontSize: 'var(--label-sm)', marginTop: 8 }}>
+          ✓ Guardado na Entrada. Pode mandar a próxima.
+        </div>
+      )}
 
-          {error && <div className="form-error" style={{ marginTop: 8 }}>{error}</div>}
-
-          <div style={{ display: 'flex', gap: 8, marginTop: 10, alignItems: 'center' }}>
-            <button type="submit" className="primary" disabled={saving || precisaAgenda}>
-              {saving ? 'Salvando...' : 'Criar compromisso'}
+      {confirmacao && (
+        <div className="quickadd-desvio">
+          <span className="muted">{confirmacao.resumo}</span>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button type="button" onClick={desfazer} disabled={desfazendo}>
+              Desfazer
             </button>
-            <button type="button" onClick={() => setModo('capturar')} disabled={saving}>
-              Só capturar
+            <button type="button" onClick={mandarParaEntrada} disabled={desfazendo}>
+              Mandar p/ Entrada
             </button>
           </div>
         </div>
       )}
 
-      {error && !agendando && <div className="form-error" style={{ marginTop: 8 }}>{error}</div>}
+      {error && <div className="form-error" style={{ marginTop: 8 }}>{error}</div>}
     </form>
   )
 }

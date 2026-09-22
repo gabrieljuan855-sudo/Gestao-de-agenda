@@ -264,22 +264,42 @@ export default function App() {
   }, [reload])
 
   async function handleCreateEvent(preview) {
-    await createEvent({
+    // O criado volta para quem chamou: o atalho rápido do Criar precisa do
+    // id para poder desfazer sem recarregar a página inteira.
+    const criado = await createEvent({
       title: preview.title,
       start: preview.start,
       end: preview.end,
       calendarId: preview.calendarId || 'primary',
     })
     await reload()
+    return criado
   }
 
   async function handleCreateTask(preview) {
-    await createTask({
+    const criada = await createTask({
       title: preview.title,
       priority: preview.priority,
       due: preview.due,
+      contexto: preview.contexto,
+      projeto: preview.projeto,
       tasklistId: preview.tasklistId || '@default',
     })
+    await reload()
+    return criada
+  }
+
+  // O Criar acerta sozinho quando o texto já tem sinal explícito (hora certa
+  // = compromisso; prazo/prioridade/@contexto/#projeto = próxima ação) — ver
+  // decidirDestino em nlp.js. Desfazer existe porque um parser que acerta
+  // sozinho também erra sozinho de vez em quando.
+  async function handleDesfazerEventoRapido({ id, calendarId }) {
+    await deleteEvent({ id, calendarId })
+    await reload()
+  }
+
+  async function handleDesfazerTarefaRapida({ id, tasklistId }) {
+    await deleteTask({ id, tasklistId })
     await reload()
   }
 
@@ -749,12 +769,18 @@ export default function App() {
       // entra (ver CSS): ali os quatro itens formam uma barra de abas, e dar
       // destaque fixo a um deles confundiria com o indicador de selecionado.
       primary: true,
-      render: (close) => (
+      // Sem onDone: o painel fica aberto depois de criar, porque a
+      // confirmação com "Desfazer" precisa continuar visível, e uma captura
+      // costuma vir em rajada — fechar sozinho atrapalharia as duas coisas.
+      render: () => (
         <QuickAdd
           calendars={calendars}
+          proximasTasklistId={idProximas}
           onCapture={handleCapture}
           onCreateEvent={handleCreateEvent}
-          onDone={close}
+          onCreateTask={handleCreateTask}
+          onDesfazerEvento={handleDesfazerEventoRapido}
+          onDesfazerTarefa={handleDesfazerTarefaRapida}
         />
       ),
     },

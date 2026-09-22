@@ -1,4 +1,5 @@
 import * as chrono from 'chrono-node'
+import { etiqueta } from './gtd.js'
 
 // "hoje" saiu daqui: aparece em quase todo compromisso marcado para o mesmo
 // dia ("Reunião hoje às 15h com o fornecedor"), e isso inflava qualquer coisa
@@ -23,6 +24,25 @@ function detectPriority(text) {
   if (URGENT_WORDS.some((w) => lower.includes(w))) return 'alta'
   if (IMPORTANT_WORDS.some((w) => lower.includes(w))) return 'media'
   return null
+}
+
+// @contexto e #projeto escritos direto na captura ("ligar pro banco @carro")
+// são o mesmo sinal explícito que a Entrada já pede na mão — por isso contam
+// como "isto já é uma tarefa decidida", em vez de precisar passar pela
+// triagem. A normalização é a mesma etiqueta.js do resto do app (gtd.js),
+// para "@Carro" e "@carro" caírem no mesmo contexto de sempre.
+const TAG_CONTEXTO = /(?<!\S)@([^\s@#]+)/
+const TAG_PROJETO = /(?<!\S)#([^\s@#]+)/
+const TAGS_GLOBAL = /(?<!\S)[@#][^\s@#]+/g
+
+function extrairTags(text) {
+  const contextoMatch = text.match(TAG_CONTEXTO)
+  const projetoMatch = text.match(TAG_PROJETO)
+  return {
+    contexto: contextoMatch ? etiqueta(contextoMatch[1]) || null : null,
+    projeto: projetoMatch ? etiqueta(projetoMatch[1]) || null : null,
+    semTags: text.replace(TAGS_GLOBAL, ' '),
+  }
 }
 
 // "por 40min", "durante 2 horas", "umas 2 horas", "por 2hs"
@@ -138,9 +158,10 @@ function recoverTime(text, day) {
 // Analisa um texto digitado em linguagem natural (pt-BR) e devolve
 // uma estrutura pronta para virar evento (Calendar) ou tarefa (Tasks).
 export function parseQuickAdd(rawText, referenceDate = new Date()) {
-  const duration = detectDuration(rawText)
+  const { contexto, projeto, semTags } = extrairTags(rawText)
+  const duration = detectDuration(semTags)
   // A duração sai do texto antes da data para "por 2 horas" não virar horário.
-  const withoutDuration = duration ? rawText.replace(duration.text, ' ') : rawText
+  const withoutDuration = duration ? semTags.replace(duration.text, ' ') : semTags
   const text = normalizeDayOfMonth(normalizeTimes(withoutDuration), referenceDate)
 
   const results = chrono.pt.parse(text, referenceDate, { forwardDate: true })
@@ -151,6 +172,8 @@ export function parseQuickAdd(rawText, referenceDate = new Date()) {
       type: 'task',
       title: cleanTitle(text),
       priority,
+      contexto,
+      projeto,
       due: null,
       durationMinutes: duration?.minutes ?? DEFAULT_MINUTES,
     }
@@ -193,7 +216,24 @@ export function parseQuickAdd(rawText, referenceDate = new Date()) {
     type: 'task',
     title: title || 'Tarefa',
     priority,
+    contexto,
+    projeto,
     due: start,
     durationMinutes: duration?.minutes ?? DEFAULT_MINUTES,
   }
+}
+
+// Para onde a captura vai, sem perguntar: compromisso com dia e hora certos
+// cai direto na agenda; tarefa com algum sinal explícito (prazo, prioridade,
+// contexto ou projeto escritos no próprio texto) cai direto em Próximas
+// ações; o resto — pensamento cru, sem nenhum desses sinais — precisa da
+// Entrada, que é o único caso em que decidir o que aquilo é ainda vale o
+// tempo de uma triagem separada.
+export function decidirDestino(preview) {
+  if (!preview) return 'entrada'
+  if (preview.type === 'event') return 'evento'
+  if (preview.type === 'task' && (preview.due || preview.priority || preview.contexto || preview.projeto)) {
+    return 'tarefa'
+  }
+  return 'entrada'
 }
