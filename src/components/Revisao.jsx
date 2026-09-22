@@ -1,9 +1,50 @@
+import { useEffect, useState } from 'react'
 import { formatDuration } from '../lib/dates.js'
 
-// A revisão semanal do GTD, sem o ritual: um clique, uma lista de números que
-// o app já sabia calcular sozinho, e um comentário de IA por cima — não um
-// checklist obrigatório, só a tela pronta para quem quiser usar.
-export default function Revisao({ numeros, comentario, carregando, onGerar }) {
+function dataCurta(iso) {
+  const [, mes, dia] = iso.split('-')
+  return `${dia}/${mes}`
+}
+
+// O que o item é, numa linha — para a sugestão ser lida sem abrir nada.
+function descreverItem(item) {
+  if (item.tipo === 'atrasada') return `"${item.titulo}" · atrasada há ${item.dias} dia(s)`
+  if (item.tipo === 'aguardando') return `"${item.titulo}" · esperando ${item.quem} há ${item.dias} dias`
+  return `${item.titulo} · projeto sem próxima ação`
+}
+
+// O rótulo diz exatamente o que o clique faz — é um atalho que grava na conta
+// do Google, então não pode ser vago tipo "Aplicar".
+function rotuloDaAcao(s) {
+  if (s.acao === 'remarcar') return `Remarcar para ${dataCurta(s.data)}`
+  if (s.acao === 'algum_dia') return 'Mover para Algum dia'
+  if (s.acao === 'concluir') return 'Marcar como feita'
+  return `Criar: ${s.titulo}${s.contexto ? ` @${s.contexto}` : ''}`
+}
+
+// A revisão semanal do GTD, sem o ritual: os números que o app calcula
+// sozinho e, por cima, uma ação sugerida para cada coisa que pede decisão —
+// um clique resolve, "Ignorar" deixa como está. Não é um checklist
+// obrigatório, só a tela pronta para destravar a semana.
+export default function Revisao({ numeros, comentario, sugestoes = [], carregando, onGerar, onAplicar }) {
+  // Estado de cada sugestão pelo id do item: 'aplicando', 'feito',
+  // 'ignorado', ou a mensagem de erro. Recalcular traz uma lista nova, e o
+  // estado da anterior não vale mais para ela.
+  const [estado, setEstado] = useState({})
+  useEffect(() => setEstado({}), [sugestoes])
+
+  async function aplicar(sugestao) {
+    setEstado((e) => ({ ...e, [sugestao.itemId]: 'aplicando' }))
+    try {
+      await onAplicar(sugestao)
+      setEstado((e) => ({ ...e, [sugestao.itemId]: 'feito' }))
+    } catch (err) {
+      setEstado((e) => ({ ...e, [sugestao.itemId]: `Não deu certo: ${err.message}` }))
+    }
+  }
+
+  const visiveis = sugestoes.filter((s) => estado[s.itemId] !== 'ignorado')
+
   return (
     <div className="card">
       <div className="muted" style={{ marginBottom: 10 }}>Revisão da semana</div>
@@ -22,6 +63,42 @@ export default function Revisao({ numeros, comentario, carregando, onGerar }) {
       {numeros && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {comentario && <p style={{ fontSize: 'var(--body-md)', margin: 0 }}>{comentario}</p>}
+
+          {visiveis.length > 0 && (
+            <div className="revisao-sugestoes">
+              {visiveis.map((s) => {
+                const st = estado[s.itemId]
+                return (
+                  <div key={s.itemId} className="revisao-sugestao">
+                    <div className="revisao-sugestao-item">{descreverItem(s.item)}</div>
+                    {s.motivo && <div className="muted revisao-sugestao-motivo">{s.motivo}</div>}
+                    {st === 'feito' ? (
+                      <div className="muted revisao-sugestao-motivo">✓ Feito.</div>
+                    ) : (
+                      <div className="revisao-sugestao-acoes">
+                        <button
+                          type="button"
+                          className="primary"
+                          disabled={st === 'aplicando'}
+                          onClick={() => aplicar(s)}
+                        >
+                          {st === 'aplicando' ? 'Aplicando...' : rotuloDaAcao(s)}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={st === 'aplicando'}
+                          onClick={() => setEstado((e) => ({ ...e, [s.itemId]: 'ignorado' }))}
+                        >
+                          Ignorar
+                        </button>
+                      </div>
+                    )}
+                    {st && !['aplicando', 'feito'].includes(st) && <div className="form-error">{st}</div>}
+                  </div>
+                )
+              })}
+            </div>
+          )}
 
           <ul
             className="revisao-lista"

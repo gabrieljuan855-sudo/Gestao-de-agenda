@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { normalizeAnalysis, normalizeBriefing, normalizeEsclarecer, normalizeSearch } from './index.js'
+import { normalizeAnalysis, normalizeEsclarecer, normalizeRevisao, normalizeSearch, sanitizarItensDaRevisao } from './index.js'
 
 describe('normalizeAnalysis', () => {
   it('mantém sugestões válidas e usa o texto como título quando a IA não sugere um', () => {
@@ -127,18 +127,77 @@ describe('normalizeSearch', () => {
   })
 })
 
-describe('normalizeBriefing', () => {
-  it('mantém o texto e corta um texto absurdamente longo', () => {
-    expect(normalizeBriefing({ text: 'Dia tranquilo, só duas reuniões.' })).toEqual({
-      text: 'Dia tranquilo, só duas reuniões.',
-    })
-    expect(normalizeBriefing({ text: 'x'.repeat(1000) }).text.length).toBe(600)
+describe('normalizeRevisao', () => {
+  const itens = [
+    { id: 't1', tipo: 'atrasada', titulo: 'Relatório', dias: 5 },
+    { id: 't2', tipo: 'aguardando', titulo: 'Laudo', quem: 'ana', dias: 12 },
+    { id: 'projeto:caso-maria', tipo: 'projeto', titulo: '#caso-maria', relacionadas: ['Esperar parecer'] },
+  ]
+
+  it('aceita uma ação permitida para o tipo do item, com o campo que ela exige', () => {
+    const r = normalizeRevisao(
+      {
+        text: 'Semana puxada, mas dá para destravar.',
+        sugestoes: [
+          { itemId: 't1', acao: 'remarcar', data: '2026-09-25', motivo: 'Cabe na sexta.' },
+          { itemId: 't2', acao: 'cobrar', titulo: 'Ligar para Ana sobre o laudo', contexto: 'Ligação', motivo: '12 dias.' },
+          { itemId: 'projeto:caso-maria', acao: 'proxima_acao', titulo: 'Pedir o parecer por e-mail', contexto: 'email' },
+        ],
+      },
+      itens
+    )
+    expect(r.text).toBe('Semana puxada, mas dá para destravar.')
+    expect(r.sugestoes).toEqual([
+      { itemId: 't1', acao: 'remarcar', motivo: 'Cabe na sexta.', data: '2026-09-25' },
+      { itemId: 't2', acao: 'cobrar', motivo: '12 dias.', titulo: 'Ligar para Ana sobre o laudo', contexto: 'ligacao' },
+      { itemId: 'projeto:caso-maria', acao: 'proxima_acao', motivo: '', titulo: 'Pedir o parecer por e-mail', contexto: 'email' },
+    ])
   })
 
-  it('nunca quebra com uma resposta vazia ou malformada', () => {
-    expect(normalizeBriefing({})).toEqual({ text: '' })
-    expect(normalizeBriefing(null)).toEqual({ text: '' })
-    expect(normalizeBriefing({ text: 123 })).toEqual({ text: '' })
+  it('descarta ação que não cabe no tipo do item (concluir uma espera, remarcar projeto)', () => {
+    const r = normalizeRevisao(
+      {
+        sugestoes: [
+          { itemId: 't2', acao: 'concluir' },
+          { itemId: 'projeto:caso-maria', acao: 'remarcar', data: '2026-09-25' },
+        ],
+      },
+      itens
+    )
+    expect(r.sugestoes).toEqual([])
+  })
+
+  it('descarta item inventado, item repetido e ação sem o campo que ela exige', () => {
+    const r = normalizeRevisao(
+      {
+        sugestoes: [
+          { itemId: 'nao-existe', acao: 'concluir' },
+          { itemId: 't1', acao: 'remarcar', data: 'sexta que vem' },
+          { itemId: 't2', acao: 'cobrar', titulo: '   ' },
+          { itemId: 't1', acao: 'algum_dia' },
+          { itemId: 't1', acao: 'concluir' },
+        ],
+      },
+      itens
+    )
+    expect(r.sugestoes).toEqual([{ itemId: 't1', acao: 'algum_dia', motivo: '' }])
+  })
+
+  it('nunca quebra com resposta vazia ou malformada', () => {
+    expect(normalizeRevisao(null, itens)).toEqual({ text: '', sugestoes: [] })
+    expect(normalizeRevisao({ text: 123, sugestoes: 'não é lista' }, itens)).toEqual({ text: '', sugestoes: [] })
+    expect(normalizeRevisao({ sugestoes: [{ itemId: 't1', acao: 'concluir' }] }, null)).toEqual({ text: '', sugestoes: [] })
+  })
+})
+
+describe('sanitizarItensDaRevisao', () => {
+  it('mantém só o formato que o prompt espera e ignora tipo desconhecido', () => {
+    const r = sanitizarItensDaRevisao([
+      { id: 't1', tipo: 'atrasada', titulo: 'Relatório', dias: 5, task: { segredo: 'não vai' } },
+      { id: 't2', tipo: 'inventado', titulo: 'x' },
+      null,
+    ])
+    expect(r).toEqual([{ id: 't1', tipo: 'atrasada', titulo: 'Relatório', dias: 5 }])
   })
 })
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { numerosDaRevisao } from './revisao.js'
+import { numerosDaRevisao, itensDaRevisao } from './revisao.js'
 
 const PROXIMAS = 'lista-proximas'
 const AGUARDANDO = 'lista-aguardando'
@@ -71,5 +71,59 @@ describe('numerosDaRevisao', () => {
       blocosDeFoco: 0,
       minutosDeFoco: 0,
     })
+  })
+})
+
+describe('itensDaRevisao', () => {
+  const ALGUM_DIA = 'lista-algum-dia'
+  const ids = { idProximas: PROXIMAS, idAguardando: AGUARDANDO, idAlgumDia: ALGUM_DIA }
+
+  it('traz a tarefa atrasada com quantos dias de atraso, a mais velha primeiro', () => {
+    const tasks = [
+      { id: 'a', status: 'needsAction', title: 'Relatório', due: '2026-09-14T00:00:00.000Z', tasklistId: PROXIMAS },
+      { id: 'b', status: 'needsAction', title: 'Ofício', due: '2026-09-08T00:00:00.000Z', tasklistId: PROXIMAS },
+    ]
+    const itens = itensDaRevisao({ tasks, ...ids }, agora())
+    expect(itens.map((i) => i.id)).toEqual(['b', 'a'])
+    expect(itens[0]).toMatchObject({ tipo: 'atrasada', titulo: 'Ofício' })
+    expect(itens[0].task.id).toBe('b')
+  })
+
+  it('não traz atrasada que já foi para Algum dia, nem concluída', () => {
+    const tasks = [
+      { id: 'a', status: 'needsAction', title: 'x', due: '2026-09-01T00:00:00.000Z', tasklistId: ALGUM_DIA },
+      { id: 'b', status: 'completed', title: 'y', due: '2026-09-01T00:00:00.000Z', tasklistId: PROXIMAS },
+    ]
+    expect(itensDaRevisao({ tasks, ...ids }, agora())).toEqual([])
+  })
+
+  it('traz a espera de uma semana ou mais, com quem e há quantos dias', () => {
+    const tasks = [
+      { id: 'a', status: 'needsAction', title: 'Laudo', tasklistId: AGUARDANDO, aguardando: { quem: 'ana', desde: '2026-09-04' } },
+      { id: 'b', status: 'needsAction', title: 'Recente', tasklistId: AGUARDANDO, aguardando: { quem: 'joao', desde: '2026-09-15' } },
+    ]
+    const itens = itensDaRevisao({ tasks, ...ids }, agora())
+    expect(itens).toHaveLength(1)
+    expect(itens[0]).toMatchObject({ id: 'a', tipo: 'aguardando', quem: 'ana', dias: 12 })
+  })
+
+  it('traz projeto sem próxima ação com as tarefas dele como contexto', () => {
+    const tasks = [
+      { id: 'a', status: 'needsAction', title: 'Esperar parecer', projeto: 'caso-maria', tasklistId: AGUARDANDO },
+    ]
+    const itens = itensDaRevisao({ tasks, ...ids }, agora())
+    const projeto = itens.find((i) => i.tipo === 'projeto')
+    expect(projeto).toMatchObject({ id: 'projeto:caso-maria', projeto: 'caso-maria', relacionadas: ['Esperar parecer'] })
+  })
+
+  it('para em 12 itens, para a IA receber só o que mais pesa', () => {
+    const tasks = Array.from({ length: 20 }, (_, i) => ({
+      id: String(i),
+      status: 'needsAction',
+      title: `t${i}`,
+      due: '2026-09-01T00:00:00.000Z',
+      tasklistId: PROXIMAS,
+    }))
+    expect(itensDaRevisao({ tasks, ...ids }, agora())).toHaveLength(12)
   })
 })

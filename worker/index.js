@@ -2,8 +2,8 @@
 //
 // Ele continua servindo o site estático como antes; as rotas próprias usam
 // o Gemini para interpretar texto em português: POST /api/esclarecer (lê um
-// item da Entrada e propõe o que ele é), POST /api/briefing (comenta os
-// números já calculados da revisão semanal, sob pedido), POST
+// item da Entrada e propõe o que ele é), POST /api/briefing (propõe uma ação
+// para cada item que pede decisão na revisão semanal, sob pedido), POST
 // /api/analyze-note (sugestões a partir de uma anotação) e POST
 // /api/search-notes (responde uma pergunta usando as anotações existentes).
 // A chave do Gemini fica como segredo do Cloudflare e nunca chega ao
@@ -151,22 +151,27 @@ Regras:
 - O título mantém as palavras da pessoa sempre que der; você está deixando claro, não reescrevendo.`
 }
 
-// Nada aqui é confiável por vir de um modelo — cada campo é validado antes de
-// virar botão na tela, do mesmo jeito que as outras rotas fazem.
-export function normalizeEsclarecer(parsed) {
-  const tipo = TIPOS_ESCLARECER.has(parsed?.tipo) ? parsed.tipo : null
-  const titulo = typeof parsed?.titulo === 'string' ? parsed.titulo.trim().slice(0, 300) : ''
-  const contextoBruto = typeof parsed?.contexto === 'string' ? parsed.contexto.trim() : ''
-  // Uma palavra só, sem acento nem espaço: é assim que o contexto é gravado
-  // na etiqueta da nota (ver etiqueta() em gtd.js).
-  const contexto =
-    contextoBruto
+// Uma palavra só, sem acento nem espaço: é assim que o contexto é gravado
+// na etiqueta da nota (ver etiqueta() em gtd.js).
+function normalizarContexto(valor) {
+  const bruto = typeof valor === 'string' ? valor.trim() : ''
+  return (
+    bruto
       .normalize('NFD')
       .replace(/\p{Diacritic}/gu, '')
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '')
       .slice(0, 30) || null
+  )
+}
+
+// Nada aqui é confiável por vir de um modelo — cada campo é validado antes de
+// virar botão na tela, do mesmo jeito que as outras rotas fazem.
+export function normalizeEsclarecer(parsed) {
+  const tipo = TIPOS_ESCLARECER.has(parsed?.tipo) ? parsed.tipo : null
+  const titulo = typeof parsed?.titulo === 'string' ? parsed.titulo.trim().slice(0, 300) : ''
+  const contexto = normalizarContexto(parsed?.contexto)
 
   return {
     tipo,
@@ -212,36 +217,102 @@ async function handleEsclarecer(request, env) {
   }
 }
 
-// Antes eram 5 tipos (manhã, tarde, recap, início e fim de semana), gerados
-// sozinhos 3x por dia. Um chat-agente ou um resumo automático que ninguém
-// pediu concorre com o que já é grátis e instantâneo (ver a análise que
-// tirou o agente na Fase 2) — e aqui a IA nem precisava contar nada: os
-// números (atrasada, parada, projeto sem próxima ação...) já saem certos do
-// próprio app, sem chutar. O que sobra para a IA é só comentar por cima
-// deles, uma vez por semana, sob pedido.
-function buildRevisaoPrompt({ today, weekday, context }) {
-  return `Escreva um comentário curto para a revisão semanal de alguém que trabalha com atendimento social/administrativo, em português do Brasil.
+// A revisão começou só comentando contagens ("3 atrasadas, 1 projeto
+// parado") — e comentário sobre contagem não muda nada na semana de
+// ninguém. Agora a IA recebe os itens que pedem decisão (quais tarefas
+// atrasaram, quem está demorando, que projeto parou) e propõe UMA ação
+// concreta para cada um, que vira botão na tela. Contar continua sendo
+// trabalho do app (revisao.js), nunca da IA.
+function buildRevisaoPrompt({ today, weekday, numeros, itens }) {
+  return `Você está ajudando na revisão semanal (método GTD) de alguém que trabalha com atendimento social/administrativo, em português do Brasil.
 
 Hoje é ${weekday}, ${today}. Fuso: America/Sao_Paulo.
 
-Os números da semana já foram calculados sem você — não invente nem repita todos, comente o que mais importa:
-${JSON.stringify(context ?? {})}
+Números da semana, já calculados sem você:
+${JSON.stringify(numeros ?? {})}
+
+Itens que pedem uma decisão (use o "id" exatamente como está):
+${JSON.stringify(itens ?? [])}
+
+Para cada item em que houver uma sugestão clara, proponha UMA ação:
+- tipo "atrasada": "remarcar" (com "data" AAAA-MM-DD, depois de hoje e realista para o que é), "algum_dia" (se parece que não vai sair tão cedo e não tem consequência real atrasar) ou "concluir" (só se o título indicar que provavelmente já foi feito; na dúvida, não).
+- tipo "aguardando": "cobrar", com "titulo" da ação de cobrança — curto, começando por verbo e citando a pessoa (ex.: "Ligar para Ana sobre o laudo") — e "contexto" de uma palavra (ex.: "ligar", "email").
+- tipo "projeto": "proxima_acao", com "titulo" de uma ação física e concreta que destrave o projeto (olhe as "relacionadas") e "contexto" de uma palavra.
 
 Responda SOMENTE com JSON, sem comentários, neste formato:
-{ "text": "o comentário, em até 60 palavras" }
+{ "text": "comentário de até 40 palavras sobre a semana", "sugestoes": [ { "itemId": "id do item", "acao": "remarcar|algum_dia|concluir|cobrar|proxima_acao", "motivo": "por que, em até 15 palavras", "data": "AAAA-MM-DD ou null", "titulo": "texto ou null", "contexto": "palavra ou null" } ] }
 
 Regras:
-- Tom direto e acolhedor, não robótico.
-- Não liste os números um por um como uma tabela — a tela já mostra todos; comente o que se destaca (o que está parado, o que envelheceu esperando, o que foi bem na semana).
-- Se os números forem todos bons (nada atrasado, nada parado, nada esperando há muito), diga isso — não precisa inventar um problema para comentar.
-- Não invente compromisso, tarefa ou projeto que não esteja nos números.`
+- Tom direto e acolhedor, não robótico. O comentário não repete os números — a tela já mostra.
+- Só use ids da lista. Não invente item, pessoa, data nem projeto.
+- Se não houver sugestão boa para um item, deixe-o de fora — melhor menos sugestões certas que muitas vagas.
+- Se a lista de itens estiver vazia, "sugestoes" é [] e o comentário reconhece que a semana está em dia.`
 }
 
-// Nada aqui é confiável por vir de um modelo — o texto é validado e cortado
-// antes de aparecer na tela.
-export function normalizeBriefing(parsed) {
-  const text = typeof parsed?.text === 'string' ? parsed.text.trim().slice(0, 600) : ''
-  return { text }
+// Quais ações fazem sentido para cada tipo de item. É a trava principal: o
+// modelo pode propor "concluir" para uma espera ou "remarcar" um projeto, e
+// isso não pode virar botão.
+const ACOES_POR_TIPO = {
+  atrasada: new Set(['remarcar', 'algum_dia', 'concluir']),
+  aguardando: new Set(['cobrar']),
+  projeto: new Set(['proxima_acao']),
+}
+const MAX_SUGESTOES = 8
+const DATA_ISO = /^\d{4}-\d{2}-\d{2}$/
+
+function textoCurto(valor, limite) {
+  return typeof valor === 'string' ? valor.trim().slice(0, limite) : ''
+}
+
+// Os itens vêm do próprio navegador, mas ainda são entrada externa: só o
+// formato que o prompt espera passa, com teto de quantidade e de tamanho.
+export function sanitizarItensDaRevisao(itens) {
+  return (Array.isArray(itens) ? itens : [])
+    .filter((i) => i && typeof i.id === 'string' && ACOES_POR_TIPO[i.tipo])
+    .slice(0, 15)
+    .map((i) => ({
+      id: i.id.slice(0, 200),
+      tipo: i.tipo,
+      titulo: textoCurto(i.titulo, 200),
+      ...(Number.isFinite(i.dias) ? { dias: i.dias } : {}),
+      ...(i.quem ? { quem: textoCurto(i.quem, 80) } : {}),
+      ...(Array.isArray(i.relacionadas)
+        ? { relacionadas: i.relacionadas.slice(0, 3).map((r) => textoCurto(r, 200)) }
+        : {}),
+    }))
+}
+
+// Nada aqui é confiável por vir de um modelo: cada sugestão precisa apontar
+// para um item que existe, com uma ação permitida para o tipo dele, e com o
+// campo que essa ação exige — senão ela some em vez de virar um botão que
+// faz a coisa errada.
+export function normalizeRevisao(parsed, itens) {
+  const porId = new Map(sanitizarItensDaRevisao(itens).map((i) => [i.id, i]))
+  const vistos = new Set()
+  const sugestoes = []
+
+  for (const s of Array.isArray(parsed?.sugestoes) ? parsed.sugestoes : []) {
+    const item = porId.get(s?.itemId)
+    if (!item || vistos.has(item.id) || !ACOES_POR_TIPO[item.tipo].has(s?.acao)) continue
+
+    const sugestao = { itemId: item.id, acao: s.acao, motivo: textoCurto(s.motivo, 200) }
+    if (s.acao === 'remarcar') {
+      if (!DATA_ISO.test(s.data || '')) continue
+      sugestao.data = s.data
+    }
+    if (s.acao === 'cobrar' || s.acao === 'proxima_acao') {
+      const titulo = textoCurto(s.titulo, 200)
+      if (!titulo) continue
+      sugestao.titulo = titulo
+      sugestao.contexto = normalizarContexto(s.contexto)
+    }
+
+    vistos.add(item.id)
+    sugestoes.push(sugestao)
+    if (sugestoes.length >= MAX_SUGESTOES) break
+  }
+
+  return { text: textoCurto(parsed?.text, 400), sugestoes }
 }
 
 async function handleBriefing(request, env) {
@@ -260,11 +331,12 @@ async function handleBriefing(request, env) {
   }
 
   try {
+    const itens = sanitizarItensDaRevisao(body.itens)
     const parsed = await callGemini(
       env,
-      buildRevisaoPrompt({ today: body.today, weekday: body.weekday, context: body.context })
+      buildRevisaoPrompt({ today: body.today, weekday: body.weekday, numeros: body.numeros, itens })
     )
-    return json(normalizeBriefing(parsed))
+    return json(normalizeRevisao(parsed, itens))
   } catch (err) {
     return erroDeIA(err)
   }
