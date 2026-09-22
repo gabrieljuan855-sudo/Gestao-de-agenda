@@ -1,10 +1,11 @@
 import { ensureToken } from './googleAuth.js'
 import { pausarIA } from './aiCooldown.js'
 
-// Manda os números já calculados da semana (nunca a lista crua de eventos ou
-// tarefas) para o Worker escrever um comentário curto com o Gemini — a única
-// chamada de IA da revisão inteira, e só quando a pessoa pede.
-export async function fetchComentarioDaRevisao(context) {
+// Manda os números e os itens que pedem decisão para o Worker propor uma
+// ação para cada um — a única chamada de IA da revisão, e só quando a pessoa
+// pede. A tarefa inteira (`task`) fica aqui no navegador: para o Gemini vai só
+// o que ele precisa ler para sugerir (título, há quantos dias, com quem).
+export async function fetchSugestoesDaRevisao(numeros, itens) {
   const token = await ensureToken()
   if (!token) throw new Error('Faça login primeiro.')
 
@@ -16,7 +17,8 @@ export async function fetchComentarioDaRevisao(context) {
       Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify({
-      context,
+      numeros,
+      itens: itens.map(({ task, ...resto }) => resto),
       today: now.toLocaleDateString('pt-BR'),
       weekday: now.toLocaleDateString('pt-BR', { weekday: 'long' }),
     }),
@@ -30,5 +32,5 @@ export async function fetchComentarioDaRevisao(context) {
     throw err
   }
 
-  return data.text || ''
+  return { comentario: data.text || '', sugestoes: Array.isArray(data.sugestoes) ? data.sugestoes : [] }
 }

@@ -32,7 +32,7 @@ import {
 import { enfileirar, descarregar, quantasPendentes } from './lib/outbox.js'
 import { lerCacheDeAgenda, gravarCacheDeAgenda } from './lib/agendaCache.js'
 import { parseQuickAdd } from './lib/nlp.js'
-import { rangeForView, shiftReference, isSameDay, toDateInput } from './lib/dates.js'
+import { rangeForView, shiftReference, isSameDay, toDateInput, fromInputs } from './lib/dates.js'
 import { findDefaultCalendar } from './lib/defaults.js'
 import QuickAdd from './components/QuickAdd.jsx'
 import Logo from './components/Logo.jsx'
@@ -530,8 +530,38 @@ export default function App() {
   const revisao = useRevisao({
     idProximas: idDaLista(LISTA_PROXIMAS),
     idAguardando: idDaLista(LISTA_AGUARDANDO),
+    idAlgumDia: idDaLista(LISTA_ALGUM_DIA),
     entradaVazia: entradaVaziaAgora,
   })
+
+  // Uma sugestão da revisão é só um atalho para o que o app já faz na mão —
+  // remarcar é editar o prazo, "algum dia" é mover de lista, cobrar é criar
+  // uma próxima ação. Nenhum caminho novo de gravar no Google.
+  async function handleSugestaoDaRevisao({ acao, data, titulo, contexto, item }) {
+    if (acao === 'remarcar') {
+      await updateTask(item.task, { due: fromInputs(data) })
+    } else if (acao === 'algum_dia') {
+      await moverEsclarecido(item.task, LISTA_ALGUM_DIA, {})
+      return
+    } else if (acao === 'concluir') {
+      await handleCompleteTask(item.task)
+      return
+    } else if (acao === 'cobrar' || acao === 'proxima_acao') {
+      await createTask({
+        title: titulo,
+        contexto,
+        projeto: item.projeto || item.task?.projeto || null,
+        tasklistId: idDaLista(LISTA_PROXIMAS) || '@default',
+      })
+      // Cobrou, a espera recomeça a contar de hoje — senão a mesma pessoa
+      // voltaria como "esperando há 19 dias" na revisão seguinte, mesmo já
+      // tendo sido cobrada.
+      if (acao === 'cobrar' && item.task?.aguardando) {
+        await updateTask(item.task, { aguardando: { ...item.task.aguardando, desde: toDateInput(new Date()) } })
+      }
+    }
+    await reload()
+  }
 
   async function moverEsclarecido(item, listaTitulo, patch) {
     const destino = idDaLista(listaTitulo)
@@ -935,8 +965,10 @@ export default function App() {
         <Revisao
           numeros={revisao.numeros}
           comentario={revisao.comentario}
+          sugestoes={revisao.sugestoes}
           carregando={revisao.carregando}
           onGerar={revisao.gerar}
+          onAplicar={handleSugestaoDaRevisao}
         />
       ),
     },

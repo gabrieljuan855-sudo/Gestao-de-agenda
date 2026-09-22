@@ -1265,6 +1265,24 @@ button.danger:hover { background: var(--urgent-bg); }
    largura do cartão em vez de quebrar linha. */
 .revisao-lista { overflow-wrap: anywhere; }
 
+/* Uma sugestão por cartão: o item, o porquê e a ação — é para ser decidida
+   de olhar, uma de cada vez, como a Entrada. */
+.revisao-sugestoes { display: flex; flex-direction: column; gap: 8px; }
+
+.revisao-sugestao {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--shape-sm);
+  overflow-wrap: anywhere;
+}
+
+.revisao-sugestao-item { font-size: var(--body-sm); font-weight: 500; }
+.revisao-sugestao-motivo { font-size: var(--label-sm); }
+.revisao-sugestao-acoes { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+
 /* O indicador: barra de 3dp, arredondada em cima, colada na linha de baixo.
    É ele que liga a aba ao conteúdo — sem isso a aba ativa vira só um texto
    de cor diferente, e a barra inteira passa a parecer um grupo de botões. */
