@@ -352,12 +352,6 @@ textarea:focus-visible,
    um overflow horizontal escondido dentro do modal. */
 .field-row .field { flex: 1; min-width: 0; }
 
-.quickadd-fields {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-  gap: 10px;
-}
-
 /* A tela de esclarecer. Cada decisão possível é um bloco com nome, para a
    escolha ser de olhar e não de lembrar — é o oposto do campo em branco. */
 .entrada-dois-minutos {
@@ -441,9 +435,9 @@ textarea:focus-visible,
   margin-top: 12px;
 }
 
-/* A saída para agendar: discreta de propósito. Capturar continua sendo o
-   caminho padrão, e este é o desvio de um caso só — compromisso com dia e
-   hora marcados. */
+/* Confirmação depois de criar direto (compromisso ou próxima ação), com
+   Desfazer — discreta de propósito, porque na maioria das vezes o palpite
+   estava certo e ninguém vai clicar em nada aqui. */
 .quickadd-desvio {
   display: flex;
   align-items: center;

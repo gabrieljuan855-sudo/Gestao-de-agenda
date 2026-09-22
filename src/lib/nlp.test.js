@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseQuickAdd } from './nlp.js'
+import { parseQuickAdd, decidirDestino } from './nlp.js'
 
 const ref = new Date(2026, 8, 1) // 1º de setembro de 2026, fixo para o teste não depender do dia em que roda
 
@@ -73,5 +73,56 @@ describe('parseQuickAdd', () => {
 
     const r2 = parseQuickAdd('Prazo do projeto amanhã', ref)
     expect(r2.title).toBe('Prazo do projeto')
+  })
+
+  it('@contexto e #projeto escritos no texto viram campos, e saem do título', () => {
+    const r = parseQuickAdd('Ligar pro banco @carro #financas', ref)
+    expect(r.type).toBe('task')
+    expect(r.contexto).toBe('carro')
+    expect(r.projeto).toBe('financas')
+    expect(r.title).toBe('Ligar pro banco')
+  })
+
+  it('a etiqueta usa a mesma normalização de gtd.js (sem acento, minúscula)', () => {
+    const r = parseQuickAdd('Revisar contrato @Advogado #Caso-Maria', ref)
+    expect(r.contexto).toBe('advogado')
+    expect(r.projeto).toBe('caso-maria')
+  })
+
+  it('tag também funciona junto com data e hora (evento)', () => {
+    const r = parseQuickAdd('Reunião 20/09/2026 14h @trabalho', ref)
+    expect(r.type).toBe('event')
+    expect(r.title).toBe('Reunião')
+  })
+})
+
+describe('decidirDestino', () => {
+  it('compromisso (dia e hora certos) vai direto para a agenda', () => {
+    const r = parseQuickAdd('Dentista 20/09/2026 14h', ref)
+    expect(decidirDestino(r)).toBe('evento')
+  })
+
+  it('tarefa com prazo vai direto para Próximas ações', () => {
+    const r = parseQuickAdd('Pagar conta dia 20', ref)
+    expect(decidirDestino(r)).toBe('tarefa')
+  })
+
+  it('tarefa com prioridade explícita vai direto para Próximas ações', () => {
+    const r = parseQuickAdd('Ligar urgente', ref)
+    expect(decidirDestino(r)).toBe('tarefa')
+  })
+
+  it('tarefa com @contexto ou #projeto vai direto para Próximas ações', () => {
+    const r = parseQuickAdd('Revisar contrato @advogado', ref)
+    expect(decidirDestino(r)).toBe('tarefa')
+  })
+
+  it('pensamento cru, sem nenhum sinal, vai para a Entrada', () => {
+    const r = parseQuickAdd('Comprar café para o escritório', ref)
+    expect(decidirDestino(r)).toBe('entrada')
+  })
+
+  it('sem preview nenhum (campo vazio), vai para a Entrada', () => {
+    expect(decidirDestino(null)).toBe('entrada')
   })
 })
