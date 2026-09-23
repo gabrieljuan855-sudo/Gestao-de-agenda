@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react'
 import { listAllTasks, prefetchFocusEvents } from './googleApi.js'
 import { fetchSugestoesDaRevisao } from './aiRevisao.js'
-import { IA_DESLIGADA } from './aiCooldown.js'
+import { REVISAO_IA_LIGADA } from './aiCooldown.js'
 import { numerosDaRevisao, itensDaRevisao } from './revisao.js'
 
 // Ao contrário do briefing antigo, que rodava sozinho 3x por dia (e virou
@@ -36,7 +36,7 @@ export default function useRevisao({ idProximas, idAguardando, idAlgumDia, entra
       setComentario(null)
       setSugestoes([])
 
-      if (IA_DESLIGADA) return
+      if (!REVISAO_IA_LIGADA) return
       try {
         const resposta = await fetchSugestoesDaRevisao(numerosCalculados, itens)
         const porId = new Map(itens.map((i) => [i.id, i]))
