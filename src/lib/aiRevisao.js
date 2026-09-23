@@ -1,11 +1,12 @@
 import { ensureToken } from './googleAuth.js'
 import { pausarIA } from './aiCooldown.js'
 
-// Manda os números e os itens que pedem decisão para o Worker propor uma
-// ação para cada um — a única chamada de IA da revisão, e só quando a pessoa
-// pede. A tarefa inteira (`task`) fica aqui no navegador: para o Gemini vai só
-// o que ele precisa ler para sugerir (título, há quantos dias, com quem).
-export async function fetchSugestoesDaRevisao(numeros, itens) {
+// Manda os números, os itens que pedem decisão e o material para montar um
+// plano da semana (candidatas a próxima ação + vãos livres da agenda) para o
+// Worker propor ações — a única chamada de IA da revisão, e só quando a
+// pessoa pede. A tarefa inteira (`task`) fica aqui no navegador: para o
+// Gemini vai só o que ele precisa ler para sugerir (título, prazo, duração).
+export async function fetchSugestoesDaRevisao(numeros, itens, candidatas, vagas) {
   const token = await ensureToken()
   if (!token) throw new Error('Faça login primeiro.')
 
@@ -19,6 +20,8 @@ export async function fetchSugestoesDaRevisao(numeros, itens) {
     body: JSON.stringify({
       numeros,
       itens: itens.map(({ task, ...resto }) => resto),
+      candidatas: candidatas.map(({ task, ...resto }) => resto),
+      vagas,
       today: now.toLocaleDateString('pt-BR'),
       weekday: now.toLocaleDateString('pt-BR', { weekday: 'long' }),
     }),
@@ -32,5 +35,9 @@ export async function fetchSugestoesDaRevisao(numeros, itens) {
     throw err
   }
 
-  return { comentario: data.text || '', sugestoes: Array.isArray(data.sugestoes) ? data.sugestoes : [] }
+  return {
+    comentario: data.text || '',
+    sugestoes: Array.isArray(data.sugestoes) ? data.sugestoes : [],
+    plano: Array.isArray(data.plano) ? data.plano : [],
+  }
 }

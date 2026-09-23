@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest'
-import { numerosDaRevisao, itensDaRevisao } from './revisao.js'
+import {
+  numerosDaRevisao,
+  itensDaRevisao,
+  candidatasParaAgendar,
+  vaosLivresDaSemana,
+  cargaDaSemana,
+  semanaEstaFolgada,
+} from './revisao.js'
 
 const PROXIMAS = 'lista-proximas'
 const AGUARDANDO = 'lista-aguardando'
@@ -116,7 +123,7 @@ describe('itensDaRevisao', () => {
     expect(projeto).toMatchObject({ id: 'projeto:caso-maria', projeto: 'caso-maria', relacionadas: ['Esperar parecer'] })
   })
 
-  it('para em 12 itens, para a IA receber só o que mais pesa', () => {
+  it('para em 15 itens, para a IA receber só o que mais pesa', () => {
     const tasks = Array.from({ length: 20 }, (_, i) => ({
       id: String(i),
       status: 'needsAction',
@@ -124,6 +131,102 @@ describe('itensDaRevisao', () => {
       due: '2026-09-01T00:00:00.000Z',
       tasklistId: PROXIMAS,
     }))
-    expect(itensDaRevisao({ tasks, ...ids }, agora())).toHaveLength(12)
+    expect(itensDaRevisao({ tasks, ...ids }, agora())).toHaveLength(15)
+  })
+
+  it('traz próxima ação sem prazo vencido mas parada há dias, sem duplicar quem já é "atrasada"', () => {
+    const tasks = [
+      // Sem prazo, mas não mexida há mais de 3 dias: entra como "parada".
+      { id: 'a', status: 'needsAction', title: 'Vaga', tasklistId: PROXIMAS, updated: '2026-09-10T00:00:00.000Z' },
+      // Prazo vencido: já é "atrasada", não deve aparecer de novo como "parada".
+      {
+        id: 'b',
+        status: 'needsAction',
+        title: 'Vencida',
+        tasklistId: PROXIMAS,
+        due: '2026-09-01T00:00:00.000Z',
+        updated: '2026-09-01T00:00:00.000Z',
+      },
+    ]
+    const itens = itensDaRevisao({ tasks, ...ids }, agora())
+    expect(itens.filter((i) => i.tipo === 'parada').map((i) => i.id)).toEqual(['a'])
+  })
+
+  it('só traz Algum dia quando incluirAlgumDia é true, os mais antigos primeiro', () => {
+    const tasks = [
+      { id: 'a', status: 'needsAction', title: 'Velho', tasklistId: ALGUM_DIA, updated: '2026-08-01T00:00:00.000Z' },
+      { id: 'b', status: 'needsAction', title: 'Novo', tasklistId: ALGUM_DIA, updated: '2026-09-15T00:00:00.000Z' },
+    ]
+    expect(itensDaRevisao({ tasks, ...ids }, agora())).toEqual([])
+    const itens = itensDaRevisao({ tasks, ...ids, incluirAlgumDia: true }, agora())
+    expect(itens.map((i) => i.id)).toEqual(['a', 'b'])
+    expect(itens[0].tipo).toBe('algum_dia')
+  })
+})
+
+describe('candidatasParaAgendar', () => {
+  it('traz só as tarefas de Próximas ações, ordenadas por prioridade e prazo, até o teto', () => {
+    const tasks = [
+      { id: 'a', status: 'needsAction', title: 'Baixa', tasklistId: PROXIMAS, priority: 'baixa' },
+      { id: 'b', status: 'needsAction', title: 'Alta', tasklistId: PROXIMAS, priority: 'alta', due: '2026-09-20T00:00:00.000Z', duracao: 45 },
+      { id: 'c', status: 'completed', title: 'Feita', tasklistId: PROXIMAS, priority: 'alta' },
+      { id: 'd', status: 'needsAction', title: 'Outra lista', tasklistId: AGUARDANDO, priority: 'alta' },
+    ]
+    const r = candidatasParaAgendar(tasks, PROXIMAS, 5)
+    expect(r.map((c) => c.id)).toEqual(['b', 'a'])
+    expect(r[0]).toMatchObject({ titulo: 'Alta', prioridade: 'alta', prazo: '2026-09-20', duracao: 45 })
+  })
+})
+
+describe('vaosLivresDaSemana', () => {
+  // Quarta 2026-09-16 (dia 3) e quinta 2026-09-17 (dia 4) trabalham 09h-17h;
+  // os outros dias da semana não têm expediente algum.
+  const schedule = { 3: [['09:00', '17:00']], 4: [['09:00', '17:00']] }
+
+  it('corta o vão de hoje a partir da hora atual, e mantém o dia seguinte inteiro', () => {
+    const vagas = vaosLivresDaSemana({ events: [], schedule, occupies: () => true }, agora(), 2)
+    expect(vagas).toEqual([
+      { dia: '2026-09-16', inicio: '12:00', fim: '17:00', minutos: 300 },
+      { dia: '2026-09-17', inicio: '09:00', fim: '17:00', minutos: 480 },
+    ])
+  })
+
+  it('pula dia sem expediente e desconta evento que ocupa', () => {
+    const events = [
+      { start: { dateTime: '2026-09-17T10:00:00' }, end: { dateTime: '2026-09-17T11:00:00' } },
+    ]
+    const vagas = vaosLivresDaSemana({ events, schedule, occupies: () => true }, agora(), 5)
+    const diaSeguinte = vagas.filter((v) => v.dia === '2026-09-17')
+    expect(diaSeguinte).toEqual([
+      { dia: '2026-09-17', inicio: '09:00', fim: '10:00', minutos: 60 },
+      { dia: '2026-09-17', inicio: '11:00', fim: '17:00', minutos: 360 },
+    ])
+    // Sexta, sábado e domingo não têm expediente no schedule de teste.
+    expect(vagas.some((v) => v.dia === '2026-09-18')).toBe(false)
+  })
+})
+
+describe('cargaDaSemana e semanaEstaFolgada', () => {
+  const schedule = { 3: [['09:00', '17:00']], 4: [['09:00', '17:00']] }
+
+  it('soma a duração das tarefas com prazo na janela contra o vão livre no mesmo período', () => {
+    const tasks = [
+      { id: 'a', status: 'needsAction', due: '2026-09-16T00:00:00.000Z', duracao: 60 },
+      // Sem duracao: entra com o palpite padrão de 30min.
+      { id: 'b', status: 'needsAction', due: '2026-09-17T00:00:00.000Z' },
+      // Fora da janela de 2 dias: não conta.
+      { id: 'c', status: 'needsAction', due: '2026-09-25T00:00:00.000Z', duracao: 999 },
+    ]
+    const carga = cargaDaSemana({ tasks, events: [], schedule, occupies: () => true }, agora(), 2)
+    expect(carga).toEqual({ minutosTarefas: 90, minutosLivres: 780 })
+    expect(semanaEstaFolgada(carga)).toBe(true)
+  })
+
+  it('não está folgada sem vão livre nenhum, mesmo sem tarefa nenhuma', () => {
+    expect(semanaEstaFolgada({ minutosTarefas: 0, minutosLivres: 0 })).toBe(false)
+  })
+
+  it('não está folgada quando as tarefas já tomam mais de 60% do vão livre', () => {
+    expect(semanaEstaFolgada({ minutosTarefas: 500, minutosLivres: 780 })).toBe(false)
   })
 })

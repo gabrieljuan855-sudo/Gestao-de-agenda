@@ -532,6 +532,8 @@ export default function App() {
     idAguardando: idDaLista(LISTA_AGUARDANDO),
     idAlgumDia: idDaLista(LISTA_ALGUM_DIA),
     entradaVazia: entradaVaziaAgora,
+    occupies,
+    schedule: workSchedule,
   })
 
   // Uma sugestão da revisão é só um atalho para o que o app já faz na mão —
@@ -559,8 +561,26 @@ export default function App() {
       if (acao === 'cobrar' && item.task?.aguardando) {
         await updateTask(item.task, { aguardando: { ...item.task.aguardando, desde: toDateInput(new Date()) } })
       }
+    } else if (acao === 'reescrever') {
+      // Só troca o título — a tarefa continua na mesma lista, com o mesmo
+      // contexto e projeto que já tinha.
+      await updateTask(item.task, { title: titulo })
+    } else if (acao === 'reativar') {
+      await moverEsclarecido(item.task, LISTA_PROXIMAS, titulo ? { title: titulo } : {})
+      return
+    } else if (acao === 'excluir') {
+      await deleteTask(item.task)
     }
     await reload()
+  }
+
+  // O plano da semana é o mesmo time-blocking que a tela Próximas já
+  // oferece (handleAgendarBloco) — só que a hora vem escolhida pela IA em
+  // vez de "livre agora".
+  async function handleAgendarPlano({ dia, hora, candidata }) {
+    const start = fromInputs(dia, hora)
+    const minutos = candidata.duracao || 30
+    await handleAgendarBloco(candidata.task, { start, end: new Date(start.getTime() + minutos * 60000) })
   }
 
   async function moverEsclarecido(item, listaTitulo, patch) {
@@ -966,9 +986,11 @@ export default function App() {
           numeros={revisao.numeros}
           comentario={revisao.comentario}
           sugestoes={revisao.sugestoes}
+          plano={revisao.plano}
           carregando={revisao.carregando}
           onGerar={revisao.gerar}
           onAplicar={handleSugestaoDaRevisao}
+          onAgendarPlano={handleAgendarPlano}
         />
       ),
     },

@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { normalizeAnalysis, normalizeEsclarecer, normalizeRevisao, normalizeSearch, sanitizarItensDaRevisao } from './index.js'
+import {
+  normalizeAnalysis,
+  normalizeEsclarecer,
+  normalizePlano,
+  normalizeRevisao,
+  normalizeSearch,
+  sanitizarCandidatas,
+  sanitizarItensDaRevisao,
+  sanitizarVagas,
+} from './index.js'
 
 describe('normalizeAnalysis', () => {
   it('mantém sugestões válidas e usa o texto como título quando a IA não sugere um', () => {
@@ -198,6 +207,140 @@ describe('sanitizarItensDaRevisao', () => {
       null,
     ])
     expect(r).toEqual([{ id: 't1', tipo: 'atrasada', titulo: 'Relatório', dias: 5 }])
+  })
+
+  it('aceita os tipos novos: parada e algum_dia', () => {
+    const r = sanitizarItensDaRevisao([
+      { id: 'p1', tipo: 'parada', titulo: 'Vaga', dias: 6 },
+      { id: 'a1', tipo: 'algum_dia', titulo: 'Velho', dias: 40 },
+    ])
+    expect(r).toEqual([
+      { id: 'p1', tipo: 'parada', titulo: 'Vaga', dias: 6 },
+      { id: 'a1', tipo: 'algum_dia', titulo: 'Velho', dias: 40 },
+    ])
+  })
+})
+
+describe('normalizeRevisao — ações novas (reescrever, reativar, excluir)', () => {
+  const itens = [
+    { id: 'p1', tipo: 'parada', titulo: 'Ver situação do Pedro' },
+    { id: 'a1', tipo: 'algum_dia', titulo: 'Aprender a tocar violão' },
+  ]
+
+  it('reescrever exige título e não leva contexto', () => {
+    const r = normalizeRevisao(
+      { sugestoes: [{ itemId: 'p1', acao: 'reescrever', titulo: 'Ligar para a escola do Pedro', contexto: 'ligar' }] },
+      itens
+    )
+    expect(r.sugestoes).toEqual([{ itemId: 'p1', acao: 'reescrever', motivo: '', titulo: 'Ligar para a escola do Pedro' }])
+  })
+
+  it('descarta reescrever sem título', () => {
+    const r = normalizeRevisao({ sugestoes: [{ itemId: 'p1', acao: 'reescrever' }] }, itens)
+    expect(r.sugestoes).toEqual([])
+  })
+
+  it('reativar aceita título opcional, e funciona sem ele', () => {
+    const comTitulo = normalizeRevisao(
+      { sugestoes: [{ itemId: 'a1', acao: 'reativar', titulo: 'Aula de violão' }] },
+      itens
+    )
+    expect(comTitulo.sugestoes).toEqual([{ itemId: 'a1', acao: 'reativar', motivo: '', titulo: 'Aula de violão' }])
+
+    const semTitulo = normalizeRevisao({ sugestoes: [{ itemId: 'a1', acao: 'reativar' }] }, itens)
+    expect(semTitulo.sugestoes).toEqual([{ itemId: 'a1', acao: 'reativar', motivo: '' }])
+  })
+
+  it('excluir não precisa de nenhum campo extra', () => {
+    const r = normalizeRevisao({ sugestoes: [{ itemId: 'a1', acao: 'excluir', motivo: 'Sem sentido hoje.' }] }, itens)
+    expect(r.sugestoes).toEqual([{ itemId: 'a1', acao: 'excluir', motivo: 'Sem sentido hoje.' }])
+  })
+
+  it('descarta ação fora do que o tipo permite (excluir uma parada, reescrever um algum_dia)', () => {
+    const r = normalizeRevisao(
+      {
+        sugestoes: [
+          { itemId: 'p1', acao: 'excluir' },
+          { itemId: 'a1', acao: 'reescrever', titulo: 'x' },
+        ],
+      },
+      itens
+    )
+    expect(r.sugestoes).toEqual([])
+  })
+})
+
+describe('sanitizarCandidatas', () => {
+  it('mantém o formato esperado e ignora prazo mal formatado', () => {
+    const r = sanitizarCandidatas([
+      { id: 'c1', titulo: 'Relatório', prioridade: 'alta', prazo: '2026-09-20', duracao: 45 },
+      { id: 'c2', titulo: 'Sem prazo válido', prazo: 'não é data' },
+      null,
+    ])
+    expect(r).toEqual([
+      { id: 'c1', titulo: 'Relatório', prioridade: 'alta', prazo: '2026-09-20', duracao: 45 },
+      { id: 'c2', titulo: 'Sem prazo válido' },
+    ])
+  })
+
+  it('corta no teto de 10', () => {
+    const candidatas = Array.from({ length: 20 }, (_, i) => ({ id: String(i), titulo: `t${i}` }))
+    expect(sanitizarCandidatas(candidatas)).toHaveLength(10)
+  })
+})
+
+describe('sanitizarVagas', () => {
+  it('mantém só vãos com dia/hora no formato certo e fim depois do início', () => {
+    const r = sanitizarVagas([
+      { dia: '2026-09-20', inicio: '09:00', fim: '11:00', minutos: 120 },
+      { dia: '2026-09-20', inicio: '14:00', fim: '13:00' }, // fim antes do início
+      { dia: 'não é data', inicio: '09:00', fim: '10:00' },
+      null,
+    ])
+    expect(r).toEqual([{ dia: '2026-09-20', inicio: '09:00', fim: '11:00' }])
+  })
+})
+
+describe('normalizePlano', () => {
+  const candidatas = [
+    { id: 'c1', titulo: 'Relatório', duracao: 60 },
+    { id: 'c2', titulo: 'Sem estimativa (usa 30min)' },
+  ]
+  const vagas = [{ dia: '2026-09-21', inicio: '09:00', fim: '11:00' }]
+
+  it('aceita um horário que cabe inteiro dentro de um vão', () => {
+    const r = normalizePlano(
+      [{ tarefaId: 'c1', dia: '2026-09-21', hora: '09:00', motivo: 'Prioridade da semana.' }],
+      candidatas,
+      vagas
+    )
+    expect(r).toEqual([{ tarefaId: 'c1', dia: '2026-09-21', hora: '09:00', motivo: 'Prioridade da semana.' }])
+  })
+
+  it('usa 30min de duração padrão quando a candidata não tem estimativa', () => {
+    // 10:30 + 30min = 11:00, encosta exatamente no fim do vão.
+    const r = normalizePlano([{ tarefaId: 'c2', dia: '2026-09-21', hora: '10:30' }], candidatas, vagas)
+    expect(r).toEqual([{ tarefaId: 'c2', dia: '2026-09-21', hora: '10:30', motivo: '' }])
+  })
+
+  it('descarta horário que estoura o fim do vão', () => {
+    // 10:30 + 60min = 11:30, passa do fim (11:00) do único vão do dia.
+    const r = normalizePlano([{ tarefaId: 'c1', dia: '2026-09-21', hora: '10:30' }], candidatas, vagas)
+    expect(r).toEqual([])
+  })
+
+  it('descarta candidata ou dia inventado, e não repete a mesma candidata duas vezes', () => {
+    const r = normalizePlano(
+      [
+        { tarefaId: 'inventada', dia: '2026-09-21', hora: '09:00' },
+        { tarefaId: 'c2', dia: '2099-01-01', hora: '09:00' },
+        { tarefaId: 'c2', dia: '2026-09-21', hora: '09:00' },
+        { tarefaId: 'c2', dia: '2026-09-21', hora: '10:00' },
+      ],
+      candidatas,
+      vagas
+    )
+    expect(r).toEqual([{ tarefaId: 'c2', dia: '2026-09-21', hora: '09:00', motivo: '' }])
   })
 })
 
