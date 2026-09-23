@@ -339,7 +339,7 @@ export default function Notes({ notesState, calendars = [], taskLists = [], onCr
         selectedId={selectedId}
         onSelect={setSelectedId}
         onRequestDelete={setPendingDeleteId}
-        onCreate={createNote}
+        onCreate={() => createNote()}
       />
 
       {error && (

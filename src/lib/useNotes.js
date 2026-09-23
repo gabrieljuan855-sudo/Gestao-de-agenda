@@ -60,9 +60,9 @@ function readCache() {
   try {
     const raw = localStorage.getItem(CACHE_KEY)
     const parsed = raw ? JSON.parse(raw) : null
-    if (Array.isArray(parsed)) return { notes: parsed, deleted: [] }
+    if (Array.isArray(parsed)) return { notes: sanitizeNotes(parsed), deleted: [] }
     return {
-      notes: Array.isArray(parsed?.notes) ? parsed.notes : [],
+      notes: sanitizeNotes(parsed?.notes),
       deleted: Array.isArray(parsed?.deleted) ? parsed.deleted : [],
     }
   } catch {
@@ -87,6 +87,45 @@ function makeId() {
 function newNote() {
   const now = new Date().toISOString()
   return { id: makeId(), title: '', body: '', createdAt: now, updatedAt: now }
+}
+
+function textoOuVazio(v) {
+  return typeof v === 'string' ? v : ''
+}
+
+// Reconstrói a nota só com os campos que ela pode ter, do jeito certo — nunca
+// espalha um objeto de fora por cima dela. Existe por causa de um bug real:
+// o botão "+" chamava `onCreate={createNote}` direto no onClick, então um
+// clique passava o próprio evento do React como `inicial`, e `{...inicial}`
+// copiava dali o alvo do clique (um <button> do DOM, com a referência que o
+// React deixa presa nele) para dentro da nota. Isso trava a sincronização
+// pra sempre: um JSON.stringify que esbarra num nó do DOM nunca chega a
+// tentar a rede, então nem aparece como erro do Google — só "não deu para
+// sincronizar", sem pista nenhuma de por quê.
+//
+// Rodar isto também na leitura do cache (abaixo) é o que limpa uma nota que
+// já ficou corrompida assim antes desta correção existir — sem isso, o
+// aparelho continuaria travado mesmo depois do código corrigido.
+export function sanitizeNote(note) {
+  if (!note || typeof note !== 'object') return null
+  if (typeof note.id !== 'string') return null
+  const limpa = {
+    id: note.id,
+    title: textoOuVazio(note.title),
+    body: textoOuVazio(note.body),
+    createdAt: typeof note.createdAt === 'string' ? note.createdAt : new Date().toISOString(),
+    updatedAt: typeof note.updatedAt === 'string' ? note.updatedAt : new Date().toISOString(),
+  }
+  if (Array.isArray(note.suggestions)) limpa.suggestions = note.suggestions
+  if (typeof note.lastAnalyzedAt === 'string') limpa.lastAnalyzedAt = note.lastAnalyzedAt
+  if (note.relatedNote && typeof note.relatedNote.id === 'string') {
+    limpa.relatedNote = { id: note.relatedNote.id, title: textoOuVazio(note.relatedNote.title) }
+  }
+  return limpa
+}
+
+export function sanitizeNotes(notes) {
+  return (Array.isArray(notes) ? notes : []).map(sanitizeNote).filter(Boolean)
 }
 
 // Resolve a referência curta que o Worker devolveu ("n1", "n2"...) contra a
@@ -227,7 +266,10 @@ export default function useNotes({ signedIn }) {
   async function subirParaODrive(lista) {
     setSyncStatus('salvando')
     try {
-      await saveNotes(lista, deletedRef.current)
+      // Última barreira antes do JSON.stringify: mesmo que algo em memória
+      // tenha corrompido uma nota (ver sanitizeNote), o que sai para o Drive
+      // continua no formato certo.
+      await saveNotes(sanitizeNotes(lista), deletedRef.current)
       setSyncStatus('salvo')
       // Uma gravação que deu certo desmente um aviso antigo de falha.
       setError(null)
@@ -247,7 +289,10 @@ export default function useNotes({ signedIn }) {
   // em vez de tarefa. Criar vazia e editar logo em seguida não serviria: o
   // updateNote seguinte ainda enxergaria a lista antiga e desfaria a criação.
   function createNote(inicial = {}) {
-    const note = { ...newNote(), ...inicial }
+    // Só título e corpo, nunca o objeto inteiro: ver o comentário de
+    // sanitizeNote sobre o que dá errado quando se espalha `inicial` sem
+    // filtro (foi assim que um clique virou o dado de uma nota).
+    const note = { ...newNote(), title: textoOuVazio(inicial.title), body: textoOuVazio(inicial.body) }
     persist([note, ...notes])
     setSelectedId(note.id)
     return note
