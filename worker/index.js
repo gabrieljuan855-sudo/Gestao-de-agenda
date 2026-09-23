@@ -223,7 +223,7 @@ async function handleEsclarecer(request, env) {
 // atrasaram, quem está demorando, que projeto parou) e propõe UMA ação
 // concreta para cada um, que vira botão na tela. Contar continua sendo
 // trabalho do app (revisao.js), nunca da IA.
-function buildRevisaoPrompt({ today, weekday, numeros, itens }) {
+function buildRevisaoPrompt({ today, weekday, numeros, itens, candidatas, vagas }) {
   return `Você está ajudando na revisão semanal (método GTD) de alguém que trabalha com atendimento social/administrativo, em português do Brasil.
 
 Hoje é ${weekday}, ${today}. Fuso: America/Sao_Paulo.
@@ -234,19 +234,34 @@ ${JSON.stringify(numeros ?? {})}
 Itens que pedem uma decisão (use o "id" exatamente como está):
 ${JSON.stringify(itens ?? [])}
 
+Próximas ações candidatas a ganhar um horário na agenda (use o "id" exatamente como está):
+${JSON.stringify(candidatas ?? [])}
+
+Vãos livres na agenda dos próximos dias — cada um é um intervalo [inicio, fim) de um "dia" (use exatamente esses valores):
+${JSON.stringify(vagas ?? [])}
+
 Para cada item em que houver uma sugestão clara, proponha UMA ação:
 - tipo "atrasada": "remarcar" (com "data" AAAA-MM-DD, depois de hoje e realista para o que é), "algum_dia" (se parece que não vai sair tão cedo e não tem consequência real atrasar) ou "concluir" (só se o título indicar que provavelmente já foi feito; na dúvida, não).
 - tipo "aguardando": "cobrar", com "titulo" da ação de cobrança — curto, começando por verbo e citando a pessoa (ex.: "Ligar para Ana sobre o laudo") — e "contexto" de uma palavra (ex.: "ligar", "email").
 - tipo "projeto": "proxima_acao", com "titulo" de uma ação física e concreta que destrave o projeto (olhe as "relacionadas") e "contexto" de uma palavra.
+- tipo "parada": o título é vago demais para ser uma ação de verdade (ex.: "Ver situação do Pedro") — "reescrever", com "titulo" reescrito como uma ação física e concreta, sem inventar fato novo (ex.: "Ligar para a escola do Pedro pedindo o boletim"); ou "algum_dia" se não for prioridade agora.
+- tipo "algum_dia": "reativar" (com "titulo" reescrito, se ajudar clarear, ou null para manter o título) para trazer de volta a Próximas ações, ou "excluir" se o item já perdeu o sentido.
+
+Além disso, monte um plano para a semana: escolha até 5 das "candidatas" e encaixe cada uma num dos "vagas", respeitando a duração dela ("duracao" em minutos; sem duração, considere 30min) sem passar do fim do vão. Não repita a mesma candidata nem sobreponha dois horários.
 
 Responda SOMENTE com JSON, sem comentários, neste formato:
-{ "text": "comentário de até 40 palavras sobre a semana", "sugestoes": [ { "itemId": "id do item", "acao": "remarcar|algum_dia|concluir|cobrar|proxima_acao", "motivo": "por que, em até 15 palavras", "data": "AAAA-MM-DD ou null", "titulo": "texto ou null", "contexto": "palavra ou null" } ] }
+{
+  "text": "comentário de até 40 palavras sobre a semana",
+  "sugestoes": [ { "itemId": "id do item", "acao": "remarcar|algum_dia|concluir|cobrar|proxima_acao|reescrever|reativar|excluir", "motivo": "por que, em até 15 palavras", "data": "AAAA-MM-DD ou null", "titulo": "texto ou null", "contexto": "palavra ou null" } ],
+  "plano": [ { "tarefaId": "id da candidata", "dia": "AAAA-MM-DD", "hora": "HH:MM", "motivo": "por que essa hora, em até 15 palavras" } ]
+}
 
 Regras:
 - Tom direto e acolhedor, não robótico. O comentário não repete os números — a tela já mostra.
-- Só use ids da lista. Não invente item, pessoa, data nem projeto.
+- Só use ids que estejam nas listas de itens/candidatas/vagas. Não invente item, candidata, vão, pessoa, data nem projeto.
 - Se não houver sugestão boa para um item, deixe-o de fora — melhor menos sugestões certas que muitas vagas.
-- Se a lista de itens estiver vazia, "sugestoes" é [] e o comentário reconhece que a semana está em dia.`
+- Se nenhum vão couber uma candidata, deixe o plano menor — nunca proponha um horário fora dos vãos.
+- Se as listas de itens e candidatas estiverem vazias, "sugestoes" e "plano" são [] e o comentário reconhece que a semana está em dia.`
 }
 
 // Quais ações fazem sentido para cada tipo de item. É a trava principal: o
@@ -256,9 +271,20 @@ const ACOES_POR_TIPO = {
   atrasada: new Set(['remarcar', 'algum_dia', 'concluir']),
   aguardando: new Set(['cobrar']),
   projeto: new Set(['proxima_acao']),
+  parada: new Set(['reescrever', 'algum_dia']),
+  algum_dia: new Set(['reativar', 'excluir']),
 }
 const MAX_SUGESTOES = 8
+const MAX_PLANO = 5
+const MAX_CANDIDATAS = 10
+const MAX_VAGAS = 40
 const DATA_ISO = /^\d{4}-\d{2}-\d{2}$/
+const HORA_HHMM = /^([01]\d|2[0-3]):[0-5]\d$/
+
+function hhmmParaMinutos(hhmm) {
+  const [h, m] = hhmm.split(':').map(Number)
+  return h * 60 + m
+}
 
 function textoCurto(valor, limite) {
   return typeof valor === 'string' ? valor.trim().slice(0, limite) : ''
@@ -300,12 +326,21 @@ export function normalizeRevisao(parsed, itens) {
       if (!DATA_ISO.test(s.data || '')) continue
       sugestao.data = s.data
     }
-    if (s.acao === 'cobrar' || s.acao === 'proxima_acao') {
+    if (s.acao === 'cobrar' || s.acao === 'proxima_acao' || s.acao === 'reescrever') {
       const titulo = textoCurto(s.titulo, 200)
       if (!titulo) continue
       sugestao.titulo = titulo
-      sugestao.contexto = normalizarContexto(s.contexto)
+      // Só cobrar/próxima ação viram uma tarefa nova, que precisa de
+      // contexto; reescrever só troca o título da tarefa que já existe.
+      if (s.acao !== 'reescrever') sugestao.contexto = normalizarContexto(s.contexto)
     }
+    if (s.acao === 'reativar') {
+      // Reativar não exige reescrever o título — null mantém o que já tinha.
+      const titulo = textoCurto(s.titulo, 200)
+      if (titulo) sugestao.titulo = titulo
+    }
+    // 'concluir', 'algum_dia' (a ação, não o tipo) e 'excluir' não têm
+    // campo extra: a tarefa em si já diz tudo que a ação precisa saber.
 
     vistos.add(item.id)
     sugestoes.push(sugestao)
@@ -313,6 +348,63 @@ export function normalizeRevisao(parsed, itens) {
   }
 
   return { text: textoCurto(parsed?.text, 400), sugestoes }
+}
+
+// Os mesmos cuidados de sanitizarItensDaRevisao, para as duas listas novas
+// do plano da semana: candidatas a próxima ação e vãos livres da agenda.
+export function sanitizarCandidatas(candidatas) {
+  return (Array.isArray(candidatas) ? candidatas : [])
+    .filter((c) => c && typeof c.id === 'string')
+    .slice(0, MAX_CANDIDATAS)
+    .map((c) => ({
+      id: c.id.slice(0, 200),
+      titulo: textoCurto(c.titulo, 200),
+      ...(typeof c.prioridade === 'string' ? { prioridade: textoCurto(c.prioridade, 20) } : {}),
+      ...(DATA_ISO.test(c.prazo || '') ? { prazo: c.prazo } : {}),
+      ...(Number.isFinite(c.duracao) ? { duracao: c.duracao } : {}),
+    }))
+}
+
+export function sanitizarVagas(vagas) {
+  return (Array.isArray(vagas) ? vagas : [])
+    .filter((v) => v && DATA_ISO.test(v.dia || '') && HORA_HHMM.test(v.inicio || '') && HORA_HHMM.test(v.fim || ''))
+    .filter((v) => hhmmParaMinutos(v.fim) > hhmmParaMinutos(v.inicio))
+    .slice(0, MAX_VAGAS)
+    .map((v) => ({ dia: v.dia, inicio: v.inicio, fim: v.fim }))
+}
+
+// O plano é diferente das sugestões: não é "uma ação por item conhecido", é
+// "encaixa esta candidata neste vão" — por isso a validação central aqui é
+// geométrica, não de vocabulário: o horário proposto precisa caber dentro de
+// algum vão de verdade daquele dia, com a duração da candidata (ou 30min sem
+// estimativa) inteira dentro dele.
+export function normalizePlano(planoBruto, candidatasBrutas, vagasBrutas) {
+  const candidatas = new Map(sanitizarCandidatas(candidatasBrutas).map((c) => [c.id, c]))
+  const vagasPorDia = new Map()
+  for (const v of sanitizarVagas(vagasBrutas)) {
+    if (!vagasPorDia.has(v.dia)) vagasPorDia.set(v.dia, [])
+    vagasPorDia.get(v.dia).push(v)
+  }
+
+  const usadas = new Set()
+  const plano = []
+  for (const p of Array.isArray(planoBruto) ? planoBruto : []) {
+    const candidata = candidatas.get(p?.tarefaId)
+    if (!candidata || usadas.has(candidata.id)) continue
+    if (!DATA_ISO.test(p?.dia || '') || !HORA_HHMM.test(p?.hora || '')) continue
+
+    const duracao = candidata.duracao || 30
+    const inicioMin = hhmmParaMinutos(p.hora)
+    const cabeEmAlgumVao = (vagasPorDia.get(p.dia) || []).some(
+      (v) => inicioMin >= hhmmParaMinutos(v.inicio) && inicioMin + duracao <= hhmmParaMinutos(v.fim)
+    )
+    if (!cabeEmAlgumVao) continue
+
+    usadas.add(candidata.id)
+    plano.push({ tarefaId: candidata.id, dia: p.dia, hora: p.hora, motivo: textoCurto(p.motivo, 200) })
+    if (plano.length >= MAX_PLANO) break
+  }
+  return plano
 }
 
 async function handleBriefing(request, env) {
@@ -332,11 +424,15 @@ async function handleBriefing(request, env) {
 
   try {
     const itens = sanitizarItensDaRevisao(body.itens)
+    const candidatas = sanitizarCandidatas(body.candidatas)
+    const vagas = sanitizarVagas(body.vagas)
     const parsed = await callGemini(
       env,
-      buildRevisaoPrompt({ today: body.today, weekday: body.weekday, numeros: body.numeros, itens })
+      buildRevisaoPrompt({ today: body.today, weekday: body.weekday, numeros: body.numeros, itens, candidatas, vagas })
     )
-    return json(normalizeRevisao(parsed, itens))
+    const { text, sugestoes } = normalizeRevisao(parsed, itens)
+    const plano = normalizePlano(parsed?.plano, candidatas, vagas)
+    return json({ text, sugestoes, plano })
   } catch (err) {
     return erroDeIA(err)
   }

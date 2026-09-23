@@ -6,11 +6,21 @@ function dataCurta(iso) {
   return `${dia}/${mes}`
 }
 
+// "09:00" + 45min = "09:45", só para mostrar o fim do bloco na tela — o app
+// já usa fromInputs/handleAgendarBloco pra virar evento de verdade.
+function somarMinutos(hora, minutos) {
+  const [h, m] = hora.split(':').map(Number)
+  const total = h * 60 + m + minutos
+  return `${String(Math.floor(total / 60) % 24).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
+}
+
 // O que o item é, numa linha — para a sugestão ser lida sem abrir nada.
 function descreverItem(item) {
   if (item.tipo === 'atrasada') return `"${item.titulo}" · atrasada há ${item.dias} dia(s)`
   if (item.tipo === 'aguardando') return `"${item.titulo}" · esperando ${item.quem} há ${item.dias} dias`
-  return `${item.titulo} · projeto sem próxima ação`
+  if (item.tipo === 'projeto') return `${item.titulo} · projeto sem próxima ação`
+  if (item.tipo === 'parada') return `"${item.titulo}" · parada há ${item.dias} dia(s), sem prazo`
+  return `"${item.titulo}" · em Algum dia há ${item.dias} dia(s)`
 }
 
 // O rótulo diz exatamente o que o clique faz — é um atalho que grava na conta
@@ -19,6 +29,9 @@ function rotuloDaAcao(s) {
   if (s.acao === 'remarcar') return `Remarcar para ${dataCurta(s.data)}`
   if (s.acao === 'algum_dia') return 'Mover para Algum dia'
   if (s.acao === 'concluir') return 'Marcar como feita'
+  if (s.acao === 'reescrever') return `Reescrever: "${s.titulo}"`
+  if (s.acao === 'reativar') return s.titulo ? `Reativar como "${s.titulo}"` : 'Reativar em Próximas ações'
+  if (s.acao === 'excluir') return 'Excluir de vez'
   return `Criar: ${s.titulo}${s.contexto ? ` @${s.contexto}` : ''}`
 }
 
@@ -26,12 +39,26 @@ function rotuloDaAcao(s) {
 // sozinho e, por cima, uma ação sugerida para cada coisa que pede decisão —
 // um clique resolve, "Ignorar" deixa como está. Não é um checklist
 // obrigatório, só a tela pronta para destravar a semana.
-export default function Revisao({ numeros, comentario, sugestoes = [], carregando, onGerar, onAplicar }) {
+export default function Revisao({
+  numeros,
+  comentario,
+  sugestoes = [],
+  plano = [],
+  carregando,
+  onGerar,
+  onAplicar,
+  onAgendarPlano,
+}) {
   // Estado de cada sugestão pelo id do item: 'aplicando', 'feito',
   // 'ignorado', ou a mensagem de erro. Recalcular traz uma lista nova, e o
   // estado da anterior não vale mais para ela.
   const [estado, setEstado] = useState({})
   useEffect(() => setEstado({}), [sugestoes])
+
+  // O plano usa o "tarefaId" como chave — não tem o mesmo id de sugestões,
+  // mas o mesmo ciclo de vida (aplicando/feito/ignorado/erro).
+  const [estadoPlano, setEstadoPlano] = useState({})
+  useEffect(() => setEstadoPlano({}), [plano])
 
   async function aplicar(sugestao) {
     setEstado((e) => ({ ...e, [sugestao.itemId]: 'aplicando' }))
@@ -43,7 +70,22 @@ export default function Revisao({ numeros, comentario, sugestoes = [], carregand
     }
   }
 
+  async function agendar(p) {
+    setEstadoPlano((e) => ({ ...e, [p.tarefaId]: 'aplicando' }))
+    try {
+      await onAgendarPlano(p)
+      setEstadoPlano((e) => ({ ...e, [p.tarefaId]: 'feito' }))
+    } catch (err) {
+      setEstadoPlano((e) => ({ ...e, [p.tarefaId]: `Não deu certo: ${err.message}` }))
+    }
+  }
+
   const visiveis = sugestoes.filter((s) => estado[s.itemId] !== 'ignorado')
+  const planoVisivel = plano.filter((p) => estadoPlano[p.tarefaId] !== 'ignorado')
+  const carga = numeros?.carga
+  // "Sobrecarregada" aqui é só o oposto de semanaEstaFolgada (revisao.js):
+  // as tarefas com prazo já tomam mais de 60% do vão livre da semana.
+  const sobrecarregada = carga && carga.minutosLivres > 0 && carga.minutosTarefas > carga.minutosLivres * 0.6
 
   return (
     <div className="card">
@@ -63,6 +105,43 @@ export default function Revisao({ numeros, comentario, sugestoes = [], carregand
       {numeros && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {comentario && <p style={{ fontSize: 'var(--body-md)', margin: 0 }}>{comentario}</p>}
+
+          {planoVisivel.length > 0 && (
+            <div>
+              <div className="revisao-sugestao-item" style={{ marginBottom: 6 }}>Plano da semana</div>
+              <div className="revisao-sugestoes">
+                {planoVisivel.map((p) => {
+                  const st = estadoPlano[p.tarefaId]
+                  const minutos = p.candidata.duracao || 30
+                  return (
+                    <div key={p.tarefaId} className="revisao-sugestao">
+                      <div className="revisao-sugestao-item">
+                        "{p.candidata.titulo}" · {dataCurta(p.dia)}, {p.hora}–{somarMinutos(p.hora, minutos)}
+                      </div>
+                      {p.motivo && <div className="muted revisao-sugestao-motivo">{p.motivo}</div>}
+                      {st === 'feito' ? (
+                        <div className="muted revisao-sugestao-motivo">✓ Agendado.</div>
+                      ) : (
+                        <div className="revisao-sugestao-acoes">
+                          <button type="button" className="primary" disabled={st === 'aplicando'} onClick={() => agendar(p)}>
+                            {st === 'aplicando' ? 'Agendando...' : 'Agendar'}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={st === 'aplicando'}
+                            onClick={() => setEstadoPlano((e) => ({ ...e, [p.tarefaId]: 'ignorado' }))}
+                          >
+                            Ignorar
+                          </button>
+                        </div>
+                      )}
+                      {st && !['aplicando', 'feito'].includes(st) && <div className="form-error">{st}</div>}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
 
           {visiveis.length > 0 && (
             <div className="revisao-sugestoes">
@@ -104,6 +183,13 @@ export default function Revisao({ numeros, comentario, sugestoes = [], carregand
             className="revisao-lista"
             style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 6, fontSize: 'var(--body-sm)' }}
           >
+            {carga && (
+              <li style={sobrecarregada ? { fontWeight: 600, color: 'var(--urgent)' } : undefined}>
+                Próximos 7 dias: {formatDuration(carga.minutosTarefas)} de tarefas com prazo,{' '}
+                {formatDuration(carga.minutosLivres)} livres na agenda
+                {sobrecarregada ? ' — mais tarefa do que espaço.' : '.'}
+              </li>
+            )}
             <li>
               {numeros.entradaVazia
                 ? 'Entrada vazia — nada esperando ser esclarecido.'
