@@ -126,3 +126,29 @@ describe('decidirDestino', () => {
     expect(decidirDestino(null)).toBe('entrada')
   })
 })
+
+describe('parseQuickAdd — recorrência', () => {
+  it('"toda segunda 14h" marca recorrência semanal e mantém "segunda" fora do título', () => {
+    const r = parseQuickAdd('Reunião de equipe toda segunda 14h', ref)
+    expect(r.type).toBe('event')
+    expect(r.recorrencia).toBe('semanal')
+    expect(r.title).toBe('Reunião de equipe')
+  })
+
+  it('"todos os dias" marca diária e some do título por completo', () => {
+    const r = parseQuickAdd('Alongamento todos os dias 7h', ref)
+    expect(r.recorrencia).toBe('diaria')
+    expect(r.title).toBe('Alongamento')
+  })
+
+  it('"todo mês" marca mensal e some do título', () => {
+    const r = parseQuickAdd('Pagar aluguel todo mês dia 5 10h', ref)
+    expect(r.recorrencia).toBe('mensal')
+    expect(r.title).toBe('Pagar aluguel')
+  })
+
+  it('sem nenhuma frase de repetição, recorrencia fica null', () => {
+    const r = parseQuickAdd('Dentista amanhã 14h', ref)
+    expect(r.recorrencia).toBe(null)
+  })
+})

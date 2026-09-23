@@ -3,6 +3,9 @@ import { parseQuickAdd, decidirDestino } from '../lib/nlp.js'
 import { toTimeInput, toDateInput } from '../lib/dates.js'
 import { findDefaultCalendar } from '../lib/defaults.js'
 import { PRIORITY_LABEL } from '../lib/priority.js'
+import { construirRecorrencia, REPETICOES } from '../lib/recorrencia.js'
+
+const REPETICAO_LABEL = Object.fromEntries(REPETICOES.map((r) => [r.id, r.label.toLowerCase()]))
 
 // Capturar e organizar são dois gestos diferentes — mas quando o texto já diz
 // sozinho o que ele é (hora certa = compromisso; prazo, prioridade,
@@ -20,7 +23,8 @@ function formatarDataBR(date) {
 
 function descreverDestino(destino, preview) {
   if (destino === 'evento') {
-    return `Enter agenda: ${formatarDataBR(preview.start)} às ${toTimeInput(preview.start)}`
+    const repeticao = preview.recorrencia ? `, ${REPETICAO_LABEL[preview.recorrencia]}` : ''
+    return `Enter agenda: ${formatarDataBR(preview.start)} às ${toTimeInput(preview.start)}${repeticao}`
   }
   if (destino === 'tarefa') {
     const partes = []
@@ -78,14 +82,17 @@ export default function QuickAdd({
       if (destino === 'evento') {
         const calendario = findDefaultCalendar(calendars) || calendars[0]
         const calendarId = calendario?.id || 'primary'
+        const recurrence = preview.recorrencia ? construirRecorrencia(preview.recorrencia, preview.start) : undefined
         const criado = await onCreateEvent({
           title: preview.title,
           start: preview.start,
           end: preview.end,
           calendarId,
+          recurrence,
         })
+        const repeticao = preview.recorrencia ? `, ${REPETICAO_LABEL[preview.recorrencia]}` : ''
         setConfirmacao({
-          resumo: `✓ Compromisso "${preview.title}" em ${formatarDataBR(preview.start)} às ${toTimeInput(preview.start)}.`,
+          resumo: `✓ Compromisso "${preview.title}" em ${formatarDataBR(preview.start)} às ${toTimeInput(preview.start)}${repeticao}.`,
           desfazer: () => onDesfazerEvento({ id: criado.id, calendarId }),
           textoOriginal: limpo,
         })

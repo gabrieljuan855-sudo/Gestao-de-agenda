@@ -238,25 +238,53 @@ export async function searchEvents(query) {
   return collapseRecurring(ordenados)
 }
 
-export async function createEvent({ title, start, end, description, calendarId = 'primary', extendedProperties }) {
-  return request(`${CAL_BASE}/calendars/${encodeURIComponent(calendarId)}/events`, {
+export async function createEvent({
+  title,
+  start,
+  end,
+  description,
+  location,
+  recurrence,
+  calendarId = 'primary',
+  extendedProperties,
+  criarVideochamada,
+}) {
+  // conferenceDataVersion=1 é o que permite o Google criar o Meet: sem esse
+  // parâmetro na URL, a API ignora silenciosamente o campo conferenceData
+  // enviado no corpo, e o evento nasce sem link nenhum.
+  const query = criarVideochamada ? '?conferenceDataVersion=1' : ''
+  return request(`${CAL_BASE}/calendars/${encodeURIComponent(calendarId)}/events${query}`, {
     method: 'POST',
     body: JSON.stringify({
       summary: title,
       description,
+      location,
       start: { dateTime: start.toISOString() },
       end: { dateTime: end.toISOString() },
+      ...(recurrence ? { recurrence } : {}),
       ...(extendedProperties ? { extendedProperties } : {}),
+      ...(criarVideochamada
+        ? { conferenceData: { createRequest: { requestId: crypto.randomUUID(), conferenceSolutionKey: { type: 'hangoutsMeet' } } } }
+        : {}),
     }),
   })
 }
 
 // Recebe o evento inteiro, não só o id: ele carrega o calendarId de origem, e
 // eventos de agendas secundárias não estão em 'primary'.
-export async function updateEvent(event, { title, start, end, description, allDay = false }) {
+export async function updateEvent(
+  event,
+  { title, start, end, description, location, recurrence, allDay = false, criarVideochamada, removerVideochamada }
+) {
   const body = {}
   if (title !== undefined) body.summary = title
   if (description !== undefined) body.description = description
+  if (location !== undefined) body.location = location
+  // `[]` (não repete mais) e uma regra nova são os dois casos válidos de
+  // mexer na recorrência; `undefined` (campo nem tocado no editor) precisa
+  // continuar de fora do body, senão toda edição apagaria uma recorrência
+  // que a pessoa não pediu para mudar.
+  if (recurrence !== undefined) body.recurrence = recurrence
   if (start && end) {
     if (allDay) {
       // O end.date do Google é exclusivo: quem escolhe "até dia 20" grava 21.
@@ -267,9 +295,18 @@ export async function updateEvent(event, { title, start, end, description, allDa
       body.end = { dateTime: end.toISOString() }
     }
   }
+  if (criarVideochamada) {
+    body.conferenceData = { createRequest: { requestId: crypto.randomUUID(), conferenceSolutionKey: { type: 'hangoutsMeet' } } }
+  }
+  // Remover não é uma operação documentada à parte — na prática, mandar o
+  // campo vazio no patch (com o mesmo conferenceDataVersion) é o que some
+  // com o link. Verificado só na leitura da documentação, não numa conta
+  // real: se o Google devolver erro aqui, é o primeiro lugar a olhar.
+  if (removerVideochamada) body.conferenceData = null
 
+  const conferenceDataVersion = criarVideochamada || removerVideochamada ? '?conferenceDataVersion=1' : ''
   return request(
-    `${CAL_BASE}/calendars/${encodeURIComponent(event.calendarId || 'primary')}/events/${event.id}`,
+    `${CAL_BASE}/calendars/${encodeURIComponent(event.calendarId || 'primary')}/events/${event.id}${conferenceDataVersion}`,
     { method: 'PATCH', body: JSON.stringify(body) }
   )
 }
