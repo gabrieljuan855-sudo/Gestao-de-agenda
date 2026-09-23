@@ -24,9 +24,16 @@ const CHAVE = 'gestao-agenda:ia-pausada-ate'
 // Continua ligada porque o app inteiro funciona sem IA nenhuma: capturar,
 // esclarecer, arquivar e concluir são todos botões. A IA só entra como
 // atalho para quem travar num item — trocar para `false` acende de novo o
-// "Não sei o que fazer com isso", as sugestões da anotação, a busca por
-// pergunta e o briefing automático.
+// "Não sei o que fazer com isso", as sugestões da anotação e a busca por
+// pergunta.
 export const IA_DESLIGADA = true
+
+// Chave separada, de propósito: a Revisão semanal (useRevisao.js) é o único
+// lugar onde a pessoa pediu IA explicitamente mesmo com o resto desligado —
+// as sugestões de ação (remarcar, cobrar, próxima ação) são o motivo de a
+// tela existir. Amarrar isso em IA_DESLIGADA ligaria de volta a Entrada e as
+// Anotações junto, o que não foi pedido.
+export const REVISAO_IA_LIGADA = true
 
 // Cota estourada não volta em minutos: espera a próxima janela de cobrança.
 // Uma hora é o meio-termo entre não queimar cota à toa e não deixar o app sem
