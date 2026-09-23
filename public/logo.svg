@@ -3,15 +3,18 @@
      seu próprio @media — os PNG (favicon-16/32, apple-touch-icon) não têm
      essa chance, então ficam sempre no fundo claro. -->
   <style>
-    .fundo { fill: #ffffff; }
+    .fundo { fill: #fffcf7; }
+    .traco { stroke: #8c5927; }
     @media (prefers-color-scheme: dark) {
       .fundo { fill: #242321; }
+      .traco { stroke: #d4a06a; }
     }
   </style>
   <rect class="fundo" x="0" y="0" width="48" height="48" rx="11"/>
   <!-- Ícone "brain" da Lucide (lucide.dev, ISC), definido num viewBox de
-     24x24 — escalado e centralizado no tile de 48x48. -->
-  <g transform="translate(8,8) scale(1.333)" fill="none" stroke="#3a6ea5" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+     24x24 — escalado e centralizado no tile de 48x48. Cor de traço igual à
+     var primary/accent do tema Chocolate (src/index.css), clara e escura. -->
+  <g transform="translate(8,8) scale(1.333)" class="traco" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
     <path d="M12 18V5"/>
     <path d="M15 13a4.17 4.17 0 0 1-3-4 4.17 4.17 0 0 1-3 4"/>
     <path d="M17.598 6.5A3 3 0 1 0 12 5a3 3 0 1 0-5.598 1.5"/>
