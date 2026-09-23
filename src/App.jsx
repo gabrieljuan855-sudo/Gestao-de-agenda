@@ -271,6 +271,7 @@ export default function App() {
       start: preview.start,
       end: preview.end,
       calendarId: preview.calendarId || 'primary',
+      recurrence: preview.recurrence,
     })
     await reload()
     return criado

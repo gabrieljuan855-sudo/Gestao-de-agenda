@@ -1,5 +1,18 @@
 import * as chrono from 'chrono-node'
 import { etiqueta } from './gtd.js'
+import { detectarRecorrencia } from './recorrencia.js'
+
+// As mesmas frases de detectarRecorrencia (recorrencia.js), só que aqui é
+// para tirar o ruído do título, não para decidir se repete.
+//
+// "toda segunda" mantém o nome do dia no texto — é ele que o chrono usa para
+// achar a data certa do primeiro compromisso da série; só o "toda"/"todo" na
+// frente sobra depois que o chrono processa. Já "todos os dias",
+// "semanalmente", "mensalmente" e "todo mês"/"todo ano" não têm dia nenhum
+// para o chrono reconhecer, então o trecho inteiro é ruído.
+const DIAS_SEMANA_RE = 'segunda|ter[çc]a|quarta|quinta|sexta|s[áa]bado|domingo'
+const RECORRENCIA_PREFIXO_DIA = new RegExp(`\\btod[ao]\\s+(?=(${DIAS_SEMANA_RE})(-feira)?\\b)`, 'giu')
+const RECORRENCIA_RUIDO = /\b(diariamente|semanalmente|mensalmente|anualmente|todos?\s+os?\s+dias?|todo\s+m[êe]s|todo\s+ano)\b/giu
 
 // "hoje" saiu daqui: aparece em quase todo compromisso marcado para o mesmo
 // dia ("Reunião hoje às 15h com o fornecedor"), e isso inflava qualquer coisa
@@ -159,10 +172,17 @@ function recoverTime(text, day) {
 // uma estrutura pronta para virar evento (Calendar) ou tarefa (Tasks).
 export function parseQuickAdd(rawText, referenceDate = new Date()) {
   const { contexto, projeto, semTags } = extrairTags(rawText)
+  const recorrencia = detectarRecorrencia(semTags)
   const duration = detectDuration(semTags)
   // A duração sai do texto antes da data para "por 2 horas" não virar horário.
   const withoutDuration = duration ? semTags.replace(duration.text, ' ') : semTags
-  const text = normalizeDayOfMonth(normalizeTimes(withoutDuration), referenceDate)
+  // O "toda"/"todo" antes do dia da semana sai agora, para o chrono continuar
+  // vendo "segunda às 14h" normalmente — sem essa etapa, "toda" ficaria como
+  // ruído solto no título depois que o chrono consome só o dia e a hora.
+  const text = normalizeDayOfMonth(normalizeTimes(withoutDuration), referenceDate).replace(
+    RECORRENCIA_PREFIXO_DIA,
+    ''
+  )
 
   const results = chrono.pt.parse(text, referenceDate, { forwardDate: true })
   const priority = detectPriority(rawText)
@@ -203,8 +223,11 @@ export function parseQuickAdd(rawText, referenceDate = new Date()) {
     const end = result.end?.date() || new Date(start.getTime() + minutes * 60000)
     return {
       type: 'event',
-      title: title || 'Compromisso',
+      // "diariamente"/"todo mês"/"todo ano"/"semanalmente" não carregam dia
+      // nenhum que o chrono já tenha consumido — só saem daqui, no fim.
+      title: (recorrencia ? title.replace(RECORRENCIA_RUIDO, ' ').replace(/\s{2,}/g, ' ').trim() : title) || 'Compromisso',
       priority,
+      recorrencia,
       start,
       end,
       durationMinutes: Math.round((end - start) / 60000),
