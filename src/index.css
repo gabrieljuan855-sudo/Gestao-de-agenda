@@ -1952,3 +1952,83 @@ button.danger:hover { background: var(--urgent-bg); }
   /* Sem texto nos chips, a célula não precisa de tanta altura. */
   .month-grid { grid-template-rows: none !important; grid-auto-rows: minmax(56px, auto); }
 }
+
+/* ---------- Projetos ----------
+   A lista é de linhas clicáveis inteiras (cada uma abre a página do projeto),
+   não de chips: chip é filtro/seleção no MD3, e aqui a ação é navegar. */
+.projetos { display: flex; flex-direction: column; gap: 14px; }
+.projetos section { display: flex; flex-direction: column; gap: 6px; }
+
+.projetos-novo { display: flex; gap: 8px; }
+.projetos-novo input { flex: 1; min-width: 0; }
+
+.projetos-secao {
+  margin: 0;
+  font-size: var(--label-md);
+  font-weight: 600;
+  color: var(--on-surface-variant);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.projetos-concluidos summary { cursor: pointer; margin-bottom: 6px; }
+
+.projetos-lista { display: flex; flex-direction: column; gap: 6px; }
+
+.projeto-linha,
+.projeto-evento {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--shape-sm);
+  background: var(--surface);
+  color: var(--on-surface);
+  overflow-wrap: anywhere;
+}
+.projeto-linha-topo { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.projeto-linha-nome { font-weight: 600; font-size: var(--body-md); }
+.projeto-linha-acao { font-size: var(--body-sm); color: var(--on-surface); }
+.projeto-pill-parado { background: var(--important-container); color: var(--important); }
+.projeto-pill-atraso { background: var(--urgent-container); color: var(--urgent); }
+
+.projeto-topo { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.projeto-titulo { margin: 0; font-family: var(--font-heading); overflow-wrap: anywhere; }
+
+.projeto-destaque {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: var(--shape-sm);
+  background: var(--primary-container);
+  color: var(--on-primary-container);
+  overflow-wrap: anywhere;
+}
+
+.projeto-captura { display: flex; flex-direction: column; gap: 4px; }
+
+.projeto-secao-cabeca { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+
+.projeto-tarefa { cursor: pointer; }
+.projeto-tarefa.is-atrasada { border-color: var(--urgent); }
+.projeto-tarefa-titulo { font-weight: 500; font-size: var(--body-md); overflow-wrap: anywhere; }
+.projeto-tarefa-titulo.is-concluida { text-decoration: line-through; color: var(--on-surface-variant); }
+
+.projeto-evento-quando { font-size: var(--label-sm); color: var(--on-surface-variant); }
+.projeto-evento-titulo { font-size: var(--body-md); font-weight: 500; }
+
+.projeto-ficha { display: flex; flex-direction: column; gap: 10px; }
+
+.note-projeto {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: var(--label-md);
+  color: var(--on-surface-variant);
+}
+.note-projeto select { flex: 1; min-width: 0; }

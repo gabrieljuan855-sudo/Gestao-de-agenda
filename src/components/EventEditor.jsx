@@ -3,6 +3,7 @@ import Modal from './Modal.jsx'
 import ConfirmDialog from './ConfirmDialog.jsx'
 import { toDateInput, toTimeInput, fromInputs } from '../lib/dates.js'
 import { isAllDay, eventStart, eventEnd } from '../lib/events.js'
+import { PROJETO_PROP } from '../lib/projetos.js'
 import { REPETICOES, REPETICAO_PERSONALIZADA, construirRecorrencia, reconhecerRecorrencia } from '../lib/recorrencia.js'
 
 // O link de vídeo pode estar em dois lugares do evento, dependendo de como
@@ -14,7 +15,7 @@ function linkDaVideochamada(event) {
   return event.hangoutLink || event.conferenceData?.entryPoints?.find((e) => e.entryPointType === 'video')?.uri || null
 }
 
-export default function EventEditor({ event, calendars = [], onSave, onDelete, onClose }) {
+export default function EventEditor({ event, calendars = [], projetos = [], onSave, onDelete, onClose }) {
   const allDay = isAllDay(event)
   const start = eventStart(event)
   const end = eventEnd(event)
@@ -33,6 +34,8 @@ export default function EventEditor({ event, calendars = [], onSave, onDelete, o
   const [description, setDescription] = useState(event.description || '')
   const [location, setLocation] = useState(event.location || '')
   const [repeticao, setRepeticao] = useState(repeticaoInicial)
+  const projetoInicial = event.extendedProperties?.private?.[PROJETO_PROP] || ''
+  const [projeto, setProjeto] = useState(projetoInicial)
   // Vídeo é uma intenção, não um valor editável direto: o link em si só
   // existe depois que o Google responde. Aqui só se guarda "quero criar" ou
   // "quero remover", e o botão junto tem um "Desfazer" antes de salvar.
@@ -70,6 +73,8 @@ export default function EventEditor({ event, calendars = [], onSave, onDelete, o
         ...(repeticao === repeticaoInicial
           ? {}
           : { recurrence: repeticao === 'nunca' ? [] : construirRecorrencia(repeticao, nextStart) }),
+        // Mesmo cuidado da repetição: só entra no patch se a pessoa mexeu.
+        ...(projeto === projetoInicial ? {} : { projeto }),
         ...(videoAcao === 'adicionar' ? { criarVideochamada: true } : {}),
         ...(videoAcao === 'remover' ? { removerVideochamada: true } : {}),
       })
@@ -184,6 +189,21 @@ export default function EventEditor({ event, calendars = [], onSave, onDelete, o
             </div>
           )}
         </div>
+
+        {(projetos.length > 0 || projetoInicial) && (
+          <label className="field">
+            <span>Projeto</span>
+            <select value={projeto} onChange={(e) => setProjeto(e.target.value)}>
+              <option value="">Nenhum</option>
+              {projetoInicial && !projetos.some((p) => p.id === projetoInicial) && (
+                <option value={projetoInicial}>{projetoInicial}</option>
+              )}
+              {projetos.map((p) => (
+                <option key={p.id} value={p.id}>{p.nome}</option>
+              ))}
+            </select>
+          </label>
+        )}
 
         {calendars.length > 0 && (
           <label className="field">
