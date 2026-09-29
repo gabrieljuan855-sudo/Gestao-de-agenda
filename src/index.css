@@ -2159,6 +2159,33 @@ button.danger:hover { background: var(--urgent-bg); }
     background: var(--surface-container);
   }
 
+  /* Semana e Mês vão até o fim da tela: a grade baixa de antes deixava meia
+     tela vazia embaixo e cortava cada dia em poucos compromissos. A altura
+     real da grade decide quantos cabem por dia (ver capacidade.js). */
+  .workspace--week .workspace-main > .card,
+  .workspace--month .workspace-main > .card {
+    height: calc(100vh - 100px);
+    min-height: 480px;
+    display: flex;
+    flex-direction: column;
+  }
+  .workspace--week .week-grid,
+  .workspace--month .month-grid { flex: 1; min-height: 0; }
+  .week-day { overflow: hidden; }
+  .month-day { overflow: hidden; }
+
+  /* Com a coluna alta, o título do compromisso pode ocupar duas linhas em vez
+     de ser cortado no meio — é o detalhe que se quer ler na Semana. */
+  .week-event { align-items: flex-start; }
+  .week-event .week-dot { margin-top: 5px; }
+  .week-event-text {
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    line-height: 1.35;
+  }
+
   /* ---------- barra de navegação (navigation rail do MD3) ---------- */
   .rail-wrap { display: contents; }
 

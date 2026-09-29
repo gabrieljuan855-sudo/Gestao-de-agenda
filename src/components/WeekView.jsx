@@ -2,6 +2,9 @@ import { startOfWeek, addDays, isToday, formatTime, formatDuration } from '../li
 import { eventsOfDay, isAllDay, eventStart, eventEnd, busyMinutesOn, tasksDueOn, findConflicts } from '../lib/events.js'
 import { isWorkday, workloadRatio, workMinutes } from '../lib/schedule.js'
 import { corDaAgenda } from '../lib/corDaAgenda.js'
+import { useRef } from 'react'
+import useAltura from '../lib/useAltura.js'
+import { quantosCabem } from '../lib/capacidade.js'
 
 // Com sábado e domingo fora, sobra espaço pra mostrar mais coisa por dia sem
 // a coluna virar uma lista cortada.
@@ -33,6 +36,10 @@ export default function WeekView({
   isInfo = () => false,
   schedule,
 }) {
+  // A grade estica até o fim da tela no computador (ver CSS): a altura dela
+  // decide quantos compromissos cabem por dia, em vez do limite fixo.
+  const gradeRef = useRef(null)
+  const alturaDaGrade = useAltura(gradeRef)
   const start = startOfWeek(reference)
   const allDays = Array.from({ length: 7 }, (_, i) => addDays(start, i))
   // O expediente é de segunda a sexta, e sábado/domingo quase sempre vêm
@@ -67,12 +74,19 @@ export default function WeekView({
         {weekTasks > 0 && ` · ${weekTasks} ${weekTasks === 1 ? 'tarefa vence' : 'tarefas vencem'}`}
       </div>
 
-      <div className="week-grid">
+      <div className="week-grid" ref={gradeRef}>
         {days.map((day) => {
           const dayEvents = eventsOfDay(events, day)
           const level = loadLevel(busyMinutesOn(events, day, occupies), day, schedule)
           const dueToday = tasksDueOn(tasks, day)
-          const shown = dayEvents.slice(0, MAX_EVENTS)
+          // O que sobra da coluna depois do cabeçalho do dia, das tarefas que
+          // vencem nele e da linha do "+N" é para compromissos.
+          const limite = quantosCabem(alturaDaGrade, {
+            alturaItem: 22,
+            reservado: 44 + dueToday.length * 22,
+            minimo: MAX_EVENTS,
+          })
+          const shown = dayEvents.slice(0, limite)
           const hasConflict = findConflicts(dayEvents, occupies).length > 0
 
           return (
@@ -128,8 +142,8 @@ export default function WeekView({
                     </div>
                   )
                 })}
-                {dayEvents.length > MAX_EVENTS && (
-                  <span className="muted" style={{ fontSize: 'var(--label-xs)' }}>+{dayEvents.length - MAX_EVENTS} mais</span>
+                {dayEvents.length > limite && (
+                  <span className="muted" style={{ fontSize: 'var(--label-xs)' }}>+{dayEvents.length - limite} mais</span>
                 )}
                 {dueToday.map((task) => (
                   <div
