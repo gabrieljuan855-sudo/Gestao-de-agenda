@@ -2403,3 +2403,49 @@ button.danger:hover { background: var(--urgent-bg); }
 .projeto-arquivo-nome { font-size: var(--body-md); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .projeto-arquivo-novo { display: flex; flex-wrap: wrap; gap: 6px; }
 .projeto-arquivo-novo input { flex: 1 1 140px; min-width: 0; }
+
+/* ---------- filtro por agenda e vista Lista ---------- */
+.filtro-agendas { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.filtro-agendas .pill-filtro { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; min-height: 0; }
+
+.lista-agenda { display: flex; flex-direction: column; gap: 4px; }
+.lista-dia { display: flex; flex-direction: column; gap: 2px; margin-bottom: 10px; }
+.lista-dia-titulo {
+  margin: 6px 0 4px;
+  font-family: var(--font-body);
+  font-size: var(--label-md);
+  font-weight: 600;
+  color: var(--on-surface-variant);
+}
+.lista-dia-titulo::first-letter { text-transform: uppercase; }
+.lista-dia-titulo.is-hoje { color: var(--primary); }
+
+/* Uma linha por compromisso, no formato "agenda" do Google: quando, a cor da
+   agenda, o título — a linha inteira abre o compromisso. */
+.lista-item {
+  display: grid;
+  grid-template-columns: 104px 8px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: var(--shape-sm);
+  background: transparent;
+  color: var(--on-surface);
+  text-align: left;
+}
+.lista-item:hover { background: color-mix(in srgb, var(--on-surface) var(--state-hover), transparent); }
+.lista-item::after { display: none; }
+.lista-item.is-declined { opacity: 0.55; text-decoration: line-through; }
+.lista-item-quando { font-size: var(--body-sm); color: var(--on-surface-variant); font-variant-numeric: tabular-nums; }
+.lista-item-cor { width: 8px; height: 8px; border-radius: var(--shape-full); }
+.lista-item-texto { display: flex; flex-direction: column; min-width: 0; }
+.lista-item-titulo { font-size: var(--body-md); font-weight: 500; overflow-wrap: anywhere; }
+.lista-item-detalhe { font-size: var(--label-sm); color: var(--on-surface-variant); }
+
+@media (max-width: 700px) {
+  .lista-item { grid-template-columns: 84px 8px minmax(0, 1fr); padding: 8px 4px; }
+  .filtro-agendas { flex-wrap: nowrap; overflow-x: auto; }
+  .filtro-agendas .pill-filtro { flex-shrink: 0; }
+}

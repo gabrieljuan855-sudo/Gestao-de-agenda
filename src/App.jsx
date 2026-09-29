@@ -60,6 +60,8 @@ import PeriodBar from './components/PeriodBar.jsx'
 import DayView from './components/DayView.jsx'
 import WeekView from './components/WeekView.jsx'
 import MonthView from './components/MonthView.jsx'
+import ListaView from './components/ListaView.jsx'
+import { filtrarPorAgenda } from './lib/listaAgenda.js'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
 import EventEditor from './components/EventEditor.jsx'
 import TaskEditor from './components/TaskEditor.jsx'
@@ -130,6 +132,13 @@ export default function App() {
   const [editingEvent, setEditingEvent] = useState(null)
   const [editingTask, setEditingTask] = useState(null)
   const [calendars, setCalendars] = useState(() => lerCacheDeAgenda().calendars)
+  // Todas as agendas que aparecem na tela (inclusive as só de leitura) — é
+  // o que o filtro por agenda oferece. `calendars` é só onde dá para gravar.
+  const [agendasVisiveis, setAgendasVisiveis] = useState([])
+  // Qual agenda a tela está mostrando (null = todas). Não fica salvo de uma
+  // sessão para a outra de propósito: um filtro esquecido faria o dia
+  // parecer vazio sem motivo à vista.
+  const [agendaFiltro, setAgendaFiltro] = useState(null)
   const [taskLists, setTaskLists] = useState([])
   // Onde a captura cai. Vazio só até a primeira carga terminar.
   const [entradaId, setEntradaId] = useState('')
@@ -165,6 +174,7 @@ export default function App() {
       .then(async ([cals, lists]) => {
         const writable = cals.filter((c) => c.accessRole === 'owner' || c.accessRole === 'writer')
         setCalendars(writable)
+        setAgendasVisiveis(cals)
         gravarCacheDeAgenda({ calendars: writable })
         setCalendarPrefs(loadCalendarPrefs(cals))
         try {
@@ -438,6 +448,7 @@ export default function App() {
     'vista-dia': () => setView('day'),
     'vista-semana': () => setView('week'),
     'vista-mes': () => setView('month'),
+    'vista-lista': () => setView('list'),
     hoje: () => setReference(new Date()),
     anterior: () => setReference((r) => shiftReference(view, r, -1)),
     proximo: () => setReference((r) => shiftReference(view, r, 1)),
@@ -961,6 +972,13 @@ export default function App() {
   // As quatro faces do mesmo material, no painel que fica sempre aberto ao
   // lado da agenda. A ordem é a do método: o que chegou, o que fazer, o que
   // espera alguém, e o olhar de fim de semana por cima de tudo.
+  // O filtro por agenda vale para todas as vistas. Com uma agenda escolhida,
+  // as tarefas saem de cena: elas não pertencem a agenda nenhuma, e a
+  // pergunta ali é "o que está marcado nesta agenda".
+  const agendaSelecionada = agendasVisiveis.find((c) => c.id === agendaFiltro) || null
+  const eventosVisiveis = filtrarPorAgenda(events, agendaSelecionada?.id)
+  const semTarefasSeFiltrado = (lista) => (agendaSelecionada ? [] : lista)
+
   const abasDoTrabalho = [
     {
       id: 'entrada',
@@ -1094,12 +1112,41 @@ export default function App() {
         <div className="workspace-main">
           {/* `key={view}` reseta o limite de erro ao trocar de aba: um erro na
               Semana não deve continuar bloqueando depois de voltar para o Dia. */}
+          {/* Chips de filtro do MD3: escolher uma agenda entre várias. Só
+              aparece quando há mais de uma agenda para escolher. */}
+          {agendasVisiveis.length > 1 && (
+            <div className="filtro-agendas" role="radiogroup" aria-label="Mostrar a agenda">
+              <button
+                type="button"
+                role="radio"
+                aria-checked={!agendaSelecionada}
+                className={`pill pill-filtro${!agendaSelecionada ? ' is-escolhido' : ''}`}
+                onClick={() => setAgendaFiltro(null)}
+              >
+                Todas
+              </button>
+              {agendasVisiveis.map((cal) => (
+                <button
+                  key={cal.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={agendaSelecionada?.id === cal.id}
+                  className={`pill pill-filtro${agendaSelecionada?.id === cal.id ? ' is-escolhido' : ''}`}
+                  onClick={() => setAgendaFiltro(agendaSelecionada?.id === cal.id ? null : cal.id)}
+                >
+                  <span className="quickadd-agenda-cor" style={{ background: cal.backgroundColor || 'var(--accent)' }} />
+                  {cal.summaryOverride || cal.summary}
+                </button>
+              ))}
+            </div>
+          )}
+
           <ErrorBoundary key={view}>
           {view === 'day' && (
             <DayView
               date={reference}
-              events={events}
-              tasks={tarefasEsclarecidas}
+              events={eventosVisiveis}
+              tasks={semTarefasSeFiltrado(tarefasEsclarecidas)}
               onSelectEvent={setEditingEvent}
               onSelectTask={setEditingTask}
               occupies={occupies}
@@ -1114,8 +1161,8 @@ export default function App() {
           {view === 'week' && (
             <WeekView
               reference={reference}
-              events={events}
-              tasks={tasks}
+              events={eventosVisiveis}
+              tasks={semTarefasSeFiltrado(tasks)}
               onSelectDay={openDay}
               onSelectEvent={setEditingEvent}
               onSelectTask={setEditingTask}
@@ -1128,12 +1175,21 @@ export default function App() {
           {view === 'month' && (
             <MonthView
               reference={reference}
-              events={events}
-              tasks={tasks}
+              events={eventosVisiveis}
+              tasks={semTarefasSeFiltrado(tasks)}
               onSelectDay={openDay}
               onSelectEvent={setEditingEvent}
               onSelectTask={setEditingTask}
               occupies={occupies}
+              declined={declined}
+            />
+          )}
+          {view === 'list' && (
+            <ListaView
+              reference={reference}
+              events={eventosVisiveis}
+              agenda={agendaSelecionada}
+              onSelectEvent={setEditingEvent}
               declined={declined}
             />
           )}
