@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
-import { toDateInput, fromInputs } from '../lib/dates.js'
+import { toDateInput, toTimeInput, fromInputs } from '../lib/dates.js'
 import { esclarecerItem } from '../lib/aiEsclarecer.js'
 import { IA_DESLIGADA } from '../lib/aiCooldown.js'
 import { PRIORITIES, DEFAULT_PRIORITY } from '../lib/priority.js'
+import { parseQuickAdd } from '../lib/nlp.js'
 
 // O passo que faltava entre capturar e fazer.
 //
@@ -37,6 +38,8 @@ export default function Entrada({
   const [quem, setQuem] = useState('')
   const [data, setData] = useState('')
   const [hora, setHora] = useState('')
+  const [diaInteiro, setDiaInteiro] = useState(false)
+  const [dataFim, setDataFim] = useState('')
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState(null)
   const [esclarecendo, setEsclarecendo] = useState(false)
@@ -54,8 +57,16 @@ export default function Entrada({
     setDuracao('')
     setPriority(DEFAULT_PRIORITY)
     setQuem('')
-    setData(item?.due ? toDateInput(new Date(item.due)) : '')
-    setHora('')
+    // O texto do item já diz, muitas vezes, quando é: "22/10 dia inteiro",
+    // "congresso 22 a 24/10", "reunião sexta 14h". O Agendar nasce preenchido
+    // com o mesmo entendimento do Criar, em vez de pedir de novo o que já
+    // está escrito.
+    const lido = item?.title ? parseQuickAdd(item.title) : null
+    const evento = lido?.type === 'event' ? lido : null
+    setData(evento ? toDateInput(evento.start) : item?.due ? toDateInput(new Date(item.due)) : '')
+    setHora(evento && !evento.allDay ? toTimeInput(evento.start) : '')
+    setDiaInteiro(Boolean(evento?.allDay))
+    setDataFim(evento?.allDay ? toDateInput(evento.end) : '')
     setErro(null)
     setSugestao(null)
   }, [item?.id])
@@ -275,23 +286,41 @@ export default function Entrada({
       </div>
 
       <div className="entrada-bloco">
-        <div className="entrada-bloco-titulo">Agendar — tem hora marcada</div>
+        <div className="entrada-bloco-titulo">Agendar — tem dia marcado</div>
+        <label className="entrada-dia-inteiro">
+          <input type="checkbox" checked={diaInteiro} onChange={(e) => setDiaInteiro(e.target.checked)} />
+          Dia inteiro
+        </label>
         <div className="field-row">
           <label className="field">
-            <span>Dia</span>
+            <span>{diaInteiro ? 'Primeiro dia' : 'Dia'}</span>
             <input type="date" value={data} onChange={(e) => setData(e.target.value)} title="Data do compromisso." />
           </label>
-          <label className="field">
-            <span>Hora</span>
-            <input type="time" value={hora} onChange={(e) => setHora(e.target.value)} title="Hora do compromisso." />
-          </label>
+          {diaInteiro ? (
+            <label className="field">
+              <span>Último dia</span>
+              <input type="date" value={dataFim || data} min={data} onChange={(e) => setDataFim(e.target.value)} title="Último dia (inclusive)." />
+            </label>
+          ) : (
+            <label className="field">
+              <span>Hora</span>
+              <input type="time" value={hora} onChange={(e) => setHora(e.target.value)} title="Hora do compromisso." />
+            </label>
+          )}
         </div>
         <button
           type="button"
-          disabled={!podeArquivar || !data || !hora}
+          disabled={!podeArquivar || !data || (!diaInteiro && !hora) || (diaInteiro && dataFim && dataFim < data)}
           style={{ marginTop: 8 }}
           onClick={() =>
-            executar(() => onAgendar(item, { titulo: tituloLimpo, start: fromInputs(data, hora) }))
+            executar(() =>
+              onAgendar(
+                item,
+                diaInteiro
+                  ? { titulo: tituloLimpo, start: fromInputs(data), end: fromInputs(dataFim || data), allDay: true }
+                  : { titulo: tituloLimpo, start: fromInputs(data, hora) }
+              )
+            )
           }
           title="Vira um evento no Google Calendar, no dia e hora escolhidos — some da Entrada."
         >

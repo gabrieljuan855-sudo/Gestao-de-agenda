@@ -3,7 +3,7 @@
 // sempre precisa da API do Google. "Rede primeiro, cache como reserva": toda
 // resposta boa atualiza o cache, e só quando a rede falha é que o que já foi
 // visto antes entra em cena, em vez de uma tela branca.
-const CACHE_NAME = 'gestao-agenda-v1'
+const CACHE_NAME = 'gestao-agenda-v2'
 
 // Só o essencial para a página conseguir montar sozinha: os arquivos com hash
 // do build (JS/CSS) entram no cache sozinhos, na primeira vez que passam por
@@ -53,8 +53,14 @@ self.addEventListener('fetch', (event) => {
   // interpretação por IA sempre precisam de uma resposta fresca do servidor.
   if (url.pathname.startsWith('/api/')) return
 
+  // A página em si revalida sempre com o servidor: servida do cache HTTP do
+  // navegador, uma versão antiga do app continuava aparecendo depois de
+  // publicada a nova. Os arquivos com hash (JS/CSS) podem vir do cache à
+  // vontade — o nome já muda quando o conteúdo muda.
+  const doServidor = request.mode === 'navigate' ? fetch(request, { cache: 'no-cache' }) : fetch(request)
+
   event.respondWith(
-    fetch(request)
+    doServidor
       .then((response) => {
         const copy = response.clone()
         caches.open(CACHE_NAME).then((cache) => cache.put(request, copy))
