@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseQuickAdd, decidirDestino } from './nlp.js'
+import { parseQuickAdd, decidirDestino, descreverQuando } from './nlp.js'
 
 const ref = new Date(2026, 8, 1) // 1º de setembro de 2026, fixo para o teste não depender do dia em que roda
 
@@ -150,5 +150,67 @@ describe('parseQuickAdd — recorrência', () => {
   it('sem nenhuma frase de repetição, recorrencia fica null', () => {
     const r = parseQuickAdd('Dentista amanhã 14h', ref)
     expect(r.recorrencia).toBe(null)
+  })
+})
+
+describe('parseQuickAdd — dia inteiro e vários dias', () => {
+  const hoje = new Date(2026, 8, 29) // terça, 29/09/2026
+  const dia = (d) => [d.getFullYear(), d.getMonth() + 1, d.getDate()]
+
+  it('"dia inteiro" com data vira compromisso de dia inteiro, não tarefa com prazo', () => {
+    const r = parseQuickAdd('Treinamento 22/10 dia inteiro', hoje)
+    expect(r).toMatchObject({ type: 'event', allDay: true, title: 'Treinamento' })
+    expect(dia(r.start)).toEqual([2026, 10, 22])
+    expect(dia(r.end)).toEqual([2026, 10, 22])
+    expect(decidirDestino(r)).toBe('evento')
+  })
+
+  it('"todo o dia" não vira repetição diária', () => {
+    const r = parseQuickAdd('Mutirão todo o dia 15/10', hoje)
+    expect(r.allDay).toBe(true)
+    expect(r.recorrencia).toBe(null)
+  })
+
+  it('"dia inteiro" sem data vale para hoje', () => {
+    const r = parseQuickAdd('Home office dia inteiro', hoje)
+    expect(dia(r.start)).toEqual([2026, 9, 29])
+  })
+
+  it.each([
+    ['Férias de 20/10 a 31/10', 'Férias', [2026, 10, 20], [2026, 10, 31]],
+    ['Congresso 22 a 24/10', 'Congresso', [2026, 10, 22], [2026, 10, 24]],
+    ['Feriado prolongado 20-31/10', 'Feriado prolongado', [2026, 10, 20], [2026, 10, 31]],
+    ['Viagem 22 a 24 de outubro', 'Viagem', [2026, 10, 22], [2026, 10, 24]],
+    ['Curso de 22/10 até 24/10', 'Curso', [2026, 10, 22], [2026, 10, 24]],
+    ['Recesso 30/12 a 02/01', 'Recesso', [2026, 12, 30], [2027, 1, 2]],
+  ])('período "%s" vira um compromisso de vários dias', (texto, titulo, inicio, fim) => {
+    const r = parseQuickAdd(texto, hoje)
+    expect(r).toMatchObject({ type: 'event', allDay: true, title: titulo })
+    expect(dia(r.start)).toEqual(inicio)
+    expect(dia(r.end)).toEqual(fim)
+  })
+
+  it('"de segunda a quarta" nunca termina antes de começar', () => {
+    const r = parseQuickAdd('Plantão de segunda a quarta', hoje)
+    expect(r.allDay).toBe(true)
+    expect(r.end >= r.start).toBe(true)
+    expect(r.start.getDay()).toBe(1)
+    expect(r.end.getDay()).toBe(3)
+    expect((r.end - r.start) / 86400000).toBe(2)
+  })
+
+  it('data com hora continua sendo compromisso com horário, e data sozinha continua prazo', () => {
+    expect(parseQuickAdd('Reunião 22/10 14h', hoje).allDay).toBeUndefined()
+    expect(parseQuickAdd('Pagar conta dia 20', hoje).type).toBe('task')
+    expect(parseQuickAdd('Entregar relatório até sexta', hoje).type).toBe('task')
+  })
+})
+
+describe('descreverQuando', () => {
+  it('diz o horário, o dia inteiro ou o período', () => {
+    const hoje = new Date(2026, 8, 29)
+    expect(descreverQuando(parseQuickAdd('Reunião 22/10 14h', hoje))).toBe('22/10 às 14:00')
+    expect(descreverQuando(parseQuickAdd('Treinamento 22/10 dia inteiro', hoje))).toBe('22/10, dia inteiro')
+    expect(descreverQuando(parseQuickAdd('Congresso 22 a 24/10', hoje))).toBe('de 22/10 a 24/10 (3 dias)')
   })
 })

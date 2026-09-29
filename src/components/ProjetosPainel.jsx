@@ -4,7 +4,7 @@ import { PRIORITY_LABEL } from '../lib/priority.js'
 import { isOverdueTask } from '../lib/tasks.js'
 import { dateOnlyFromISO, addDays } from '../lib/dates.js'
 import { eventStart, isAllDay } from '../lib/events.js'
-import { parseQuickAdd } from '../lib/nlp.js'
+import { parseQuickAdd, descreverQuando } from '../lib/nlp.js'
 import { construirRecorrencia } from '../lib/recorrencia.js'
 import { SITUACOES, PROJETO_PROP, novoProjeto, tarefasDoProjeto, eventoDoProjeto } from '../lib/projetos.js'
 
@@ -251,6 +251,7 @@ function CapturaNoProjeto({ projetoId, idProximas, onCreateEvent, onCreateTask }
           start: preview.start,
           end: preview.end,
           recurrence: preview.recorrencia ? construirRecorrencia(preview.recorrencia, preview.start) : undefined,
+          allDay: preview.allDay,
           extendedProperties: { private: { [PROJETO_PROP]: projetoId } },
         })
         setAviso(`Compromisso "${preview.title}" criado no projeto.`)
@@ -289,7 +290,7 @@ function CapturaNoProjeto({ projetoId, idProximas, onCreateEvent, onCreateTask }
       {preview && (
         <div className="muted t-label">
           {preview.type === 'event'
-            ? `Vira compromisso: ${preview.start.toLocaleString('pt-BR', { weekday: 'short', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}`
+            ? `Vira compromisso: ${descreverQuando(preview)}`
             : `Vira próxima ação${preview.due ? ` com prazo ${preview.due.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}` : ''}`}
         </div>
       )}
