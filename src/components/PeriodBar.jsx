@@ -4,6 +4,7 @@ const VIEWS = [
   { id: 'day', label: 'Dia' },
   { id: 'week', label: 'Semana' },
   { id: 'month', label: 'Mês' },
+  { id: 'list', label: 'Lista' },
 ]
 
 function label(view, reference) {
@@ -17,6 +18,9 @@ function label(view, reference) {
   }
   if (view === 'month') {
     return reference.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+  }
+  if (view === 'list') {
+    return `A partir de ${isToday(reference) ? 'hoje' : reference.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}`
   }
   return reference.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' })
 }

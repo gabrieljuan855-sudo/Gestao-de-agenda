@@ -75,12 +75,19 @@ export function rangeForView(view, reference) {
   if (view === 'month') {
     return { timeMin: addDays(startOfMonth(reference), -7), timeMax: addDays(endOfMonth(reference), 7) }
   }
+  // A Lista olha para a frente: do dia escolhido até três meses depois
+  // (DIAS_DA_LISTA em listaAgenda.js). O Google devolve também o que começou
+  // antes e ainda está acontecendo — as férias já em curso entram.
+  if (view === 'list') {
+    return { timeMin: startOfDay(reference), timeMax: addDays(startOfDay(reference), 90) }
+  }
   return { timeMin: addDays(startOfDay(reference), -1), timeMax: addDays(endOfDay(reference), 1) }
 }
 
 export function shiftReference(view, reference, direction) {
   if (view === 'week') return addDays(reference, 7 * direction)
   if (view === 'month') return addMonths(reference, direction)
+  if (view === 'list') return addDays(reference, 30 * direction)
   return addDays(reference, direction)
 }
 

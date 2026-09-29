@@ -57,3 +57,15 @@ describe('rangeForView', () => {
     expect(timeMax > new Date(2026, 8, 30, 23, 59, 59)).toBe(true)
   })
 })
+
+describe('Lista (vista)', () => {
+  it('busca do dia escolhido até 90 dias depois e anda de 30 em 30', async () => {
+    const { rangeForView, shiftReference } = await import('./dates.js')
+    const ref = new Date(2026, 8, 29, 15, 0)
+    const { timeMin, timeMax } = rangeForView('list', ref)
+    expect([timeMin.getDate(), timeMin.getHours()]).toEqual([29, 0])
+    expect(Math.round((timeMax - timeMin) / 86400000)).toBe(90)
+    expect(shiftReference('list', ref, 1).getDate()).toBe(29)
+    expect(shiftReference('list', ref, 1).getMonth()).toBe(9)
+  })
+})
