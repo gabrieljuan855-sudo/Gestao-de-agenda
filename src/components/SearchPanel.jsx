@@ -5,6 +5,7 @@ import { eventStart, isAllDay } from '../lib/events.js'
 import { PRIORITY_LABEL } from '../lib/priority.js'
 import { semAcento } from '../lib/texto.js'
 import Banner from './Banner.jsx'
+import { corDaAgenda } from '../lib/corDaAgenda.js'
 
 function whenLabel(event) {
   const start = eventStart(event)
@@ -145,7 +146,7 @@ export default function SearchPanel({ tasks = [], onSelectEvent, onSelectTask, c
                   close()
                 }}
               >
-                <span className="week-dot" style={{ background: event.calendarColor || 'var(--accent)', flexShrink: 0 }} />
+                <span className="week-dot" style={{ background: corDaAgenda(event.calendarColor), flexShrink: 0 }} />
                 <span className="search-result-text">{event.summary || '(sem título)'}</span>
                 <span className="muted" style={{ fontSize: 'var(--label-sm)', flexShrink: 0 }}>{whenLabel(event)}</span>
               </button>

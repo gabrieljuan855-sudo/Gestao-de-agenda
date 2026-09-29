@@ -15,6 +15,7 @@ import { workBlocksFor, isWorkday } from '../lib/schedule.js'
 import { isOverdueTask } from '../lib/tasks.js'
 import { PRIORITY_LABEL } from '../lib/priority.js'
 import Banner from './Banner.jsx'
+import { corDaAgenda } from '../lib/corDaAgenda.js'
 
 // Sessões de foco seguidas da mesma tarefa (pomodoro com pausa no meio) viram
 // um cartão só, em vez de repetir o mesmo título várias vezes na lista.
@@ -183,7 +184,7 @@ export default function DayView({
               onClick={() => onSelectEvent && onSelectEvent(event)}
               style={{
                 background: 'var(--surface-2)',
-                border: `1px solid ${event.calendarColor || 'var(--border-strong)'}`,
+                border: `1px solid ${corDaAgenda(event.calendarColor, 'var(--border-strong)')}`,
                 color: 'var(--text-secondary)',
                 cursor: onSelectEvent ? 'pointer' : 'default',
               }}
@@ -281,7 +282,7 @@ export default function DayView({
 
           const event = item.event
           const isFocus = isFocusEvent(event)
-          const borderColor = event.calendarColor || (isFocus ? 'var(--accent)' : 'var(--border-strong)')
+          const borderColor = corDaAgenda(event.calendarColor, isFocus ? 'var(--accent)' : 'var(--border-strong)')
           const info = isInfo(event)
           const recusado = declined(event)
           const pedePresenca = asksPresence(event)

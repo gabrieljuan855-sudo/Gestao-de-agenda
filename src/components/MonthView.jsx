@@ -1,6 +1,7 @@
 import { startOfMonth, startOfWeek, addDays, isToday, formatTime, formatDuration } from '../lib/dates.js'
 import { eventsOfDay, isAllDay, eventStart, busyMinutesOn, tasksDueOn } from '../lib/events.js'
 import { isWorkday } from '../lib/schedule.js'
+import { corDaAgenda } from '../lib/corDaAgenda.js'
 
 const WEEKDAYS = ['seg', 'ter', 'qua', 'qui', 'sex', 'sáb', 'dom']
 const MAX_CHIPS = 3
@@ -70,7 +71,7 @@ export default function MonthView({
               <div className="month-chips">
                 {shownEvents.map((event) => {
                   const allDay = isAllDay(event)
-                  const color = event.calendarColor || 'var(--accent)'
+                  const color = corDaAgenda(event.calendarColor)
                   return (
                     <div
                       key={event.id}
