@@ -22,7 +22,7 @@ function snippetOf(note) {
 // sempre: gravar a cada tecla gastaria uma chamada ao Drive por letra. A IA
 // tem seu próprio timer, bem mais longo (ver AI_IDLE_MS): a ideia é analisar
 // quando a anotação estiver "pronta", não a cada pausa curta de digitação.
-function NoteEditor({ note, onChange, onAnalyze, analyzing, syncStatus, calendars, taskLists, onCreateEvent, onCreateTask, onSelectRelated }) {
+function NoteEditor({ note, projetos = [], onProjetoChange, onChange, onAnalyze, analyzing, syncStatus, calendars, taskLists, onCreateEvent, onCreateTask, onSelectRelated }) {
   const [title, setTitle] = useState(note.title)
   const [body, setBody] = useState(note.body)
   const firstRender = useRef(true)
@@ -113,6 +113,23 @@ function NoteEditor({ note, onChange, onAnalyze, analyzing, syncStatus, calendar
         placeholder="Título (a IA sugere um, se deixar em branco)"
         style={{ width: '100%', marginBottom: 8, fontWeight: 500 }}
       />
+
+      {/* A anotação de um caso mora no projeto dele — é assim que ela aparece
+          na página do projeto, junto das tarefas e compromissos. */}
+      {(projetos.length > 0 || note.projeto) && (
+        <label className="note-projeto">
+          <span>Projeto</span>
+          <select value={note.projeto || ''} onChange={(e) => onProjetoChange(e.target.value)}>
+            <option value="">Nenhum</option>
+            {note.projeto && !projetos.some((p) => p.id === note.projeto) && (
+              <option value={note.projeto}>{note.projeto}</option>
+            )}
+            {projetos.map((p) => (
+              <option key={p.id} value={p.id}>{p.nome}</option>
+            ))}
+          </select>
+        </label>
+      )}
 
       <textarea
         autoFocus
@@ -291,7 +308,7 @@ function NoteSearch({ onSearch, searching, result, error, onDismiss, onOpenNote 
 // O estado de verdade (as anotações, qual está selecionada, a sincronização
 // com o Drive, a análise por IA) mora em useNotes — este componente só existe
 // enquanto o painel do trilho está aberto.
-export default function Notes({ notesState, calendars = [], taskLists = [], onCreateEvent, onCreateTask }) {
+export default function Notes({ notesState, projetos = [], calendars = [], taskLists = [], onCreateEvent, onCreateTask }) {
   const {
     notes,
     selectedId,
@@ -357,6 +374,9 @@ export default function Notes({ notesState, calendars = [], taskLists = [], onCr
       {selected ? (
         <NoteEditor
           note={selected}
+          projetos={projetos}
+          // `undefined` apaga o campo: sanitizeNote não grava projeto vazio.
+          onProjetoChange={(projeto) => updateNote(selected.id, { projeto: projeto || undefined })}
           onChange={(patch) => updateNote(selected.id, patch)}
           onAnalyze={analyzeNote}
           analyzing={analyzingIds.has(selected.id)}

@@ -8,7 +8,7 @@ import { searchNotes } from './aiSearchNotes.js'
 // Falta de permissão não é falha de rede: insistir não resolve, e dizer
 // "não deu agora" manda a pessoa esperar por algo que nunca vai acontecer
 // sozinho. O caminho de saída precisa estar na própria mensagem.
-const MSG_SEM_PERMISSAO =
+export const MSG_SEM_PERMISSAO =
   'Esta sessão não tem a permissão do Drive (ela chegou depois, e a autorização antiga não a inclui). Toque em "Sair" e entre de novo, marcando a permissão do Google Drive na tela do Google — o que está neste aparelho não se perde.'
 
 const MSG_API_DESATIVADA =
@@ -19,7 +19,7 @@ const MSG_API_DESATIVADA =
 // para causas que nunca iam se resolver sozinhas. O motivo real entra na
 // mensagem — e quando não houver um motivo conhecido, entra o que o próprio
 // Google escreveu, para o próximo diagnóstico não recomeçar do zero.
-function descreverFalha(err, prefixo) {
+export function descreverFalha(err, prefixo) {
   if (driveApiDesativada(err)) return MSG_API_DESATIVADA
   if (faltaPermissaoDoDrive(err) || permissaoDoDriveConcedida() === false) return MSG_SEM_PERMISSAO
   const motivo = motivoDoGoogle(err)
@@ -118,6 +118,9 @@ export function sanitizeNote(note) {
   }
   if (Array.isArray(note.suggestions)) limpa.suggestions = note.suggestions
   if (typeof note.lastAnalyzedAt === 'string') limpa.lastAnalyzedAt = note.lastAnalyzedAt
+  // Etiqueta do projeto a que a anotação pertence (o mesmo id de
+  // projetos.js). Sem projeto, o campo simplesmente não existe.
+  if (typeof note.projeto === 'string' && note.projeto) limpa.projeto = note.projeto
   if (note.relatedNote && typeof note.relatedNote.id === 'string') {
     limpa.relatedNote = { id: note.relatedNote.id, title: textoOuVazio(note.relatedNote.title) }
   }
@@ -247,6 +250,10 @@ export default function useNotes({ signedIn }) {
 
   function persist(next) {
     setNotes(next)
+    // Atualizado aqui, e não só no efeito pós-render: duas edições no mesmo
+    // instante (a gravação atrasada da digitação e a troca de projeto da
+    // nota) precisam enxergar uma a outra, senão a segunda desfaz a primeira.
+    notesRef.current = next
     writeCache(next, deletedRef.current)
     // Há alteração não gravada a partir daqui, e é isso que o status diz —
     // mesmo durante o segundo de espera do debounce.
@@ -293,6 +300,8 @@ export default function useNotes({ signedIn }) {
     // sanitizeNote sobre o que dá errado quando se espalha `inicial` sem
     // filtro (foi assim que um clique virou o dado de uma nota).
     const note = { ...newNote(), title: textoOuVazio(inicial.title), body: textoOuVazio(inicial.body) }
+    // A página do projeto cria a anotação já dentro dele.
+    if (typeof inicial.projeto === 'string' && inicial.projeto) note.projeto = inicial.projeto
     persist([note, ...notes])
     setSelectedId(note.id)
     return note
@@ -304,7 +313,9 @@ export default function useNotes({ signedIn }) {
   // nenhuma edição de verdade por trás.
   function updateNote(id, patch, { touch = true } = {}) {
     persist(
-      notes.map((n) => (n.id === id ? { ...n, ...patch, ...(touch ? { updatedAt: new Date().toISOString() } : {}) } : n))
+      notesRef.current.map((n) =>
+        n.id === id ? { ...n, ...patch, ...(touch ? { updatedAt: new Date().toISOString() } : {}) } : n
+      )
     )
   }
 

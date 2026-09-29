@@ -12,38 +12,63 @@ import { request } from './googleApi.js'
 
 const DRIVE_BASE = 'https://www.googleapis.com/drive/v3'
 const UPLOAD_BASE = 'https://www.googleapis.com/upload/drive/v3'
-const FILE_NAME = 'anotacoes.json'
+// Cada arquivo do app na pasta privada do Drive (anotações, projetos) segue
+// o mesmo ciclo: achar o id uma vez, ler inteiro, gravar inteiro. Guardado em
+// memória só para não perguntar "qual é o id do arquivo" ao Drive de novo a
+// cada gravação — o id não muda enquanto o arquivo existir.
+function arquivoNoDrive(nome) {
+  let cachedFileId = null
 
-// Guardado em memória só para não perguntar "qual é o id do arquivo" ao
-// Drive de novo a cada gravação — o id não muda enquanto o arquivo existir.
-let cachedFileId = null
+  async function findFileId() {
+    if (cachedFileId) return cachedFileId
+    const params = new URLSearchParams({
+      spaces: 'appDataFolder',
+      fields: 'files(id)',
+      q: `name = '${nome}' and trashed = false`,
+    })
+    const data = await request(`${DRIVE_BASE}/files?${params}`)
+    cachedFileId = data.files?.[0]?.id || null
+    return cachedFileId
+  }
 
-async function findFileId() {
-  if (cachedFileId) return cachedFileId
-  const params = new URLSearchParams({
-    spaces: 'appDataFolder',
-    fields: 'files(id)',
-    q: `name = '${FILE_NAME}' and trashed = false`,
-  })
-  const data = await request(`${DRIVE_BASE}/files?${params}`)
-  cachedFileId = data.files?.[0]?.id || null
-  return cachedFileId
-}
-
-async function createFile(conteudo) {
   // Cria vazio e grava o conteúdo em seguida: o endpoint de metadados não
   // aceita corpo de arquivo junto, e evitar multipart aqui mantém as duas
   // chamadas simples o bastante para reaproveitar o `request()` genérico.
-  const meta = await request(`${DRIVE_BASE}/files`, {
-    method: 'POST',
-    body: JSON.stringify({ name: FILE_NAME, parents: ['appDataFolder'] }),
-  })
-  cachedFileId = meta.id
-  await request(`${UPLOAD_BASE}/files/${meta.id}?uploadType=media`, {
-    method: 'PATCH',
-    body: conteudo,
-  })
+  async function createFile(conteudo) {
+    const meta = await request(`${DRIVE_BASE}/files`, {
+      method: 'POST',
+      body: JSON.stringify({ name: nome, parents: ['appDataFolder'] }),
+    })
+    cachedFileId = meta.id
+    await request(`${UPLOAD_BASE}/files/${meta.id}?uploadType=media`, {
+      method: 'PATCH',
+      body: conteudo,
+    })
+  }
+
+  return {
+    // `null` quando o arquivo ainda não existe.
+    async ler() {
+      const fileId = await findFileId()
+      if (!fileId) return null
+      return request(`${DRIVE_BASE}/files/${fileId}?alt=media`)
+    },
+    async gravar(conteudo) {
+      const fileId = await findFileId()
+      if (!fileId) {
+        await createFile(conteudo)
+        return
+      }
+      await request(`${UPLOAD_BASE}/files/${fileId}?uploadType=media`, {
+        method: 'PATCH',
+        body: conteudo,
+      })
+    },
+  }
 }
+
+const arquivoDeAnotacoes = arquivoNoDrive('anotacoes.json')
+const arquivoDeProjetos = arquivoNoDrive('projetos.json')
 
 // O 403 que o Drive devolve quando o token não carrega o escopo
 // `drive.appdata`. Acontece com quem entrou no app antes de a sincronização
@@ -91,22 +116,23 @@ export function motivoDoGoogle(err) {
 // antes de eles existirem não têm o campo, e uma lista vazia é a leitura certa
 // para esse caso — ninguém apagou nada que precise ser lembrado.
 export async function loadNotes() {
-  const fileId = await findFileId()
-  if (!fileId) return null
-  const data = await request(`${DRIVE_BASE}/files/${fileId}?alt=media`)
+  const data = await arquivoDeAnotacoes.ler()
   if (!Array.isArray(data?.notes)) return null
   return { notes: data.notes, deleted: Array.isArray(data.deleted) ? data.deleted : [] }
 }
 
 export async function saveNotes(notes, deleted = []) {
-  const conteudo = JSON.stringify({ notes, deleted })
-  const fileId = await findFileId()
-  if (!fileId) {
-    await createFile(conteudo)
-    return
-  }
-  await request(`${UPLOAD_BASE}/files/${fileId}?uploadType=media`, {
-    method: 'PATCH',
-    body: conteudo,
-  })
+  await arquivoDeAnotacoes.gravar(JSON.stringify({ notes, deleted }))
+}
+
+// As fichas dos projetos (nome, resultado esperado, situação, prazo). As
+// tarefas de cada projeto não moram aqui — continuam no Google Tasks, ligadas
+// pela etiqueta #projeto; este arquivo guarda só o que o Tasks não tem onde pôr.
+export async function loadProjetos() {
+  const data = await arquivoDeProjetos.ler()
+  return Array.isArray(data?.projetos) ? data.projetos : null
+}
+
+export async function saveProjetos(projetos) {
+  await arquivoDeProjetos.gravar(JSON.stringify({ projetos }))
 }

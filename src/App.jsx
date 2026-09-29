@@ -26,8 +26,6 @@ import {
   LISTA_ALGUM_DIA,
   LISTAS_GTD,
   acharLista,
-  projetosSemProximaAcao,
-  agruparPorProjeto,
 } from './lib/gtd.js'
 import { enfileirar, descarregar, quantasPendentes } from './lib/outbox.js'
 import { lerCacheDeAgenda, gravarCacheDeAgenda } from './lib/agendaCache.js'
@@ -44,7 +42,9 @@ import Notes from './components/Notes.jsx'
 import useNotes from './lib/useNotes.js'
 import Entrada from './components/Entrada.jsx'
 import Aguardando from './components/Aguardando.jsx'
-import Projetos from './components/Projetos.jsx'
+import ProjetosPainel from './components/ProjetosPainel.jsx'
+import useProjetos from './lib/useProjetos.js'
+import { listarProjetos } from './lib/projetos.js'
 import Trabalho from './components/Trabalho.jsx'
 import HorarioTrabalho from './components/HorarioTrabalho.jsx'
 import { loadWorkSchedule } from './lib/schedule.js'
@@ -272,6 +272,8 @@ export default function App() {
       end: preview.end,
       calendarId: preview.calendarId || 'primary',
       recurrence: preview.recurrence,
+      // A marca do projeto, quando o compromisso nasce dentro de um.
+      extendedProperties: preview.extendedProperties,
     })
     await reload()
     return criado
@@ -388,6 +390,7 @@ export default function App() {
     },
   })
   const notesState = useNotes({ signedIn })
+  const projetosState = useProjetos({ signedIn })
   // Qual painel do trilho está aberto. Mora aqui, e não dentro do Rail, porque
   // os atalhos de teclado também precisam abrir e fechar esses painéis.
   const [railAberto, setRailAberto] = useState(null)
@@ -409,7 +412,9 @@ export default function App() {
     // seleciona em vez de alternar.
     entrada: () => setAbaTrabalho('entrada'),
     proximas: () => setAbaTrabalho('proximas'),
-    projetos: () => setAbaTrabalho('projetos'),
+    // Projetos saiu das abas do Trabalho e virou painel do trilho: a tecla
+    // passa a abrir e fechar, como Anotações.
+    projetos: () => abrirOuFechar('projetos'),
     aguardando: () => setAbaTrabalho('aguardando'),
     revisao: () => setAbaTrabalho('revisao'),
     notas: () => abrirOuFechar('notes'),
@@ -783,7 +788,7 @@ export default function App() {
   // "Prioridade ...", de antes desta reforma) continuam aparecendo aqui —
   // migrar é escolha de quem usa, não deste filtro.
   const tarefasEsclarecidas = tasks.filter((t) => !naEntrada(t) && !naAguardando(t) && !noAlgumDia(t))
-  // Uma tarefa com projeto já tem casa própria na aba Projetos — deixá-la
+  // Uma tarefa com projeto já tem casa própria no painel Projetos — deixá-la
   // também em Próximas ações duplicava a mesma tarefa nas duas telas. O Dia e
   // a Semana continuam mostrando `tarefasEsclarecidas` inteira: ali o que
   // importa é o prazo, não em qual aba a tarefa mora.
@@ -794,12 +799,37 @@ export default function App() {
   // Os contextos e os projetos que a pessoa já usa viram os botões da tela de
   // esclarecer, em vez de uma lista inventada por mim: o vocabulário é dela.
   const contextosUsados = [...new Set(tasks.map((t) => t.contexto).filter(Boolean))].sort()
-  const projetosUsados = [...new Set(tasks.map((t) => t.projeto).filter(Boolean))].sort()
+  // A lista completa de projetos: fichas + etiquetas soltas (ver
+  // listarProjetos). Os seletores de projeto oferecem só os que não
+  // terminaram — o concluído continua existindo, mas não é lugar de ação nova.
+  const listaDeProjetos = listarProjetos({
+    registros: projetosState.projetos,
+    tasks,
+    notes: notesState.notes,
+    idProximas,
+  })
+  const projetosEmAberto = listaDeProjetos.filter((p) => p.situacao !== 'concluido')
+  const projetosUsados = projetosEmAberto.map((p) => p.id).sort()
 
-  // Um projeto sem nenhuma tarefa em Próximas ações parou de andar sem
+  // Um projeto ativo sem nenhuma tarefa em Próximas ações parou de andar sem
   // ninguém perceber — é o único sinal do método que não aparece sozinho em
-  // lugar nenhum da tela (atraso já pula aos olhos; isto não).
-  const projetosParados = projetosSemProximaAcao(tasks, idProximas)
+  // lugar nenhum da tela (atraso já pula aos olhos; isto não). Pausado e
+  // concluído ficam de fora: não ter próxima ação é o que eles significam.
+  // Só conta projeto que tem alguma tarefa em aberto ou ficha própria — uma
+  // etiqueta que só existe numa anotação não é um projeto parado.
+  const projetosParados = listaDeProjetos
+    .filter((p) => p.semProximaAcao && (p.pendentes > 0 || !p.implicito))
+    .map((p) => p.id)
+
+  function abrirNota(id) {
+    notesState.setSelectedId(id)
+    setRailAberto('notes')
+  }
+
+  function novaNotaNoProjeto(projeto) {
+    notesState.createNote({ projeto })
+    setRailAberto('notes')
+  }
 
   const tools = [
     {
@@ -870,10 +900,41 @@ export default function App() {
       render: () => (
         <Notes
           notesState={notesState}
+          projetos={projetosEmAberto}
           calendars={calendars}
           taskLists={taskLists}
           onCreateEvent={handleCreateEvent}
           onCreateTask={handleCreateTask}
+        />
+      ),
+    },
+    {
+      id: 'projetos',
+      label: 'Projetos',
+      // A página de um projeto junta tarefas, anotações e compromissos:
+      // precisa da largura de um side sheet, igual às Anotações.
+      wide: true,
+      icon: (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" />
+        </svg>
+      ),
+      tecla: 'p',
+      render: () => (
+        <ProjetosPainel
+          lista={listaDeProjetos}
+          projetosState={projetosState}
+          tasks={tasks}
+          notes={notesState.notes}
+          ids={{ idProximas, idAguardando, idAlgumDia, idEntrada: entradaId }}
+          onEditarTarefa={setEditingTask}
+          onConcluirTarefa={handleCompleteTask}
+          onAbrirNota={abrirNota}
+          onNovaNota={novaNotaNoProjeto}
+          onCreateEvent={handleCreateEvent}
+          onCreateTask={handleCreateTask}
+          buscarEventos={listAllEvents}
+          onEditarEvento={setEditingEvent}
         />
       ),
     },
@@ -935,22 +996,6 @@ export default function App() {
           onAgendar={handleAgendarBloco}
           showCompleted={showCompleted}
           onToggleShowCompleted={setShowCompleted}
-        />
-      ),
-    },
-    {
-      id: 'projetos',
-      label: 'Projetos',
-      icon: (
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" />
-        </svg>
-      ),
-      render: () => (
-        <Projetos
-          grupos={agruparPorProjeto(tasks, idProximas)}
-          onEdit={setEditingTask}
-          onComplete={handleCompleteTask}
         />
       ),
     },
@@ -1155,6 +1200,7 @@ export default function App() {
         <EventEditor
           event={editingEvent}
           calendars={calendars}
+          projetos={projetosEmAberto}
           onSave={handleSaveEvent}
           onDelete={handleDeleteEvent}
           onClose={() => setEditingEvent(null)}

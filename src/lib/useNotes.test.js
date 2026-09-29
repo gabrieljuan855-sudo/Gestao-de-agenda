@@ -102,3 +102,14 @@ describe('sanitizeNotes', () => {
     expect(sanitizeNotes('x')).toEqual([])
   })
 })
+
+describe('sanitizeNote — projeto', () => {
+  it('mantém o projeto da anotação quando é uma etiqueta', () => {
+    expect(sanitizeNote({ id: 'n1', title: '', body: '', projeto: 'caso-maria' }).projeto).toBe('caso-maria')
+  })
+
+  it('descarta projeto vazio ou de outro tipo', () => {
+    expect(sanitizeNote({ id: 'n1', projeto: '' })).not.toHaveProperty('projeto')
+    expect(sanitizeNote({ id: 'n1', projeto: { id: 'x' } })).not.toHaveProperty('projeto')
+  })
+})

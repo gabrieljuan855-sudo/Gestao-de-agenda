@@ -1,4 +1,5 @@
 import { normalizePriority, priorityFromListTitle, DEFAULT_PRIORITY } from './priority.js'
+import { PROJETO_PROP } from './projetos.js'
 import { ensureToken, refreshAfterUnauthorized } from './googleAuth.js'
 import { toDateInput, addDays } from './dates.js'
 import { PRESENCE_PROP, TO_RSVP } from './calendarPrefs.js'
@@ -274,9 +275,13 @@ export async function createEvent({
 // eventos de agendas secundárias não estão em 'primary'.
 export async function updateEvent(
   event,
-  { title, start, end, description, location, recurrence, allDay = false, criarVideochamada, removerVideochamada }
+  { title, start, end, description, location, recurrence, allDay = false, criarVideochamada, removerVideochamada, projeto }
 ) {
   const body = {}
+  // PATCH mescla as chaves de extendedProperties.private uma a uma, então só
+  // a do projeto muda — as marcas de presença e de foco no mesmo evento
+  // ficam intactas. `null` é o que apaga a chave (evento saiu do projeto).
+  if (projeto !== undefined) body.extendedProperties = { private: { [PROJETO_PROP]: projeto || null } }
   if (title !== undefined) body.summary = title
   if (description !== undefined) body.description = description
   if (location !== undefined) body.location = location
