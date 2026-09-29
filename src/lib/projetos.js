@@ -38,7 +38,89 @@ export function normalizarProjeto(p, agora = new Date()) {
     prazo: DATA_ISO.test(p.prazo || '') ? p.prazo : null,
     createdAt: typeof p.createdAt === 'string' ? p.createdAt : iso,
     updatedAt: typeof p.updatedAt === 'string' ? p.updatedAt : iso,
+    arquivos: normalizarArquivos(p.arquivos),
   }
+}
+
+// ---------- arquivos vinculados ----------
+//
+// O arquivo não sobe para o app: fica onde já está (Drive, site, sistema) e o
+// projeto guarda o link. Enviar arquivo para o Drive visível pediria uma
+// permissão nova do Google e um login de novo; o link resolve o que importa
+// — ter à mão, dentro do caso, tudo o que é dele.
+
+const TIPOS_DE_ARQUIVO = [
+  { tipo: 'doc', rotulo: 'Documento', re: /docs\.google\.com\/document\//i },
+  { tipo: 'planilha', rotulo: 'Planilha', re: /docs\.google\.com\/spreadsheets\//i },
+  { tipo: 'apresentacao', rotulo: 'Apresentação', re: /docs\.google\.com\/presentation\//i },
+  { tipo: 'formulario', rotulo: 'Formulário', re: /docs\.google\.com\/forms\/|forms\.gle\//i },
+  { tipo: 'pasta', rotulo: 'Pasta do Drive', re: /drive\.google\.com\/drive\/(u\/\d+\/)?folders\//i },
+  { tipo: 'pdf', rotulo: 'PDF', re: /\.pdf(\?|#|$)/i },
+  { tipo: 'drive', rotulo: 'Arquivo do Drive', re: /drive\.google\.com\//i },
+]
+
+export function tipoDeArquivo(url) {
+  const achado = TIPOS_DE_ARQUIVO.find((t) => t.re.test(url || ''))
+  return achado ? { tipo: achado.tipo, rotulo: achado.rotulo } : { tipo: 'link', rotulo: 'Link' }
+}
+
+// Link sem protocolo ("drive.google.com/...") é o que se cola do celular
+// muitas vezes; só http(s) passa — "javascript:" num link clicável seria uma
+// porta aberta.
+export function normalizarLink(texto) {
+  const bruto = (texto || '').trim()
+  if (!bruto) return null
+  const comProtocolo = /^[a-z][a-z0-9+.-]*:/i.test(bruto) ? bruto : `https://${bruto}`
+  try {
+    const url = new URL(comProtocolo)
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return null
+    if (!url.hostname.includes('.')) return null
+    return url.toString()
+  } catch {
+    return null
+  }
+}
+
+// Um nome razoável quando a pessoa não escreve nenhum: o nome do arquivo no
+// fim do endereço ("contrato.pdf"), ou o tipo + o site ("Documento").
+export function nomeSugerido(url) {
+  const { tipo, rotulo } = tipoDeArquivo(url)
+  if (tipo !== 'link' && tipo !== 'pdf') return rotulo
+  try {
+    const u = new URL(url)
+    const ultimo = decodeURIComponent(u.pathname.split('/').filter(Boolean).pop() || '')
+    if (ultimo && /\.[a-z0-9]{2,5}$/i.test(ultimo)) return ultimo
+    return u.hostname.replace(/^www\./, '')
+  } catch {
+    return rotulo
+  }
+}
+
+function normalizarArquivo(a) {
+  if (!a || typeof a !== 'object') return null
+  const url = normalizarLink(a.url)
+  if (!url || typeof a.id !== 'string' || !a.id) return null
+  return {
+    id: a.id,
+    url,
+    nome: typeof a.nome === 'string' && a.nome.trim() ? a.nome.trim() : nomeSugerido(url),
+    adicionadoEm: typeof a.adicionadoEm === 'string' ? a.adicionadoEm : null,
+  }
+}
+
+export function normalizarArquivos(lista) {
+  return (Array.isArray(lista) ? lista : []).map(normalizarArquivo).filter(Boolean)
+}
+
+// Devolve a lista nova, ou null quando o link não é válido. Link repetido
+// não duplica: o mesmo arquivo vinculado duas vezes é só ruído na lista.
+export function vincularArquivo(arquivos, { url, nome }, agora = new Date()) {
+  const link = normalizarLink(url)
+  if (!link) return null
+  const atuais = normalizarArquivos(arquivos)
+  if (atuais.some((a) => a.url === link)) return atuais
+  const id = `arq-${agora.getTime().toString(36)}-${Math.random().toString(36).slice(2, 6)}`
+  return [...atuais, { id, url: link, nome: (nome || '').trim() || nomeSugerido(link), adicionadoEm: agora.toISOString() }]
 }
 
 export function normalizarProjetos(lista, agora = new Date()) {
@@ -51,7 +133,7 @@ export function novoProjeto(nome, agora = new Date()) {
   const id = etiqueta(nome)
   if (!id) return null
   const iso = agora.toISOString()
-  return { id, nome: nome.trim(), resultado: '', situacao: 'ativo', prazo: null, createdAt: iso, updatedAt: iso }
+  return { id, nome: nome.trim(), resultado: '', situacao: 'ativo', prazo: null, createdAt: iso, updatedAt: iso, arquivos: [] }
 }
 
 function maisRecente(...datas) {
@@ -72,7 +154,7 @@ export function listarProjetos({ registros = [], tasks = [], notes = [], idProxi
   const etiquetasSoltas = [...tasks.map((t) => t.projeto), ...notes.map((n) => n.projeto)].filter(Boolean)
   for (const id of etiquetasSoltas) {
     if (!porId.has(id)) {
-      porId.set(id, { id, nome: id, resultado: '', situacao: 'ativo', prazo: null, createdAt: null, updatedAt: null, implicito: true })
+      porId.set(id, { id, nome: id, resultado: '', situacao: 'ativo', prazo: null, createdAt: null, updatedAt: null, arquivos: [], implicito: true })
     }
   }
 

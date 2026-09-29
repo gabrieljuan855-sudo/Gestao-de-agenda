@@ -7,6 +7,10 @@ import {
   tarefasDoProjeto,
   eventoDoProjeto,
   PROJETO_PROP,
+  tipoDeArquivo,
+  normalizarLink,
+  nomeSugerido,
+  vincularArquivo,
 } from './projetos.js'
 
 const PROXIMAS = 'l-proximas'
@@ -29,7 +33,7 @@ describe('novoProjeto', () => {
 
 describe('normalizarProjeto', () => {
   it('mantém uma ficha válida', () => {
-    const p = { id: 'x', nome: 'X', resultado: 'r', situacao: 'pausado', prazo: '2026-10-01', createdAt: 'a', updatedAt: 'b' }
+    const p = { id: 'x', nome: 'X', resultado: 'r', situacao: 'pausado', prazo: '2026-10-01', createdAt: 'a', updatedAt: 'b', arquivos: [] }
     expect(normalizarProjeto(p, agora)).toEqual(p)
   })
 
@@ -43,6 +47,7 @@ describe('normalizarProjeto', () => {
       prazo: null,
       createdAt: agora.toISOString(),
       updatedAt: agora.toISOString(),
+      arquivos: [],
     })
   })
 
@@ -130,5 +135,44 @@ describe('eventoDoProjeto', () => {
     expect(eventoDoProjeto({ summary: 'Visita #caso-maria-2' }, 'caso-maria')).toBe(false)
     expect(eventoDoProjeto({ summary: 'Visita #caso-joao' }, 'caso-maria')).toBe(false)
     expect(eventoDoProjeto({ summary: 'Visita' }, 'caso-maria')).toBe(false)
+  })
+})
+
+describe('arquivos vinculados', () => {
+  it('reconhece o tipo pelo link', () => {
+    expect(tipoDeArquivo('https://docs.google.com/document/d/abc/edit').tipo).toBe('doc')
+    expect(tipoDeArquivo('https://docs.google.com/spreadsheets/d/abc').tipo).toBe('planilha')
+    expect(tipoDeArquivo('https://drive.google.com/drive/folders/abc').tipo).toBe('pasta')
+    expect(tipoDeArquivo('https://drive.google.com/file/d/abc/view').tipo).toBe('drive')
+    expect(tipoDeArquivo('https://site.gov.br/edital.pdf').tipo).toBe('pdf')
+    expect(tipoDeArquivo('https://site.gov.br/pagina').tipo).toBe('link')
+  })
+
+  it('aceita link colado sem protocolo e recusa o que não é http(s)', () => {
+    expect(normalizarLink('drive.google.com/file/d/abc')).toBe('https://drive.google.com/file/d/abc')
+    expect(normalizarLink('javascript:alert(1)')).toBe(null)
+    expect(normalizarLink('texto solto')).toBe(null)
+    expect(normalizarLink('')).toBe(null)
+  })
+
+  it('sugere um nome quando a pessoa não escreve nenhum', () => {
+    expect(nomeSugerido('https://site.gov.br/docs/edital%202026.pdf')).toBe('edital 2026.pdf')
+    expect(nomeSugerido('https://docs.google.com/spreadsheets/d/abc')).toBe('Planilha')
+    expect(nomeSugerido('https://www.exemplo.com.br/')).toBe('exemplo.com.br')
+  })
+
+  it('vincula, não duplica o mesmo link e recusa link inválido', () => {
+    const agora = new Date('2026-09-29T12:00:00Z')
+    const um = vincularArquivo([], { url: 'drive.google.com/file/d/abc', nome: ' Laudo ' }, agora)
+    expect(um).toHaveLength(1)
+    expect(um[0]).toMatchObject({ url: 'https://drive.google.com/file/d/abc', nome: 'Laudo', adicionadoEm: agora.toISOString() })
+    expect(vincularArquivo(um, { url: 'https://drive.google.com/file/d/abc' }, agora)).toHaveLength(1)
+    expect(vincularArquivo(um, { url: 'nada' }, agora)).toBe(null)
+  })
+
+  it('a ficha descarta arquivo com link inválido vindo do Drive', () => {
+    const p = normalizarProjeto({ id: 'x', arquivos: [{ id: 'a', url: 'javascript:x' }, { id: 'b', url: 'https://a.com/x.pdf' }, 'lixo'] })
+    expect(p.arquivos.map((a) => a.id)).toEqual(['b'])
+    expect(p.arquivos[0].nome).toBe('x.pdf')
   })
 })
