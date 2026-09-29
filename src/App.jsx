@@ -1044,7 +1044,10 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      <div className="app-head">
+      {/* No computador, a barra superior do MD3: saudação, período e as
+          configurações na mesma linha. No celular o período desce para a
+          linha de baixo e as configurações ficam no rodapé (ver CSS). */}
+      <div className="app-topo">
         <div className="app-head-title">
           <Logo size={30} />
           <div>
@@ -1052,18 +1055,24 @@ export default function App() {
             <div className="muted app-head-sub">Segundo Cérebro</div>
           </div>
         </div>
+
+        <PeriodBar
+          view={view}
+          onChangeView={setView}
+          reference={reference}
+          onPrev={() => setReference((r) => shiftReference(view, r, -1))}
+          onNext={() => setReference((r) => shiftReference(view, r, 1))}
+          onToday={() => setReference(new Date())}
+        />
+
+        <div className="app-topo-acoes">
+          <button type="button" onClick={() => setShowCalendarSettings(true)}>Agendas</button>
+          <button type="button" onClick={() => setEditandoHorario(true)}>Horário</button>
+          <button type="button" onClick={signOut}>Sair</button>
+        </div>
       </div>
 
-      <PeriodBar
-        view={view}
-        onChangeView={setView}
-        reference={reference}
-        onPrev={() => setReference((r) => shiftReference(view, r, -1))}
-        onNext={() => setReference((r) => shiftReference(view, r, 1))}
-        onToday={() => setReference(new Date())}
-      />
-
-      <div className={view === 'day' ? 'workspace' : 'workspace workspace--wide'}>
+      <div className={`workspace workspace--${view}`}>
         <div className="workspace-main">
           {/* `key={view}` reseta o limite de erro ao trocar de aba: um erro na
               Semana não deve continuar bloqueando depois de voltar para o Dia. */}

@@ -28,8 +28,13 @@ export default function Trabalho({ abas, abaAtiva, onAbaChange }) {
             className={`tab${atual.id === aba.id ? ' is-ativa' : ''}`}
             onClick={() => onAbaChange(aba.id)}
           >
-            {aba.icon}
-            {aba.badge > 0 && <span className="tab-badge">{aba.badge}</span>}
+            <span className="tab-icone">
+              {aba.icon}
+              {aba.badge > 0 && <span className="tab-badge">{aba.badge}</span>}
+            </span>
+            {/* Nome visível só onde cabe (computador): no celular o ícone
+                basta e o nome continua no aria-label. */}
+            <span className="tab-label">{aba.label}</span>
           </button>
         ))}
       </div>

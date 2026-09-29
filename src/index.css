@@ -62,6 +62,9 @@
 
   --shadow: rgba(74, 53, 32, 0.16);
   --shadow-weak: rgba(74, 53, 32, 0.08);
+  /* O véu atrás de diálogo e de tela sobreposta: um valor só, para os dois
+     escurecerem a agenda do mesmo jeito. */
+  --scrim: rgba(74, 53, 32, 0.45);
 
   /* ---------- forma ---------- */
   /* Escala de seis degraus, calibrada pelos raios do tema Chocolate
@@ -311,7 +314,7 @@ textarea:focus-visible,
   position: fixed;
   inset: 0;
   z-index: 40;
-  background: rgba(74, 53, 32, 0.45);
+  background: var(--scrim);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -682,14 +685,18 @@ button.danger:hover { background: var(--urgent-bg); }
 
 /* ---------- cabeçalho ---------- */
 
-.app-head {
+/* No celular: saudação numa linha, a barra de período inteira na de baixo, e
+   as configurações ficam no rodapé. O computador junta tudo numa linha só (ver
+   o bloco "computador" no fim do arquivo). */
+.app-topo {
   display: flex;
   flex-wrap: wrap;
-  justify-content: space-between;
   align-items: center;
   gap: 12px;
   margin-bottom: 14px;
 }
+.app-topo .period-bar { flex-basis: 100%; margin-bottom: 0; }
+.app-topo-acoes { display: none; }
 
 .app-head-title { display: flex; align-items: center; gap: 10px; }
 .app-head-title h2 { margin: 0; font-size: var(--headline-sm); line-height: 1.1; }
@@ -1154,25 +1161,29 @@ button.danger:hover { background: var(--urgent-bg); }
 
 /* ---------- área de trabalho ---------- */
 
-/* O minmax(0, ...) é o que deixa as colunas encolherem: sem ele o conteúdo
-   define a largura mínima e a página ganha rolagem horizontal. A terceira
-   coluna (o trilho) é um valor fixo, não "auto": "auto" mede o conteúdo mais
-   largo do momento, e a pílula que cresce no hover contava como conteúdo —
-   cada hover recalculava a coluna e empurrava a lista de tarefas ao lado
-   (o "pulinho" relatado). Com largura fixa, a pílula pode crescer por cima
-   do vizinho sem mexer na grade.
-*/
+/* Agenda à esquerda, painel de trabalho à direita, em qualquer vista. Antes a
+   Semana e o Mês jogavam o painel para baixo da agenda — no computador isso
+   deixava as tarefas fora da tela justo quando se planeja a semana. A coluna
+   do painel tem largura própria (não uma fração): é uma lista, e lista não
+   melhora esticando.
+   O minmax(0, ...) é o que deixa a agenda encolher: sem ele o conteúdo define
+   a largura mínima e a página ganha rolagem horizontal. O trilho não é mais
+   coluna da grade — é a barra fixa na borda esquerda (ver .rail). */
 .workspace {
   display: grid;
-  grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr) 48px;
-  gap: 16px;
+  grid-template-columns: minmax(0, 1fr) clamp(320px, 30vw, 420px);
+  gap: 20px;
   align-items: start;
 }
 
-/* Semana e mês precisam da largura inteira para o título do evento caber, então
-   a agenda ocupa a linha toda e a lista de tarefas desce para baixo dela. */
-.workspace--wide { grid-template-columns: minmax(0, 1fr) 48px; }
-.workspace--wide .workspace-main { grid-column: 1 / -1; }
+.workspace-main { min-width: 0; }
+
+/* Numa tela de computador estreita (notebook pequeno, janela dividida), sete
+   colunas de mês ao lado do painel não cabem: aí sim o painel desce. */
+@media (max-width: 1100px) {
+  .workspace--week,
+  .workspace--month { grid-template-columns: minmax(0, 1fr); }
+}
 
 /* ---------- tarefas que vencem no dia, na visão de Dia ---------- */
 
@@ -1313,9 +1324,19 @@ button.danger:hover { background: var(--urgent-bg); }
   justify-content: center;
 }
 
+.tab-icone { display: inline-flex; align-items: center; gap: 6px; }
+
+/* No computador a aba é a primária do MD3 com ícone e nome empilhados (64dp):
+   com a coluna do painel larga o bastante, só o ícone obrigava a decorar o
+   desenho de cada aba. */
+.tab-label { display: none; }
+
+@media (min-width: 701px) {
+  .tab { flex-direction: column; gap: 4px; min-height: 64px; font-size: var(--label-md); }
+  .tab-label { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+}
+
 @media (max-width: 700px) {
-  /* No celular o rótulo encolhe antes de sumir: quatro abas ainda cabem, e
-     um ícone só não diria a diferença entre "Aguardando" e "Revisão". */
   .tab { font-size: var(--label-md); padding: 0 4px; }
   .tab.is-ativa::before { left: 8px; right: 8px; }
 }
@@ -2004,8 +2025,11 @@ button.danger:hover { background: var(--urgent-bg); }
   gap: 2px;
   padding: 10px 12px;
   border-radius: var(--shape-sm);
-  background: var(--primary-container);
-  color: var(--on-primary-container);
+  /* Mesma razão da linha selecionada: o painel já é --primary-container, então
+     o destaque é o fundo claro com a barra de cor, não a cor do painel. */
+  background: var(--surface);
+  box-shadow: inset 4px 0 0 var(--primary);
+  color: var(--on-surface);
   overflow-wrap: anywhere;
 }
 
@@ -2032,3 +2056,255 @@ button.danger:hover { background: var(--urgent-bg); }
   color: var(--on-surface-variant);
 }
 .note-projeto select { flex: 1; min-width: 0; }
+
+/* A tela de Projetos é mestre-detalhe: no celular (e em janela estreita) uma
+   coisa de cada vez — a lista, ou o projeto aberto. Com largura, as duas lado
+   a lado (ver bloco "computador" abaixo). */
+.projetos-tela.tem-aberto .projetos-mestre { display: none; }
+.projetos-tela:not(.tem-aberto) .projetos-detalhe { display: none; }
+.projetos-vazio { padding: 48px 16px; text-align: center; }
+
+.projeto-colunas,
+.projeto-coluna { display: flex; flex-direction: column; gap: 14px; }
+.projeto-coluna section { display: flex; flex-direction: column; gap: 6px; }
+.projeto-resultado { margin: 0; flex-basis: 100%; }
+
+/* O fundo do painel já é da cor de --primary-container: pintar a linha
+   selecionada com ele a deixava igual ao resto. A barra à esquerda é a marca. */
+.projeto-linha.is-selecionado {
+  border-color: var(--primary);
+  box-shadow: inset 4px 0 0 var(--primary);
+}
+
+.rail-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 35;
+  background: var(--scrim);
+}
+
+/* ================= computador =================
+   O que o celular já fazia bem fica como está; daqui para baixo é só o que
+   muda quando há tela. Antes o layout de mesa era o do celular esticado: uma
+   coluna de 1180px no meio da tela, os botões redondos soltos à direita e os
+   painéis abrindo como balão por cima da agenda. */
+@media (min-width: 701px) {
+  :root { --rail-largura: 88px; }
+
+  /* A tela inteira é usada: a barra de navegação ocupa a borda esquerda e o
+     conteúdo vai até a direita, sem a coluna estreita centralizada. */
+  .app-shell {
+    max-width: none;
+    margin: 0;
+    padding: 16px 24px 32px calc(var(--rail-largura) + 24px);
+  }
+
+  /* Barra superior: saudação, período e configurações numa linha só. */
+  .app-topo { flex-wrap: nowrap; gap: 24px; margin-bottom: 16px; }
+  .app-topo .period-bar { flex: 1; flex-basis: auto; min-width: 0; }
+  .app-topo-acoes { display: flex; gap: 4px; flex-shrink: 0; }
+  .app-topo-acoes button {
+    border: none;
+    background: transparent;
+    color: var(--on-surface-variant);
+    padding: 8px 12px;
+  }
+  .app-footer { display: none; }
+
+  /* O arranjo do Google Agenda, que é o que se espera no computador: "Hoje",
+     as setas, a data, e a troca de vista na ponta direita. */
+  .period-hoje { order: 0; }
+  .period-arrow { order: 1; }
+  .period-label { order: 2; font-size: var(--title-lg); font-family: var(--font-heading); }
+  .period-views { order: 3; margin-left: auto; }
+
+  /* O painel de trabalho acompanha a rolagem da agenda: rolar um dia cheio
+     não pode levar as tarefas embora. Rola sozinho por dentro quando passa
+     da altura da tela. */
+  .trabalho {
+    position: sticky;
+    top: 16px;
+    max-height: calc(100vh - 32px);
+    overflow-y: auto;
+  }
+  /* As abas ficam presas no alto do painel enquanto a lista rola embaixo. */
+  .trabalho .tabs {
+    position: sticky;
+    top: -16px;
+    z-index: 1;
+    background: var(--surface-container);
+  }
+
+  /* ---------- barra de navegação (navigation rail do MD3) ---------- */
+  .rail-wrap { display: contents; }
+
+  .rail {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 30;
+    width: var(--rail-largura);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    padding: 16px 0;
+    background: var(--surface-container);
+    border-right: 1px solid var(--outline-variant);
+  }
+
+  /* Destino: ícone numa pílula de 56x32 (o indicador) com o nome embaixo,
+     sempre visível. A camada de estado vai na pílula, não no botão inteiro,
+     como manda o MD3 — o hover mostra exatamente o que vai ser clicado. */
+  .rail-btn {
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    width: 100%;
+    height: auto;
+    min-height: 56px;
+    padding: 0;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    color: var(--on-surface-variant);
+    overflow: visible;
+  }
+  .rail-btn::after { display: none; }
+
+  .rail-btn-icon {
+    width: 56px;
+    flex: 0 0 32px;
+    height: 32px;
+    border-radius: var(--shape-full);
+    transition: background var(--dur-short) var(--ease-standard);
+  }
+  .rail-btn:hover .rail-btn-icon { background: color-mix(in srgb, var(--on-surface) var(--state-hover), transparent); }
+  .rail-btn:focus-visible { outline: none; }
+  .rail-btn:focus-visible .rail-btn-icon { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+  .rail-btn.is-open { border: none; color: var(--on-surface); }
+  .rail-btn.is-open .rail-btn-icon,
+  .rail-btn.is-live .rail-btn-icon {
+    background: var(--primary-container);
+    color: var(--on-primary-container);
+  }
+
+  .rail-btn-label,
+  .rail-btn:hover .rail-btn-label,
+  .rail-btn.is-open .rail-btn-label,
+  .rail-btn.is-open:hover .rail-btn-label {
+    max-width: none;
+    opacity: 1;
+    padding: 0;
+    font-size: var(--label-md);
+    font-weight: 500;
+    transition: none;
+  }
+  .rail-btn.is-open .rail-btn-label { font-weight: 700; }
+
+  /* Criar é o FAB da barra: quadrado arredondado de 56dp, cor de destaque,
+     separado dos destinos logo abaixo. */
+  .rail-btn.is-primary { margin-bottom: 8px; background: transparent; color: var(--on-primary-container); }
+  .rail-btn.is-primary .rail-btn-icon {
+    height: 56px;
+    flex-basis: 56px;
+    border-radius: var(--shape-lg);
+    background: var(--primary-container);
+    box-shadow: var(--elevation-1);
+  }
+  .rail-btn.is-primary:hover .rail-btn-icon { box-shadow: var(--elevation-2); }
+  .rail-btn.is-primary.is-open .rail-btn-icon { background: var(--primary); color: var(--on-primary); }
+
+  .rail-btn-badge { top: 0; right: calc(50% - 30px); }
+
+  /* ---------- painéis ---------- */
+
+  /* Ferramenta rápida (Criar, Buscar): cartão ao lado da barra, na altura de
+     onde foi aberta — não mais do outro lado da tela. */
+  .rail-panel {
+    position: fixed;
+    top: 16px;
+    left: calc(var(--rail-largura) + 12px);
+    right: auto;
+    width: 400px;
+    max-height: calc(100vh - 32px);
+    z-index: 36;
+    border-radius: var(--shape-lg);
+    box-shadow: var(--elevation-3);
+    transform-origin: top left;
+  }
+
+  /* Anotações e Projetos: tela sobreposta de verdade, com o véu atrás e
+     quase a tela inteira — conteúdo longo pede largura e altura. */
+  .rail-panel.is-wide {
+    top: 24px;
+    bottom: 24px;
+    left: calc(var(--rail-largura) + 24px);
+    right: 24px;
+    width: auto;
+    max-width: 1280px;
+    max-height: none;
+    margin: 0 auto;
+    padding: 0 24px 24px;
+    border-radius: var(--shape-xl);
+  }
+  .rail-panel.is-wide .rail-panel-head {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    margin: 0 -24px 12px;
+    padding: 18px 24px 12px;
+    background: var(--surface-container);
+    border-bottom: 1px solid var(--outline-variant);
+  }
+  .rail-panel.is-wide .rail-panel-head strong {
+    font-family: var(--font-heading);
+    font-size: var(--title-lg);
+  }
+  .rail-panel.is-wide .rail-close {
+    width: 40px;
+    height: 40px;
+    border-radius: var(--shape-full);
+    padding: 0;
+  }
+
+  /* A anotação ganha a altura da tela em vez de 12 linhas fixas — só ela: o
+     campo curto da ficha do projeto continua curto. */
+  .rail-panel.is-wide textarea { min-height: 55vh; }
+  .rail-panel.is-wide .projeto-ficha textarea { min-height: 0; }
+}
+
+/* Projetos lado a lado a partir de onde cabem os dois sem apertar. */
+@media (min-width: 1000px) {
+  .projetos-tela {
+    display: grid;
+    grid-template-columns: 300px minmax(0, 1fr);
+    gap: 24px;
+    align-items: start;
+  }
+  /* Mesma especificidade das regras de "uma de cada vez" acima, para vencer
+     por vir depois — com menos, a lista sumia mesmo havendo espaço. */
+  .projetos-tela.tem-aberto .projetos-mestre,
+  .projetos-tela:not(.tem-aberto) .projetos-detalhe { display: block; }
+  /* A lista fica parada enquanto o projeto rola ao lado. */
+  .projetos-mestre {
+    position: sticky;
+    top: 72px;
+    max-height: calc(100vh - 150px);
+    overflow-y: auto;
+    padding-right: 4px;
+  }
+  .projeto-voltar { display: none; }
+}
+
+/* E o projeto em duas colunas quando o próprio detalhe tem largura. */
+@media (min-width: 1280px) {
+  .projeto-colunas {
+    display: grid;
+    grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+    gap: 24px;
+    align-items: start;
+  }
+}

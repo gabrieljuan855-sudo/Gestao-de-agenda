@@ -45,7 +45,7 @@ export default function PeriodBar({ view, onChangeView, reference, onPrev, onNex
 
       <div className="period-label">{label(view, reference)}</div>
 
-      {!isToday(reference) && <button onClick={onToday}>Hoje</button>}
+      {!isToday(reference) && <button className="period-hoje" onClick={onToday}>Hoje</button>}
     </div>
   )
 }

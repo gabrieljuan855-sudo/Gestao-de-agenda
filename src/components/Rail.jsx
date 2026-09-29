@@ -1,37 +1,44 @@
 import { useEffect, useRef } from 'react'
 
-// O trilho: três botões redondos na lateral que viram um painel com a
-// ferramenta inteira. Ganha espaço na tela — adicionar, cronometrar e anotar
-// são coisas que a gente faz de vez em quando, não o tempo todo, então não
-// precisam ocupar a página enquanto estão paradas.
+// O trilho: as ferramentas que se usam de vez em quando (criar, buscar,
+// anotar, abrir um projeto). No computador é a barra de navegação do MD3,
+// colada na borda esquerda com ícone e nome; no celular vira a barra
+// flutuante de ícones no rodapé (ver CSS).
 //
-// O painel só abre no clique, em qualquer dispositivo. A primeira versão
-// abria no hover também: passar o mouse perto do trilho já estourava o
-// painel por cima da lista de tarefas, sem transição nenhuma — um "pulinho"
-// a cada vez que o cursor cruzava aquele canto da tela. O hover agora só
-// expande o rótulo da pílula (efeito puramente em CSS, via :hover), que é
-// a prévia que ele deveria ser desde o início.
+// Dois tipos de painel: o das ferramentas rápidas (Criar, Buscar) abre como
+// um cartão ao lado da barra; o largo (Anotações, Projetos) é uma tela
+// sobreposta, com fundo escurecido — conteúdo longo pede a tela, não um
+// balão por cima da agenda.
+//
 // `openId`/`onOpenChange` vêm de fora (App.jsx) porque os atalhos de teclado
 // também abrem e fecham estes painéis — com o estado preso aqui dentro, não
 // havia como um atalho alcançá-lo.
 export default function Rail({ tools, openId, onOpenChange }) {
   const wrapRef = useRef(null)
   const setOpenId = onOpenChange
+  const open = tools.find((t) => t.id === openId) || null
 
   useEffect(() => {
-    if (!openId) return
+    if (!open) return
     function onKey(e) {
-      if (e.key === 'Escape') close()
+      // Um diálogo aberto por cima (editar a tarefa de um projeto, confirmar
+      // exclusão) é quem responde ao Esc — fechar o painel de baixo junto
+      // jogava fora a tela onde a pessoa estava.
+      if (e.key === 'Escape' && !document.querySelector('.modal-backdrop')) close()
     }
     function onPointerDown(e) {
       if (wrapRef.current && !wrapRef.current.contains(e.target)) close()
     }
     window.addEventListener('keydown', onKey)
-    window.addEventListener('pointerdown', onPointerDown)
+    // A tela sobreposta abre editores de tarefa e de compromisso, que moram
+    // fora do trilho. Fechar no clique de fora derrubava a tela inteira a
+    // cada clique nesses editores — ela fecha pelo X, pelo Esc ou pelo fundo.
+    if (!open.wide) window.addEventListener('pointerdown', onPointerDown)
     return () => {
       window.removeEventListener('keydown', onKey)
       window.removeEventListener('pointerdown', onPointerDown)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openId])
 
   function close() {
@@ -42,13 +49,11 @@ export default function Rail({ tools, openId, onOpenChange }) {
     setOpenId(openId === id ? null : id)
   }
 
-  const open = tools.find((t) => t.id === openId) || null
-
   return (
     // No celular o painel aberto vira tela cheia e a barra sai de cena; a
     // classe é o que diz isso ao CSS.
-    <div className={`rail-wrap${open ? " tem-painel" : ""}`} ref={wrapRef}>
-      <div className="rail">
+    <div className={`rail-wrap${open ? ' tem-painel' : ''}`} ref={wrapRef}>
+      <nav className="rail" aria-label="Ferramentas">
         {tools.map((tool) => (
           <button
             key={tool.id}
@@ -57,25 +62,25 @@ export default function Rail({ tools, openId, onOpenChange }) {
             onClick={() => handleClick(tool.id)}
             aria-expanded={openId === tool.id}
             aria-label={tool.label}
+            title={tool.tecla ? `${tool.label} (${tool.tecla.toUpperCase()})` : tool.label}
           >
-            {/* Sem `title`: o tooltip nativo do navegador aparecia por cima
-                desta pílula, repetindo o mesmo nome duas vezes. A tecla de
-                atalho entra aqui dentro, que é onde dá para estilizar. */}
-            <span className="rail-btn-label">
-              {tool.label}
-              {tool.tecla && <kbd className="rail-btn-tecla">{tool.tecla.toUpperCase()}</kbd>}
-            </span>
             <span className="rail-btn-icon">{tool.icon}</span>
-            {/* O contador fica no ícone, e não no rótulo, porque o rótulo só
-                aparece no hover — e um número que só aparece quando se passa
-                o mouse não serve para lembrar de nada. */}
+            <span className="rail-btn-label">{tool.label}</span>
             {tool.badge > 0 && <span className="rail-btn-badge">{tool.badge > 99 ? '99+' : tool.badge}</span>}
           </button>
         ))}
-      </div>
+      </nav>
+
+      {/* O fundo escurecido é o que faz do painel largo uma tela à parte, e
+          não um balão sobre a agenda: clicar nele fecha, como num diálogo. */}
+      {open?.wide && <div className="rail-scrim" onClick={close} aria-hidden="true" />}
 
       {open && (
-        <div className={`rail-panel card${open.wide ? ' is-wide' : ''}`}>
+        <div
+          className={`rail-panel card${open.wide ? ' is-wide' : ''}`}
+          role={open.wide ? 'dialog' : undefined}
+          aria-label={open.label}
+        >
           <div className="rail-panel-head">
             <strong>{open.label}</strong>
             <button type="button" className="rail-close" onClick={close} aria-label="Fechar">×</button>
