@@ -21,13 +21,18 @@ function quandoDoEvento(event) {
 
 // ---------- Lista ----------
 
-function LinhaDoProjeto({ projeto, onAbrir }) {
+function LinhaDoProjeto({ projeto, onAbrir, selecionado }) {
   const partes = []
   if (projeto.pendentes) partes.push(`${projeto.pendentes} ${projeto.pendentes === 1 ? 'tarefa' : 'tarefas'}`)
   if (projeto.anotacoes) partes.push(`${projeto.anotacoes} ${projeto.anotacoes === 1 ? 'anotação' : 'anotações'}`)
   if (projeto.prazo) partes.push(`prazo ${dataCurta(projeto.prazo)}`)
   return (
-    <button type="button" className="projeto-linha" onClick={() => onAbrir(projeto.id)}>
+    <button
+      type="button"
+      className={`projeto-linha${selecionado ? ' is-selecionado' : ''}`}
+      aria-current={selecionado ? 'true' : undefined}
+      onClick={() => onAbrir(projeto.id)}
+    >
       <span className="projeto-linha-topo">
         <span className="projeto-linha-nome">{projeto.nome}</span>
         {projeto.semProximaAcao && <span className="pill projeto-pill-parado">sem próxima ação</span>}
@@ -43,7 +48,7 @@ function LinhaDoProjeto({ projeto, onAbrir }) {
   )
 }
 
-function ListaDeProjetos({ lista, onAbrir, onCriar }) {
+function ListaDeProjetos({ lista, onAbrir, onCriar, abertoId }) {
   const [nome, setNome] = useState('')
   const porSituacao = (s) => lista.filter((p) => p.situacao === s)
   const concluidos = porSituacao('concluido')
@@ -77,7 +82,9 @@ function ListaDeProjetos({ lista, onAbrir, onCriar }) {
           <section key={s}>
             <h3 className="projetos-secao">{s === 'ativo' ? 'Ativos' : 'Pausados'}</h3>
             <div className="projetos-lista">
-              {porSituacao(s).map((p) => <LinhaDoProjeto key={p.id} projeto={p} onAbrir={onAbrir} />)}
+              {porSituacao(s).map((p) => (
+                <LinhaDoProjeto key={p.id} projeto={p} onAbrir={onAbrir} selecionado={p.id === abertoId} />
+              ))}
             </div>
           </section>
         ) : null
@@ -89,7 +96,9 @@ function ListaDeProjetos({ lista, onAbrir, onCriar }) {
         <details className="projetos-concluidos">
           <summary className="projetos-secao">Concluídos ({concluidos.length})</summary>
           <div className="projetos-lista">
-            {concluidos.map((p) => <LinhaDoProjeto key={p.id} projeto={p} onAbrir={onAbrir} />)}
+            {concluidos.map((p) => (
+              <LinhaDoProjeto key={p.id} projeto={p} onAbrir={onAbrir} selecionado={p.id === abertoId} />
+            ))}
           </div>
         </details>
       )}
@@ -371,14 +380,22 @@ function PaginaDoProjeto({
   const [versaoEventos, setVersaoEventos] = useState(0)
 
   return (
-    <div className="projetos">
+    <div className="projetos projeto-pagina">
       <div className="projeto-topo">
-        <button type="button" onClick={onVoltar} aria-label="Voltar para a lista de projetos">
+        {/* Só no celular: no computador a lista fica ao lado e já é o caminho
+            de volta. */}
+        <button type="button" className="projeto-voltar" onClick={onVoltar} aria-label="Voltar para a lista de projetos">
           ← Projetos
         </button>
         <h2 className="t-headline projeto-titulo">{projeto.nome}</h2>
+        {projeto.resultado && <p className="muted projeto-resultado">{projeto.resultado}</p>}
       </div>
 
+      {/* Duas colunas quando há largura: o que se faz (ação, tarefas,
+          agenda) à esquerda, o que se consulta (anotações e ficha) à
+          direita. No celular as duas empilham na mesma ordem. */}
+      <div className="projeto-colunas">
+      <div className="projeto-coluna">
       {projeto.semProximaAcao && (
         <Banner tone="warning">Nenhuma próxima ação: este projeto parou de andar. Qual é o próximo passo concreto?</Banner>
       )}
@@ -422,6 +439,18 @@ function PaginaDoProjeto({
       </section>
 
       <section>
+        <h3 className="projetos-secao">Compromissos</h3>
+        <Compromissos
+          projetoId={projeto.id}
+          buscarEventos={buscarEventos}
+          onEditarEvento={onEditarEvento}
+          versao={versaoEventos}
+        />
+      </section>
+      </div>
+
+      <div className="projeto-coluna">
+      <section>
         <div className="projeto-secao-cabeca">
           <h3 className="projetos-secao">Anotações</h3>
           <button type="button" onClick={() => onNovaNota(projeto.id)}>Nova anotação</button>
@@ -441,25 +470,20 @@ function PaginaDoProjeto({
       </section>
 
       <section>
-        <h3 className="projetos-secao">Compromissos</h3>
-        <Compromissos
-          projetoId={projeto.id}
-          buscarEventos={buscarEventos}
-          onEditarEvento={onEditarEvento}
-          versao={versaoEventos}
-        />
-      </section>
-
-      <section>
         <h3 className="projetos-secao">Ficha</h3>
         <Ficha projeto={projeto} onSalvar={onSalvar} />
       </section>
+      </div>
+      </div>
     </div>
   )
 }
 
-// O painel de Projetos: a lista e, ao abrir um, a página dele — um lugar só
-// onde o caso inteiro (tarefas, anotações, compromissos) fica à vista.
+// A tela de Projetos: a lista e a página do projeto aberto — um lugar só
+// onde o caso inteiro (tarefas, anotações, compromissos) fica à vista. Com
+// largura (computador), as duas ficam lado a lado, como uma caixa de e-mail:
+// trocar de projeto é um clique, sem voltar. Sem largura (celular), uma de
+// cada vez — quem decide é o CSS, pela largura da própria tela.
 export default function ProjetosPainel({ lista, projetosState, tasks, notes, ids, ...acoes }) {
   const [abertoId, setAbertoId] = useState(null)
   const aberto = lista.find((p) => p.id === abertoId)
@@ -480,19 +504,29 @@ export default function ProjetosPainel({ lista, projetosState, tasks, notes, ids
           {projetosState.error}
         </Banner>
       )}
-      {aberto ? (
-        <PaginaDoProjeto
-          projeto={aberto}
-          tasks={tasks}
-          notes={notes}
-          ids={ids}
-          onVoltar={() => setAbertoId(null)}
-          onSalvar={projetosState.salvarProjeto}
-          {...acoes}
-        />
-      ) : (
-        <ListaDeProjetos lista={lista} onAbrir={setAbertoId} onCriar={criar} />
-      )}
+      <div className={`projetos-tela${aberto ? ' tem-aberto' : ''}`}>
+        <div className="projetos-mestre">
+          <ListaDeProjetos lista={lista} onAbrir={setAbertoId} onCriar={criar} abertoId={aberto?.id} />
+        </div>
+        <div className="projetos-detalhe">
+          {aberto ? (
+            <PaginaDoProjeto
+              key={aberto.id}
+              projeto={aberto}
+              tasks={tasks}
+              notes={notes}
+              ids={ids}
+              onVoltar={() => setAbertoId(null)}
+              onSalvar={projetosState.salvarProjeto}
+              {...acoes}
+            />
+          ) : (
+            <div className="projetos-vazio muted">
+              {lista.length > 0 ? 'Escolha um projeto na lista para ver tudo o que ele tem.' : 'Crie o primeiro projeto ao lado.'}
+            </div>
+          )}
+        </div>
+      </div>
     </>
   )
 }
