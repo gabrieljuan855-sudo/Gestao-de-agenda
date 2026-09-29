@@ -2,6 +2,9 @@ import { startOfMonth, startOfWeek, addDays, isToday, formatTime, formatDuration
 import { eventsOfDay, isAllDay, eventStart, busyMinutesOn, tasksDueOn } from '../lib/events.js'
 import { isWorkday } from '../lib/schedule.js'
 import { corDaAgenda } from '../lib/corDaAgenda.js'
+import { useRef } from 'react'
+import useAltura from '../lib/useAltura.js'
+import { quantosCabem } from '../lib/capacidade.js'
 
 const WEEKDAYS = ['seg', 'ter', 'qua', 'qui', 'sex', 'sáb', 'dom']
 const MAX_CHIPS = 3
@@ -26,6 +29,16 @@ export default function MonthView({
   declined = () => false,
 }) {
   const cells = buildGrid(reference)
+  // Com a grade esticada até o fim da tela, cada célula tem espaço para mais
+  // do que três compromissos: a altura real de uma linha decide o limite.
+  const gradeRef = useRef(null)
+  const alturaDaGrade = useAltura(gradeRef)
+  const limite = quantosCabem(alturaDaGrade / (cells.length / 7), {
+    alturaItem: 17,
+    reservado: 44,
+    minimo: MAX_CHIPS,
+    maximo: 12,
+  })
   const month = reference.getMonth()
   const monthMinutes = cells
     .filter((day) => day.getMonth() === month)
@@ -43,7 +56,7 @@ export default function MonthView({
         ))}
       </div>
 
-      <div className="month-grid" style={{ gridTemplateRows: `repeat(${cells.length / 7}, minmax(84px, auto))` }}>
+      <div className="month-grid" ref={gradeRef} style={{ gridTemplateRows: `repeat(${cells.length / 7}, minmax(84px, 1fr))` }}>
         {cells.map((day) => {
           const dayEvents = eventsOfDay(events, day)
           const dueToday = tasksDueOn(tasks, day)
@@ -54,8 +67,8 @@ export default function MonthView({
           // o mesmo limite, em vez de virar uma seção à parte que estouraria
           // a altura da célula.
           const total = dayEvents.length + dueToday.length
-          const shownEvents = dayEvents.slice(0, MAX_CHIPS)
-          const shownTasks = dueToday.slice(0, Math.max(0, MAX_CHIPS - shownEvents.length))
+          const shownEvents = dayEvents.slice(0, limite)
+          const shownTasks = dueToday.slice(0, Math.max(0, limite - shownEvents.length))
 
           return (
             <div
@@ -106,8 +119,8 @@ export default function MonthView({
                     <span className="month-chip-text">prazo: {task.title}</span>
                   </div>
                 ))}
-                {total > MAX_CHIPS && (
-                  <div className="month-more">+{total - MAX_CHIPS}</div>
+                {total > limite && (
+                  <div className="month-more">+{total - limite}</div>
                 )}
               </div>
             </div>
