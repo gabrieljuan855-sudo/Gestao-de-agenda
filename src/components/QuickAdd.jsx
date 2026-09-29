@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { parseQuickAdd, decidirDestino, descreverQuando } from '../lib/nlp.js'
 import { toDateInput } from '../lib/dates.js'
-import { findDefaultCalendar } from '../lib/defaults.js'
+import { findDefaultCalendar, acharAgendaNoTexto } from '../lib/defaults.js'
 import { PRIORITY_LABEL } from '../lib/priority.js'
 import { construirRecorrencia, REPETICOES } from '../lib/recorrencia.js'
 
@@ -59,6 +59,9 @@ export default function QuickAdd({
   // pulado a Entrada".
   const [confirmacao, setConfirmacao] = useState(null)
   const [desfazendo, setDesfazendo] = useState(false)
+  // A agenda escolhida à mão nos chips. Enquanto for null, vale o palpite:
+  // a agenda citada no texto ("Imersão AEPETI") ou, sem nenhuma, a padrão.
+  const [agendaEscolhida, setAgendaEscolhida] = useState(null)
   const inputRef = useRef(null)
 
   function handleChange(value) {
@@ -70,6 +73,12 @@ export default function QuickAdd({
   }
 
   const destino = decidirDestino(preview)
+  const agendaDoCompromisso =
+    calendars.find((c) => c.id === agendaEscolhida) ||
+    acharAgendaNoTexto(text, calendars) ||
+    findDefaultCalendar(calendars) ||
+    calendars[0] ||
+    null
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -80,8 +89,7 @@ export default function QuickAdd({
     setConfirmacao(null)
     try {
       if (destino === 'evento') {
-        const calendario = findDefaultCalendar(calendars) || calendars[0]
-        const calendarId = calendario?.id || 'primary'
+        const calendarId = agendaDoCompromisso?.id || 'primary'
         const recurrence = preview.recorrencia ? construirRecorrencia(preview.recorrencia, preview.start) : undefined
         const criado = await onCreateEvent({
           title: preview.title,
@@ -93,7 +101,7 @@ export default function QuickAdd({
         })
         const repeticao = preview.recorrencia ? `, ${REPETICAO_LABEL[preview.recorrencia]}` : ''
         setConfirmacao({
-          resumo: `✓ Compromisso "${preview.title}", ${descreverQuando(preview)}${repeticao}.`,
+          resumo: `✓ Compromisso "${preview.title}", ${descreverQuando(preview)}${repeticao}${agendaDoCompromisso ? ` — agenda ${agendaDoCompromisso.summaryOverride || agendaDoCompromisso.summary}` : ''}.`,
           desfazer: () => onDesfazerEvento({ id: criado.id, calendarId }),
           textoOriginal: limpo,
         })
@@ -117,6 +125,7 @@ export default function QuickAdd({
       }
       setText('')
       setPreview(null)
+      setAgendaEscolhida(null)
       // O campo continua aberto e com o cursor dentro: esvaziar a cabeça
       // costuma vir em rajada, uma coisa puxando a outra.
       inputRef.current?.focus()
@@ -169,6 +178,31 @@ export default function QuickAdd({
         onChange={(e) => handleChange(e.target.value)}
         style={{ width: '100%' }}
       />
+
+      {/* Em qual agenda o compromisso vai cair, à vista e trocável com um
+          toque: antes ia sempre para a padrão, e mudar exigia abrir o
+          compromisso depois de criado. Chips de seleção do MD3 — escolher um
+          entre vários —, só quando há mais de uma agenda onde gravar. */}
+      {destino === 'evento' && calendars.length > 1 && (
+        <div className="quickadd-agendas" role="radiogroup" aria-label="Agenda">
+          {calendars.map((cal) => (
+            <button
+              key={cal.id}
+              type="button"
+              role="radio"
+              aria-checked={agendaDoCompromisso?.id === cal.id}
+              className={`pill pill-filtro${agendaDoCompromisso?.id === cal.id ? ' is-escolhido' : ''}`}
+              onClick={() => {
+                setAgendaEscolhida(cal.id)
+                inputRef.current?.focus()
+              }}
+            >
+              <span className="quickadd-agenda-cor" style={{ background: cal.backgroundColor || 'var(--accent)' }} />
+              {cal.summaryOverride || cal.summary}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* A dica só aparece quando o Enter vai fazer mais que capturar — é
           o aviso de que o texto vai pular a Entrada, para não surpreender. */}

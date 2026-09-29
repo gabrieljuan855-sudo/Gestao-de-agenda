@@ -2368,3 +2368,8 @@ button.danger:hover { background: var(--urgent-bg); }
   font-size: var(--body-sm);
   color: var(--on-surface);
 }
+
+/* As agendas onde o compromisso pode cair, no Criar. */
+.quickadd-agendas { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.quickadd-agendas .pill-filtro { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; min-height: 0; }
+.quickadd-agenda-cor { width: 8px; height: 8px; border-radius: var(--shape-full); flex-shrink: 0; }

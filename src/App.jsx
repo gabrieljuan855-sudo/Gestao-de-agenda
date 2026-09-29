@@ -32,7 +32,7 @@ import { lerCacheDeAgenda, gravarCacheDeAgenda } from './lib/agendaCache.js'
 import { parseQuickAdd, decidirDestino } from './lib/nlp.js'
 import { construirRecorrencia } from './lib/recorrencia.js'
 import { rangeForView, shiftReference, isSameDay, toDateInput, fromInputs } from './lib/dates.js'
-import { findDefaultCalendar } from './lib/defaults.js'
+import { findDefaultCalendar, acharAgendaNoTexto } from './lib/defaults.js'
 import QuickAdd from './components/QuickAdd.jsx'
 import Logo from './components/Logo.jsx'
 import Rail from './components/Rail.jsx'
@@ -384,7 +384,7 @@ export default function App() {
             start: preview.start,
             end: preview.end,
             allDay: preview.allDay,
-            calendarId: (findDefaultCalendar(calendars) || calendars[0])?.id,
+            calendarId: (acharAgendaNoTexto(textoLimpo, calendars) || findDefaultCalendar(calendars) || calendars[0])?.id,
             recurrence: preview.recorrencia ? construirRecorrencia(preview.recorrencia, preview.start) : undefined,
           }).catch(() => handleCapture({ texto: textoLimpo, due: null }))
         : handleCapture({ texto: textoLimpo, due: preview.type === 'task' ? preview.due : null })
