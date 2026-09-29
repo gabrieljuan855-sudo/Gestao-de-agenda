@@ -29,7 +29,8 @@ import {
 } from './lib/gtd.js'
 import { enfileirar, descarregar, quantasPendentes } from './lib/outbox.js'
 import { lerCacheDeAgenda, gravarCacheDeAgenda } from './lib/agendaCache.js'
-import { parseQuickAdd } from './lib/nlp.js'
+import { parseQuickAdd, decidirDestino } from './lib/nlp.js'
+import { construirRecorrencia } from './lib/recorrencia.js'
 import { rangeForView, shiftReference, isSameDay, toDateInput, fromInputs } from './lib/dates.js'
 import { findDefaultCalendar } from './lib/defaults.js'
 import QuickAdd from './components/QuickAdd.jsx'
@@ -44,6 +45,7 @@ import Entrada from './components/Entrada.jsx'
 import Aguardando from './components/Aguardando.jsx'
 import ProjetosPainel from './components/ProjetosPainel.jsx'
 import useProjetos from './lib/useProjetos.js'
+import useNovaVersao from './lib/useNovaVersao.js'
 import { listarProjetos } from './lib/projetos.js'
 import Trabalho from './components/Trabalho.jsx'
 import HorarioTrabalho from './components/HorarioTrabalho.jsx'
@@ -368,14 +370,26 @@ export default function App() {
     // não pode capturar a mesma coisa de novo.
     window.history.replaceState({}, '', window.location.pathname)
     const textoLimpo = texto.trim()
-    // Mesmo reconhecimento de data do QuickAdd: "atualizar PLANCOM amanhã"
-    // vindo de um Atalho do iOS também vira prazo, não só quando digitado
-    // dentro do app. Um evento (dia+hora certos) não faz sentido aqui — a
-    // captura por URL sempre vira tarefa, então só a data importa.
+    // Mesmo entendimento do Criar: "atualizar PLANCOM amanhã" vira prazo, e
+    // um compromisso ("reunião sexta 14h", "22/10 dia inteiro", "férias 20 a
+    // 31/10") vai direto para a agenda. Antes a captura por link sempre
+    // virava tarefa na Entrada, até quando o texto dizia com todas as letras
+    // que era um compromisso. Se a agenda falhar (sem rede), cai na Entrada
+    // como sempre — capturar não pode perder nada.
     const preview = parseQuickAdd(textoLimpo)
-    handleCapture({ texto: textoLimpo, due: preview.type === 'task' ? preview.due : null })
-      .then(() => setCapturaDaUrl(textoLimpo))
-      .catch(() => setCapturaDaUrl(textoLimpo))
+    const gravar =
+      decidirDestino(preview) === 'evento'
+        ? handleCreateEvent({
+            title: preview.title,
+            start: preview.start,
+            end: preview.end,
+            allDay: preview.allDay,
+            calendarId: (findDefaultCalendar(calendars) || calendars[0])?.id,
+            recurrence: preview.recorrencia ? construirRecorrencia(preview.recorrencia, preview.start) : undefined,
+          }).catch(() => handleCapture({ texto: textoLimpo, due: null }))
+        : handleCapture({ texto: textoLimpo, due: preview.type === 'task' ? preview.due : null })
+    gravar.then(() => setCapturaDaUrl(textoLimpo)).catch(() => setCapturaDaUrl(textoLimpo))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [signedIn, entradaId, handleCapture])
 
   function openDay(day) {
@@ -392,6 +406,7 @@ export default function App() {
   })
   const notesState = useNotes({ signedIn })
   const projetosState = useProjetos({ signedIn })
+  const novaVersao = useNovaVersao()
   // Qual painel do trilho está aberto. Mora aqui, e não dentro do Rail, porque
   // os atalhos de teclado também precisam abrir e fechar esses painéis.
   const [railAberto, setRailAberto] = useState(null)
@@ -625,12 +640,14 @@ export default function App() {
 
   // Virou compromisso: entra no calendário e sai das listas. O calendário só
   // recebe o que tem hora marcada de verdade — é o que o mantém confiável.
-  async function handleAgendarDaEntrada(item, { titulo, start }) {
+  async function handleAgendarDaEntrada(item, { titulo, start, end, allDay = false }) {
     const calendario = findDefaultCalendar(calendars) || calendars[0]
     await createEvent({
       title: titulo,
       start,
-      end: new Date(start.getTime() + 60 * 60000),
+      // Dia inteiro: `end` é o último dia (inclusive); createEvent converte.
+      end: allDay ? end : new Date(start.getTime() + 60 * 60000),
+      allDay,
       calendarId: calendario?.id || 'primary',
     })
     await deleteTask(item)
@@ -1129,9 +1146,15 @@ export default function App() {
 
       <FocusOverlay focus={focus} onCompleteTask={handleCompleteTask} />
 
+      {novaVersao && (
+        <Banner tone="info" actionLabel="Atualizar" onAction={() => window.location.reload()}>
+          Há uma versão nova do app publicada. Atualize para usar as últimas melhorias.
+        </Banner>
+      )}
+
       {capturaDaUrl && (
         <Banner tone="info" actionLabel="Entendi" onAction={() => setCapturaDaUrl(null)}>
-          Guardado na Entrada: "{capturaDaUrl}"
+          Capturado: "{capturaDaUrl}"
         </Banner>
       )}
 

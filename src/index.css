@@ -2359,3 +2359,12 @@ button.danger:hover { background: var(--urgent-bg); }
     align-items: start;
   }
 }
+
+.entrada-dia-inteiro {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: var(--body-sm);
+  color: var(--on-surface);
+}
