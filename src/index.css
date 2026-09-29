@@ -2373,3 +2373,33 @@ button.danger:hover { background: var(--urgent-bg); }
 .quickadd-agendas { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .quickadd-agendas .pill-filtro { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; min-height: 0; }
 .quickadd-agenda-cor { width: 8px; height: 8px; border-radius: var(--shape-full); flex-shrink: 0; }
+
+/* Arquivos vinculados ao projeto: a linha inteira abre o arquivo; o × só
+   desfaz o vínculo. */
+.projeto-arquivos { display: flex; flex-direction: column; gap: 6px; }
+.projeto-arquivo {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--shape-sm);
+  background: var(--surface-raised);
+  padding-right: 4px;
+}
+.projeto-arquivo-link {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  color: var(--on-surface);
+  text-decoration: none;
+  border-radius: var(--shape-sm);
+}
+.projeto-arquivo-link:hover { background: color-mix(in srgb, var(--on-surface) var(--state-hover), transparent); }
+.projeto-arquivo-link svg { flex-shrink: 0; color: var(--primary); }
+.projeto-arquivo-texto { display: flex; flex-direction: column; min-width: 0; }
+.projeto-arquivo-nome { font-size: var(--body-md); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.projeto-arquivo-novo { display: flex; flex-wrap: wrap; gap: 6px; }
+.projeto-arquivo-novo input { flex: 1 1 140px; min-width: 0; }

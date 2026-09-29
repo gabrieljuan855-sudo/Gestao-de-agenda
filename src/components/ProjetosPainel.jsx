@@ -6,7 +6,15 @@ import { dateOnlyFromISO, addDays } from '../lib/dates.js'
 import { eventStart, isAllDay } from '../lib/events.js'
 import { parseQuickAdd, descreverQuando } from '../lib/nlp.js'
 import { construirRecorrencia } from '../lib/recorrencia.js'
-import { SITUACOES, PROJETO_PROP, novoProjeto, tarefasDoProjeto, eventoDoProjeto } from '../lib/projetos.js'
+import {
+  SITUACOES,
+  PROJETO_PROP,
+  novoProjeto,
+  tarefasDoProjeto,
+  eventoDoProjeto,
+  tipoDeArquivo,
+  vincularArquivo,
+} from '../lib/projetos.js'
 
 function dataCurta(valor) {
   return dateOnlyFromISO(valor).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })
@@ -25,6 +33,8 @@ function LinhaDoProjeto({ projeto, onAbrir, selecionado }) {
   const partes = []
   if (projeto.pendentes) partes.push(`${projeto.pendentes} ${projeto.pendentes === 1 ? 'tarefa' : 'tarefas'}`)
   if (projeto.anotacoes) partes.push(`${projeto.anotacoes} ${projeto.anotacoes === 1 ? 'anotação' : 'anotações'}`)
+  const nArquivos = projeto.arquivos?.length || 0
+  if (nArquivos) partes.push(`${nArquivos} ${nArquivos === 1 ? 'arquivo' : 'arquivos'}`)
   if (projeto.prazo) partes.push(`prazo ${dataCurta(projeto.prazo)}`)
   return (
     <button
@@ -175,6 +185,79 @@ function Ficha({ projeto, onSalvar }) {
         <button type="submit" className="primary" disabled={!mudou}>Salvar ficha</button>
       </div>
     </form>
+  )
+}
+
+// Ícone por tipo, para achar "a planilha" ou "o PDF" de olho numa lista longa.
+const ICONE_DO_TIPO = {
+  doc: 'M6 3h9l5 5v13H6zM14 3v6h6M9 13h8M9 17h6',
+  planilha: 'M5 4h14v16H5zM5 10h14M5 15h14M10 4v16',
+  apresentacao: 'M4 5h16v11H4zM12 16v4M8 20h8',
+  formulario: 'M6 3h12v18H6zM9 8h6M9 12h6M9 16h4',
+  pasta: 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z',
+  pdf: 'M6 3h9l5 5v13H6zM14 3v6h6M9 15h6',
+  drive: 'M6 3h9l5 5v13H6zM14 3v6h6',
+  link: 'M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1',
+}
+
+// Os arquivos do caso ficam onde já estão (Drive, sistema, site): aqui o
+// projeto guarda o link, para tudo o que é dele estar a um clique.
+function Arquivos({ projeto, onSalvar }) {
+  const [link, setLink] = useState('')
+  const [nome, setNome] = useState('')
+  const [erro, setErro] = useState(null)
+  const arquivos = projeto.arquivos || []
+
+  function vincular(e) {
+    e.preventDefault()
+    const nova = vincularArquivo(arquivos, { url: link, nome })
+    if (!nova) {
+      setErro('Isso não parece um link. Cole o endereço do arquivo (ex.: o "Copiar link" do Drive).')
+      return
+    }
+    onSalvar({ id: projeto.id, arquivos: nova })
+    setLink('')
+    setNome('')
+    setErro(null)
+  }
+
+  function remover(id) {
+    onSalvar({ id: projeto.id, arquivos: arquivos.filter((a) => a.id !== id) })
+  }
+
+  return (
+    <div className="projeto-arquivos">
+      {arquivos.length === 0 && (
+        <p className="muted" style={{ margin: 0 }}>
+          Nenhum arquivo vinculado. Cole o link de um arquivo do Drive, documento, planilha, PDF ou site.
+        </p>
+      )}
+      {arquivos.map((a) => {
+        const { tipo, rotulo } = tipoDeArquivo(a.url)
+        return (
+          <div key={a.id} className="projeto-arquivo">
+            <a href={a.url} target="_blank" rel="noopener noreferrer" className="projeto-arquivo-link" title={a.url}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d={ICONE_DO_TIPO[tipo]} />
+              </svg>
+              <span className="projeto-arquivo-texto">
+                <span className="projeto-arquivo-nome">{a.nome}</span>
+                <span className="projeto-evento-quando">{rotulo}</span>
+              </span>
+            </a>
+            <button type="button" className="icon-btn" aria-label={`Desvincular ${a.nome}`} title="Desvincular (o arquivo em si não é apagado)" onClick={() => remover(a.id)}>
+              ×
+            </button>
+          </div>
+        )
+      })}
+      <form className="projeto-arquivo-novo" onSubmit={vincular}>
+        <input type="text" value={link} onChange={(e) => { setLink(e.target.value); setErro(null) }} placeholder="Link do arquivo" />
+        <input type="text" value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Nome (opcional)" />
+        <button type="submit" disabled={!link.trim()}>Vincular</button>
+      </form>
+      {erro && <div className="form-error">{erro}</div>}
+    </div>
   )
 }
 
@@ -468,6 +551,11 @@ function PaginaDoProjeto({
             ))}
           </div>
         )}
+      </section>
+
+      <section>
+        <h3 className="projetos-secao">Arquivos</h3>
+        <Arquivos projeto={projeto} onSalvar={onSalvar} />
       </section>
 
       <section>
