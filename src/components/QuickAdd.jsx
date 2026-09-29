@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { parseQuickAdd, decidirDestino, descreverQuando } from '../lib/nlp.js'
 import { toDateInput } from '../lib/dates.js'
 import { findDefaultCalendar, acharAgendaNoTexto } from '../lib/defaults.js'
+import SeletorDeAgenda from './SeletorDeAgenda.jsx'
 import { PRIORITY_LABEL } from '../lib/priority.js'
 import { construirRecorrencia, REPETICOES } from '../lib/recorrencia.js'
 
@@ -179,28 +180,20 @@ export default function QuickAdd({
         style={{ width: '100%' }}
       />
 
-      {/* Em qual agenda o compromisso vai cair, à vista e trocável com um
-          toque: antes ia sempre para a padrão, e mudar exigia abrir o
-          compromisso depois de criado. Chips de seleção do MD3 — escolher um
-          entre vários —, só quando há mais de uma agenda onde gravar. */}
+      {/* Em qual agenda o compromisso vai cair, à vista e trocável antes do
+          Enter: antes ia sempre para a padrão, e mudar exigia abrir o
+          compromisso depois de criado. */}
       {destino === 'evento' && calendars.length > 1 && (
-        <div className="quickadd-agendas" role="radiogroup" aria-label="Agenda">
-          {calendars.map((cal) => (
-            <button
-              key={cal.id}
-              type="button"
-              role="radio"
-              aria-checked={agendaDoCompromisso?.id === cal.id}
-              className={`pill pill-filtro${agendaDoCompromisso?.id === cal.id ? ' is-escolhido' : ''}`}
-              onClick={() => {
-                setAgendaEscolhida(cal.id)
-                inputRef.current?.focus()
-              }}
-            >
-              <span className="quickadd-agenda-cor" style={{ background: cal.backgroundColor || 'var(--accent)' }} />
-              {cal.summaryOverride || cal.summary}
-            </button>
-          ))}
+        <div className="quickadd-agendas">
+          <SeletorDeAgenda
+            agendas={calendars}
+            valor={agendaDoCompromisso?.id || null}
+            onChange={(id) => {
+              setAgendaEscolhida(id)
+              inputRef.current?.focus()
+            }}
+            rotulo="Agenda"
+          />
         </div>
       )}
 
