@@ -61,6 +61,7 @@ import DayView from './components/DayView.jsx'
 import WeekView from './components/WeekView.jsx'
 import MonthView from './components/MonthView.jsx'
 import ListaView from './components/ListaView.jsx'
+import SeletorDeAgenda from './components/SeletorDeAgenda.jsx'
 import { filtrarPorAgenda } from './lib/listaAgenda.js'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
 import EventEditor from './components/EventEditor.jsx'
@@ -1112,32 +1113,20 @@ export default function App() {
         <div className="workspace-main">
           {/* `key={view}` reseta o limite de erro ao trocar de aba: um erro na
               Semana não deve continuar bloqueando depois de voltar para o Dia. */}
-          {/* Chips de filtro do MD3: escolher uma agenda entre várias. Só
-              aparece quando há mais de uma agenda para escolher. */}
           {agendasVisiveis.length > 1 && (
-            <div className="filtro-agendas" role="radiogroup" aria-label="Mostrar a agenda">
-              <button
-                type="button"
-                role="radio"
-                aria-checked={!agendaSelecionada}
-                className={`pill pill-filtro${!agendaSelecionada ? ' is-escolhido' : ''}`}
-                onClick={() => setAgendaFiltro(null)}
-              >
-                Todas
-              </button>
-              {agendasVisiveis.map((cal) => (
-                <button
-                  key={cal.id}
-                  type="button"
-                  role="radio"
-                  aria-checked={agendaSelecionada?.id === cal.id}
-                  className={`pill pill-filtro${agendaSelecionada?.id === cal.id ? ' is-escolhido' : ''}`}
-                  onClick={() => setAgendaFiltro(agendaSelecionada?.id === cal.id ? null : cal.id)}
-                >
-                  <span className="quickadd-agenda-cor" style={{ background: cal.backgroundColor || 'var(--accent)' }} />
-                  {cal.summaryOverride || cal.summary}
+            <div className="filtro-agendas">
+              <SeletorDeAgenda
+                agendas={agendasVisiveis}
+                valor={agendaSelecionada?.id || null}
+                onChange={setAgendaFiltro}
+                rotulo="Mostrando"
+                rotuloTodas="Todas as agendas"
+              />
+              {agendaSelecionada && (
+                <button type="button" className="filtro-agendas-limpar" onClick={() => setAgendaFiltro(null)}>
+                  Ver todas
                 </button>
-              ))}
+              )}
             </div>
           )}
 

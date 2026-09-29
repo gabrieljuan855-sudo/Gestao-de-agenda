@@ -2327,6 +2327,23 @@ button.danger:hover { background: var(--urgent-bg); }
   .rail-panel.is-wide .projeto-ficha textarea { min-height: 0; }
 }
 
+/* Computador com janela estreita (notebook pequeno, tela dividida): a barra
+   superior numa linha só espremia tudo — "Boa tarde" quebrava em duas
+   linhas e a data em três. Aqui o período desce para uma linha própria, e as
+   abas do painel encolhem o texto antes de cortar o nome. */
+@media (min-width: 701px) and (max-width: 1200px) {
+  .app-topo { flex-wrap: wrap; row-gap: 10px; }
+  .app-topo .app-head-title { flex: 1; }
+  .app-topo .period-bar { order: 3; flex-basis: 100%; }
+  .period-label { font-size: var(--title-md); }
+  .tab { padding: 0 2px; }
+  .tab-label { font-size: var(--label-sm); }
+}
+
+@media (min-width: 701px) {
+  .period-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+}
+
 /* Projetos lado a lado a partir de onde cabem os dois sem apertar. */
 @media (min-width: 1000px) {
   .projetos-tela {
@@ -2369,10 +2386,8 @@ button.danger:hover { background: var(--urgent-bg); }
   color: var(--on-surface);
 }
 
-/* As agendas onde o compromisso pode cair, no Criar. */
-.quickadd-agendas { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-.quickadd-agendas .pill-filtro { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; min-height: 0; }
-.quickadd-agenda-cor { width: 8px; height: 8px; border-radius: var(--shape-full); flex-shrink: 0; }
+/* A agenda onde o compromisso vai cair, no Criar. */
+.quickadd-agendas { display: flex; margin-top: 8px; }
 
 /* Arquivos vinculados ao projeto: a linha inteira abre o arquivo; o × só
    desfaz o vínculo. */
@@ -2405,8 +2420,56 @@ button.danger:hover { background: var(--urgent-bg); }
 .projeto-arquivo-novo input { flex: 1 1 140px; min-width: 0; }
 
 /* ---------- filtro por agenda e vista Lista ---------- */
-.filtro-agendas { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
-.filtro-agendas .pill-filtro { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; min-height: 0; }
+.filtro-agendas { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.filtro-agendas-limpar {
+  border: none;
+  background: transparent;
+  color: var(--primary);
+  padding: 6px 10px;
+  font-size: var(--body-sm);
+}
+
+/* O seletor de agenda tem cara de chip (pílula, contorno fino) e comporta-
+   mento de <select>: o select transparente cobre o chip inteiro e recebe o
+   clique, o resto é só desenho por cima. */
+.seletor-agenda {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  padding: 6px 12px;
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--shape-full);
+  background: var(--surface-container);
+  color: var(--on-surface);
+  font-size: var(--body-sm);
+  cursor: pointer;
+}
+.seletor-agenda:hover { background: color-mix(in srgb, var(--on-surface) var(--state-hover), var(--surface-container)); }
+.seletor-agenda:focus-within { outline: 2px solid var(--primary); outline-offset: 2px; }
+.seletor-agenda.is-filtrando { border-color: var(--primary); background: var(--primary-container); color: var(--on-primary-container); }
+.seletor-agenda-rotulo { color: var(--on-surface-variant); }
+.seletor-agenda.is-filtrando .seletor-agenda-rotulo { color: inherit; opacity: 0.8; }
+.seletor-agenda-cor { width: 8px; height: 8px; border-radius: var(--shape-full); flex-shrink: 0; }
+.seletor-agenda select {
+  appearance: none;
+  -webkit-appearance: none;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  padding: 0 18px 0 0;
+  margin-right: -18px;
+  min-width: 0;
+  max-width: 260px;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+.seletor-agenda select:focus { outline: none; }
+.seletor-agenda select option { background: var(--surface-container); color: var(--on-surface); font-weight: 400; }
+.seletor-agenda svg { flex-shrink: 0; pointer-events: none; }
 
 .lista-agenda { display: flex; flex-direction: column; gap: 4px; }
 .lista-dia { display: flex; flex-direction: column; gap: 2px; margin-bottom: 10px; }
@@ -2446,6 +2509,4 @@ button.danger:hover { background: var(--urgent-bg); }
 
 @media (max-width: 700px) {
   .lista-item { grid-template-columns: 84px 8px minmax(0, 1fr); padding: 8px 4px; }
-  .filtro-agendas { flex-wrap: nowrap; overflow-x: auto; }
-  .filtro-agendas .pill-filtro { flex-shrink: 0; }
 }
