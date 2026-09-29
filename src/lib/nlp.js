@@ -168,10 +168,95 @@ function recoverTime(text, day) {
   return { date: withTime, text: match[0] }
 }
 
+// ---------- dia inteiro e períodos de vários dias ----------
+//
+// "22/10 Dia inteiro" virava tarefa com prazo: sem hora, o parser só sabia
+// fazer tarefa. Mas férias, viagem, plantão e evento do dia todo são
+// compromissos de agenda, não coisas a fazer — e é assim que a Agenda do
+// Google os guarda (evento de dia inteiro, com data e sem hora).
+
+// "dia inteiro", "o dia todo", "todo o dia". Sai do texto antes da
+// checagem de repetição: "todo o dia" também casa com o "todos os dias" de
+// recorrencia.js, e marcaria um compromisso único como diário.
+const DIA_INTEIRO = /(?<!\p{L})(?:(?:o|todo\s+o)\s+)?dia\s+(?:inteiro|todo)(?!\p{L})|(?<!\p{L})todo\s+o\s+dia(?!\p{L})/iu
+
+// "de 22 a 24/10" e "20-31/10": o mês escrito só no fim vale para os dois
+// dias. O chrono só enxerga "24/10" e perde o começo; reescrito como
+// "22/10 a 24/10", ele passa a ler as duas datas.
+const PERIODO_MES_NO_FIM = /(?<![\d/])(\d{1,2})\s*(a|até|ate|ao|-|–)\s*(\d{1,2})\/(\d{1,2})(\/\d{2,4})?(?![\d/])/giu
+
+function normalizarPeriodo(text) {
+  return text.replace(PERIODO_MES_NO_FIM, (match, d1, conector, d2, mes, ano = '') =>
+    Number(d1) >= 1 && Number(d1) <= 31 ? `${d1}/${mes}${ano} ${conector === '-' || conector === '–' ? 'a' : conector} ${d2}/${mes}${ano}` : match
+  )
+}
+
+// O que pode ligar o primeiro dia ao último: "22/10 a 24/10", "de segunda
+// até quarta", "do dia 5 ao dia 9".
+const CONECTOR_DE_PERIODO = /^\s*(?:a|até|ate|ao|à|-|–)\s*(?:(?:o\s+)?dia\s+)?$/iu
+// A palavra que abre o período ("de 22/10 a 24/10", "entre segunda e...")
+// sai do título junto com as datas.
+const ABERTURA_DE_PERIODO = /(?<!\p{L})(?:de|do|da|entre)(?:\s+dia)?\s*$/iu
+
+function inicioDoDia(date) {
+  const d = new Date(date)
+  d.setHours(0, 0, 0, 0)
+  return d
+}
+
+// Dois resultados do chrono lidos como "de X a Y". Devolve o período e o
+// trecho do texto que ele ocupa (para sair do título), ou null.
+function acharPeriodo(text, results) {
+  // "22 a 24 de outubro": o próprio chrono já entende como intervalo.
+  const comFim = results.find((r) => r.end)
+  if (comFim && !comFim.start.isCertain('hour')) {
+    return { inicio: comFim.start.date(), fim: comFim.end.date(), trecho: comFim.text, indice: comFim.index }
+  }
+  for (let i = 0; i + 1 < results.length; i++) {
+    const a = results[i]
+    const b = results[i + 1]
+    const entre = text.slice(a.index + a.text.length, b.index)
+    if (!CONECTOR_DE_PERIODO.test(entre)) continue
+    if (a.start.isCertain('hour') || b.start.isCertain('hour')) continue
+    let inicio = a.start.date()
+    let fim = b.start.date()
+    // Cada data é resolvida sozinha para a frente: "de segunda a quarta"
+    // escrito numa terça dá a segunda que vem e a quarta de amanhã. O fim
+    // nunca vem antes do começo — dias da semana andam uma semana, datas
+    // com dia e mês andam um ano ("30/12 a 02/01").
+    if (fim < inicio) {
+      const dias = (inicio - fim) / 86400000
+      fim = dias < 7 ? new Date(fim.getTime() + 7 * 86400000) : new Date(fim.setFullYear(fim.getFullYear() + 1))
+    }
+    return { inicio, fim, trecho: text.slice(a.index, b.index + b.text.length), indice: a.index }
+  }
+  return null
+}
+
+function dataCurtaBR(date) {
+  return `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}`
+}
+
+function horaBR(date) {
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+}
+
+// Quando o compromisso acontece, do jeito que se fala: "22/10 às 14:00",
+// "22/10, dia inteiro" ou "de 22/10 a 24/10 (3 dias)". Antes a dica dizia
+// sempre "às HH:MM", o que nem existe num compromisso de dia inteiro.
+export function descreverQuando(preview) {
+  if (!preview.allDay) return `${dataCurtaBR(preview.start)} às ${horaBR(preview.start)}`
+  const dias = Math.round((preview.end - preview.start) / 86400000) + 1
+  if (dias <= 1) return `${dataCurtaBR(preview.start)}, dia inteiro`
+  return `de ${dataCurtaBR(preview.start)} a ${dataCurtaBR(preview.end)} (${dias} dias)`
+}
+
 // Analisa um texto digitado em linguagem natural (pt-BR) e devolve
 // uma estrutura pronta para virar evento (Calendar) ou tarefa (Tasks).
 export function parseQuickAdd(rawText, referenceDate = new Date()) {
-  const { contexto, projeto, semTags } = extrairTags(rawText)
+  const { contexto, projeto, semTags: comMarcaDeDiaInteiro } = extrairTags(rawText)
+  const diaInteiro = DIA_INTEIRO.test(comMarcaDeDiaInteiro)
+  const semTags = comMarcaDeDiaInteiro.replace(DIA_INTEIRO, ' ')
   const recorrencia = detectarRecorrencia(semTags)
   const duration = detectDuration(semTags)
   // A duração sai do texto antes da data para "por 2 horas" não virar horário.
@@ -179,13 +264,40 @@ export function parseQuickAdd(rawText, referenceDate = new Date()) {
   // O "toda"/"todo" antes do dia da semana sai agora, para o chrono continuar
   // vendo "segunda às 14h" normalmente — sem essa etapa, "toda" ficaria como
   // ruído solto no título depois que o chrono consome só o dia e a hora.
-  const text = normalizeDayOfMonth(normalizeTimes(withoutDuration), referenceDate).replace(
+  // O período é reescrito antes do "dia N": em "dia 22 a 24/10" o 22 já
+  // precisa ter ganhado o mês do fim, senão viraria dia 22 do mês atual.
+  const text = normalizeDayOfMonth(normalizarPeriodo(normalizeTimes(withoutDuration)), referenceDate).replace(
     RECORRENCIA_PREFIXO_DIA,
     ''
   )
 
   const results = chrono.pt.parse(text, referenceDate, { forwardDate: true })
   const priority = detectPriority(rawText)
+
+  // Vários dias seguidos, ou um dia marcado como inteiro: compromisso de dia
+  // inteiro na agenda. `end` é o último dia (inclusive) — quem grava no
+  // Google converte para o fim exclusivo que a API pede.
+  const periodo = acharPeriodo(text, results)
+  if (periodo || (diaInteiro && !results.some((r) => r.start.isCertain('hour') && !r.start.isCertain('day')))) {
+    const antes = periodo ? text.slice(0, periodo.indice).replace(ABERTURA_DE_PERIODO, ' ') : null
+    const semPeriodo = periodo
+      ? `${antes} ${text.slice(periodo.indice + periodo.trecho.length)}`
+      : text
+    const unico = periodo ? null : results.find((r) => r.start.isCertain('day')) || results[0]
+    const inicio = inicioDoDia(periodo ? periodo.inicio : unico ? unico.start.date() : referenceDate)
+    const fim = inicioDoDia(periodo ? periodo.fim : inicio)
+    const titulo = cleanTitle(semPeriodo, unico?.text, text.match(LEFTOVER_CLOCK)?.[0])
+    return {
+      type: 'event',
+      allDay: true,
+      title: (recorrencia ? titulo.replace(RECORRENCIA_RUIDO, ' ').replace(/\s{2,}/g, ' ').trim() : titulo) || 'Compromisso',
+      priority,
+      recorrencia,
+      start: inicio,
+      end: fim,
+      durationMinutes: null,
+    }
+  }
 
   if (results.length === 0) {
     return {

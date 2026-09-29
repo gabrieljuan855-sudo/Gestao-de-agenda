@@ -249,6 +249,7 @@ export async function createEvent({
   calendarId = 'primary',
   extendedProperties,
   criarVideochamada,
+  allDay = false,
 }) {
   // conferenceDataVersion=1 é o que permite o Google criar o Meet: sem esse
   // parâmetro na URL, a API ignora silenciosamente o campo conferenceData
@@ -260,8 +261,11 @@ export async function createEvent({
       summary: title,
       description,
       location,
-      start: { dateTime: start.toISOString() },
-      end: { dateTime: end.toISOString() },
+      // Dia inteiro é data sem hora, e o fim do Google é exclusivo: quem pede
+      // "de 22 a 24" grava fim 25 — mesma regra de updateEvent.
+      ...(allDay
+        ? { start: { date: toDateInput(start) }, end: { date: toDateInput(addDays(end, 1)) } }
+        : { start: { dateTime: start.toISOString() }, end: { dateTime: end.toISOString() } }),
       ...(recurrence ? { recurrence } : {}),
       ...(extendedProperties ? { extendedProperties } : {}),
       ...(criarVideochamada

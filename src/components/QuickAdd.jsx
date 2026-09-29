@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { parseQuickAdd, decidirDestino } from '../lib/nlp.js'
-import { toTimeInput, toDateInput } from '../lib/dates.js'
+import { parseQuickAdd, decidirDestino, descreverQuando } from '../lib/nlp.js'
+import { toDateInput } from '../lib/dates.js'
 import { findDefaultCalendar } from '../lib/defaults.js'
 import { PRIORITY_LABEL } from '../lib/priority.js'
 import { construirRecorrencia, REPETICOES } from '../lib/recorrencia.js'
@@ -24,7 +24,7 @@ function formatarDataBR(date) {
 function descreverDestino(destino, preview) {
   if (destino === 'evento') {
     const repeticao = preview.recorrencia ? `, ${REPETICAO_LABEL[preview.recorrencia]}` : ''
-    return `Enter agenda: ${formatarDataBR(preview.start)} às ${toTimeInput(preview.start)}${repeticao}`
+    return `Enter agenda: ${descreverQuando(preview)}${repeticao}`
   }
   if (destino === 'tarefa') {
     const partes = []
@@ -89,10 +89,11 @@ export default function QuickAdd({
           end: preview.end,
           calendarId,
           recurrence,
+          allDay: preview.allDay,
         })
         const repeticao = preview.recorrencia ? `, ${REPETICAO_LABEL[preview.recorrencia]}` : ''
         setConfirmacao({
-          resumo: `✓ Compromisso "${preview.title}" em ${formatarDataBR(preview.start)} às ${toTimeInput(preview.start)}${repeticao}.`,
+          resumo: `✓ Compromisso "${preview.title}", ${descreverQuando(preview)}${repeticao}.`,
           desfazer: () => onDesfazerEvento({ id: criado.id, calendarId }),
           textoOriginal: limpo,
         })

@@ -272,6 +272,7 @@ export default function App() {
       end: preview.end,
       calendarId: preview.calendarId || 'primary',
       recurrence: preview.recurrence,
+      allDay: preview.allDay,
       // A marca do projeto, quando o compromisso nasce dentro de um.
       extendedProperties: preview.extendedProperties,
     })
