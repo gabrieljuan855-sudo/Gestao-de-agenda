@@ -1,6 +1,7 @@
 import { startOfWeek, addDays, isToday, formatTime, formatDuration } from '../lib/dates.js'
 import { eventsOfDay, isAllDay, eventStart, eventEnd, busyMinutesOn, tasksDueOn, findConflicts } from '../lib/events.js'
 import { isWorkday, workloadRatio, workMinutes } from '../lib/schedule.js'
+import { corDaAgenda } from '../lib/corDaAgenda.js'
 
 // Com sábado e domingo fora, sobra espaço pra mostrar mais coisa por dia sem
 // a coluna virar uma lista cortada.
@@ -117,7 +118,7 @@ export default function WeekView({
                     >
                       <span
                         className="week-dot"
-                        style={{ background: event.calendarColor || 'var(--accent)' }}
+                        style={{ background: corDaAgenda(event.calendarColor) }}
                       />
                       <span className="week-event-text">
                         {!isAllDay(event) &&
@@ -161,7 +162,7 @@ export default function WeekView({
               className="week-weekend-chip"
               onClick={() => (onSelectEvent ? onSelectEvent(event) : onSelectDay && onSelectDay(day))}
             >
-              <span className="week-dot" style={{ background: event.calendarColor || 'var(--accent)' }} />
+              <span className="week-dot" style={{ background: corDaAgenda(event.calendarColor) }} />
               {day.toLocaleDateString('pt-BR', { weekday: 'short' })}
               {!isAllDay(event) && ` ${formatTime(eventStart(event))}`} · {event.summary}
             </button>

@@ -36,6 +36,11 @@
   --surface-variant: #f6f0e6;
   --on-surface: #4a3520;
   --on-surface-variant: #b88859;
+  /* Item que sobe de dentro de um cartão (a linha de um projeto, a próxima
+     ação em destaque). No claro coincide com a página; no escuro precisa ser
+     mais claro que o cartão — usar a cor da página ali fazia o destaque virar
+     um buraco preto. */
+  --surface-raised: #fffcf7;
   --on-surface-muted: #c4ac95;
 
   --outline: #b88859;
@@ -65,6 +70,10 @@
   /* O véu atrás de diálogo e de tela sobreposta: um valor só, para os dois
      escurecerem a agenda do mesmo jeito. */
   --scrim: rgba(74, 53, 32, 0.45);
+  /* Quanto da cor original de cada agenda do Google entra na tela (ver
+     corDaAgenda.js). Inteira no claro; no escuro, misturada ao cartão para
+     o azul e o verde das agendas não gritarem sobre o fundo. */
+  --agenda-forca: 100%;
 
   /* ---------- forma ---------- */
   /* Escala de seis degraus, calibrada pelos raios do tema Chocolate
@@ -142,34 +151,43 @@
    marrom quase preto, texto creme, tons de prioridade um pouco mais claros
    para continuar legíveis sobre fundo escuro. */
 @media (prefers-color-scheme: dark) {
+  /* O escuro do Chocolate é grafite quente, não marrom: marrom sobre marrom
+     em três tons quase iguais apagava a divisão entre página, cartão e item,
+     e o texto secundário cor de caramelo cansava a vista. A cor da marca
+     (âmbar) fica reservada para o que pede atenção — botão de criar, aba e
+     seleção —, e cada camada é um degrau visível acima da anterior, como o
+     MD3 faz no tema escuro. */
   :root {
-    --primary: #d4a06a;
-    --on-primary: #4a3520;
-    --primary-container: #2a2018;
-    --on-primary-container: #ede4d4;
+    --primary: #e2ad76;
+    --on-primary: #3b2410;
+    --primary-container: #4a3320;
+    --on-primary-container: #ffdcbd;
 
-    --solid: #ede4d4;
-    --on-solid: #1c1610;
+    --solid: #ece6e1;
+    --on-solid: #1b1715;
 
-    --surface: #141010;
-    --surface-container: #2a2018;
-    --surface-variant: #1f1814;
-    --on-surface: #ede4d4;
-    --on-surface-variant: #c4a882;
-    --on-surface-muted: #6b5540;
+    --surface: #141211;
+    --surface-container: #1f1c1a;
+    --surface-variant: #2a2623;
+    --surface-raised: #2f2a27;
+    --on-surface: #ece6e1;
+    --on-surface-variant: #b9aea6;
+    --on-surface-muted: #7d736c;
 
-    --outline: #6b5540;
-    --outline-variant: #38302a;
+    --outline: #675d56;
+    --outline-variant: #3a3431;
 
-    --urgent: #ff7a7a;
-    --urgent-container: #431f1f;
-    --important: #e0a04a;
-    --important-container: #3a2a18;
-    --low: #a8d43a;
-    --low-container: #2e3315;
+    --urgent: #ff8a80;
+    --urgent-container: #4a2220;
+    --important: #f0b36a;
+    --important-container: #3d2c17;
+    --low: #b5d46a;
+    --low-container: #2c3317;
 
-    --shadow: rgba(0, 0, 0, 0.45);
-    --shadow-weak: rgba(0, 0, 0, 0.25);
+    --shadow: rgba(0, 0, 0, 0.5);
+    --shadow-weak: rgba(0, 0, 0, 0.3);
+    --scrim: rgba(0, 0, 0, 0.6);
+    --agenda-forca: 72%;
   }
 }
 
@@ -1660,6 +1678,12 @@ button.danger:hover { background: var(--urgent-bg); }
 
 .month-day:hover { background: var(--surface-2); }
 .month-day--outside { background: var(--surface-0); }
+/* No escuro, a cor da página dentro da grade virava um bloco preto e parecia
+   o dia mais importante, não o de fora do mês. Ali o dia de fora fica da cor
+   do cartão, e só o número apagado diz que é de outro mês. */
+@media (prefers-color-scheme: dark) {
+  .month-day--outside { background: var(--surface-container); }
+}
 .month-day--outside .month-daynum { color: var(--text-muted); }
 .month-day--off { background: var(--surface-2); }
 
@@ -2006,7 +2030,7 @@ button.danger:hover { background: var(--urgent-bg); }
   padding: 10px 12px;
   border: 1px solid var(--outline-variant);
   border-radius: var(--shape-sm);
-  background: var(--surface);
+  background: var(--surface-raised);
   color: var(--on-surface);
   overflow-wrap: anywhere;
 }
@@ -2027,7 +2051,7 @@ button.danger:hover { background: var(--urgent-bg); }
   border-radius: var(--shape-sm);
   /* Mesma razão da linha selecionada: o painel já é --primary-container, então
      o destaque é o fundo claro com a barra de cor, não a cor do painel. */
-  background: var(--surface);
+  background: var(--surface-raised);
   box-shadow: inset 4px 0 0 var(--primary);
   color: var(--on-surface);
   overflow-wrap: anywhere;
