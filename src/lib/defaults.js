@@ -1,4 +1,5 @@
 import { priorityFromListTitle } from './priority.js'
+import { semAcento } from './texto.js'
 
 // A agenda de trabalho é onde quase tudo cai. Deixar "Escolha a agenda..." em
 // branco obrigava um clique a mais em todo compromisso, e bloqueava o botão de
@@ -13,4 +14,24 @@ export function findDefaultCalendar(calendars) {
 
 export function findListForPriority(taskLists, priority) {
   return taskLists.find((list) => priorityFromListTitle(list.title) === priority) || null
+}
+
+function nomeDaAgenda(cal) {
+  return cal.summaryOverride || cal.summary || ''
+}
+
+// A agenda citada no próprio texto: "Imersão AEPETI" cai na agenda AEPETI,
+// "reunião CREAS sexta 9h" na do CREAS. É o nome inteiro da agenda como
+// palavra(s) do texto, sem acento e sem caixa — "aepeti" acha "AEPETI". O
+// nome mais longo ganha quando dois casam ("CREAS" e "CREAS Norte"), porque
+// é o mais específico. Sem nenhum nome no texto, fica a agenda padrão.
+export function acharAgendaNoTexto(texto, calendars = []) {
+  const alvo = ` ${semAcento(texto).replace(/[^\p{L}\p{N}]+/gu, ' ')} `
+  let melhor = null
+  for (const cal of calendars) {
+    const nome = semAcento(nomeDaAgenda(cal)).replace(/[^\p{L}\p{N}]+/gu, ' ').trim()
+    if (nome.length < 3) continue
+    if (alvo.includes(` ${nome} `) && (!melhor || nome.length > melhor.nome.length)) melhor = { cal, nome }
+  }
+  return melhor?.cal || null
 }
