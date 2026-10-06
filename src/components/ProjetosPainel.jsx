@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import Banner from './Banner.jsx'
+import AssistenteDoProjeto from './AssistenteDoProjeto.jsx'
 import { PRIORITY_LABEL } from '../lib/priority.js'
 import { isOverdueTask } from '../lib/tasks.js'
 import { dateOnlyFromISO, addDays } from '../lib/dates.js'
@@ -134,6 +135,7 @@ function Ficha({ projeto, onSalvar }) {
   const [situacao, setSituacao] = useState(projeto.situacao)
   const [tipo, setTipo] = useState(projeto.tipo || 'projeto')
   const [prazo, setPrazo] = useState(projeto.prazo || '')
+  const [semIA, setSemIA] = useState(Boolean(projeto.semIA))
   const [salvo, setSalvo] = useState(false)
 
   useEffect(() => {
@@ -141,6 +143,7 @@ function Ficha({ projeto, onSalvar }) {
     setResultado(projeto.resultado || '')
     setSituacao(projeto.situacao)
     setTipo(projeto.tipo || 'projeto')
+    setSemIA(Boolean(projeto.semIA))
     setPrazo(projeto.prazo || '')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projeto.id, projeto.updatedAt])
@@ -151,11 +154,12 @@ function Ficha({ projeto, onSalvar }) {
     resultado !== (projeto.resultado || '') ||
     situacao !== projeto.situacao ||
     tipo !== (projeto.tipo || 'projeto') ||
+    semIA !== Boolean(projeto.semIA) ||
     prazo !== (projeto.prazo || '')
 
   function salvar(e) {
     e.preventDefault()
-    onSalvar({ id: projeto.id, nome: nome.trim() || projeto.id, resultado, situacao, tipo, prazo: prazo || null })
+    onSalvar({ id: projeto.id, nome: nome.trim() || projeto.id, resultado, situacao, tipo, prazo: prazo || null, semIA })
     setSalvo(true)
     setTimeout(() => setSalvo(false), 2000)
   }
@@ -207,6 +211,12 @@ function Ficha({ projeto, onSalvar }) {
           <input type="date" value={prazo} onChange={(e) => setPrazo(e.target.value)} />
         </label>
       </div>
+      {/* Caso atendido, com nomes e situações: a pessoa decide se aquilo
+          pode ir para a IA. Marcado, o assistente some deste projeto. */}
+      <label className="entrada-dia-inteiro">
+        <input type="checkbox" checked={semIA} onChange={(e) => setSemIA(e.target.checked)} />
+        Não usar IA neste projeto (dados sensíveis)
+      </label>
       <div className="modal-actions">
         <span className="muted">{salvo ? 'Ficha salva.' : `#${projeto.id}`}</span>
         <div style={{ flex: 1 }} />
@@ -482,6 +492,7 @@ function PaginaDoProjeto({
   onNovaNota,
   onCreateEvent,
   onCreateTask,
+  onAtualizarTarefa,
   buscarEventos,
   onEditarEvento,
 }) {
@@ -527,6 +538,17 @@ function PaginaDoProjeto({
           )}
         </div>
       )}
+
+      <AssistenteDoProjeto
+        projeto={projeto}
+        grupos={grupos}
+        anotacoes={anotacoes}
+        contextos={[...new Set(tasks.map((t) => t.contexto).filter(Boolean))]}
+        idProximas={ids.idProximas}
+        onCreateTask={onCreateTask}
+        onSalvar={onSalvar}
+        onAtualizarTarefa={onAtualizarTarefa}
+      />
 
       <CapturaNoProjeto
         projetoId={projeto.id}

@@ -35,6 +35,12 @@ export const IA_DESLIGADA = true
 // Anotações junto, o que não foi pedido.
 export const REVISAO_IA_LIGADA = true
 
+// O assistente dos Projetos (planejar passos, definir resultado, dividir uma
+// ideia em ações) foi pedido explicitamente, como a Revisão — e, como ela,
+// tem chave própria para não religar a IA da Entrada e das Anotações junto.
+// Cada projeto ainda pode recusar a IA na própria ficha ("Não usar IA").
+export const PROJETOS_IA_LIGADA = true
+
 // Cota estourada não volta em minutos: espera a próxima janela de cobrança.
 // Uma hora é o meio-termo entre não queimar cota à toa e não deixar o app sem
 // IA o dia inteiro por causa de um pico.

@@ -49,6 +49,8 @@ export function normalizarProjeto(p, agora = new Date()) {
     createdAt: typeof p.createdAt === 'string' ? p.createdAt : iso,
     updatedAt: typeof p.updatedAt === 'string' ? p.updatedAt : iso,
     arquivos: normalizarArquivos(p.arquivos),
+    // Projeto com dados sensíveis (um caso atendido) pode recusar a IA de vez.
+    ...(p.semIA === true ? { semIA: true } : {}),
   }
 }
 

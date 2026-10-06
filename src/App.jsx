@@ -743,6 +743,13 @@ export default function App() {
     await reload()
   }
 
+  // Atualizar uma tarefa qualquer (não a do editor aberto) — o assistente do
+  // projeto reescreve a próxima ação por aqui.
+  async function atualizarTarefa(task, patch) {
+    await updateTask(task, patch)
+    await reload()
+  }
+
   async function handleSaveTask(patch) {
     await updateTask(editingTask, patch)
     await reload()
@@ -1024,6 +1031,7 @@ export default function App() {
           onCreateTask={handleCreateTask}
           buscarEventos={listAllEvents}
           onEditarEvento={setEditingEvent}
+          onAtualizarTarefa={atualizarTarefa}
         />
       ),
     },

@@ -5,7 +5,9 @@
 // item da Entrada e propõe o que ele é), POST /api/briefing (propõe uma ação
 // para cada item que pede decisão na revisão semanal, sob pedido), POST
 // /api/analyze-note (sugestões a partir de uma anotação) e POST
-// /api/search-notes (responde uma pergunta usando as anotações existentes).
+// /api/search-notes (responde uma pergunta usando as anotações existentes) e
+// POST /api/projeto (o assistente de um projeto: planejar passos, definir o
+// resultado, dividir uma ideia em ações).
 // A chave do Gemini fica como segredo do Cloudflare e nunca chega ao
 // navegador — é justamente por isso que essa parte roda no servidor.
 
@@ -671,6 +673,196 @@ async function handleSearchNotes(request, env) {
   }
 }
 
+// ---------- Projeto ----------
+//
+// Uma rota para o assistente de um projeto, com um modo por botão. Tudo o
+// que chega do navegador é limpo antes de ir para o prompt (tamanho e tipo
+// de cada campo), e tudo o que volta do modelo é validado antes de virar
+// tarefa ou ficha — o mesmo cuidado de normalizeRevisao.
+
+const LISTAS_DO_PROJETO = ['proximas', 'aguardando', 'algum_dia', 'entrada', 'outras', 'concluida']
+const MAX_TAREFAS_PROJETO = 40
+const MAX_ANOTACOES_PROJETO = 12
+const MAX_ACOES_PLANO = 7
+
+function texto(v, max) {
+  return typeof v === 'string' ? v.trim().slice(0, max) : ''
+}
+
+function slugDeContexto(v) {
+  if (typeof v !== 'string') return null
+  const limpo = v
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLowerCase()
+    .replace(/^@/, '')
+    .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 30)
+  return limpo || null
+}
+
+export function sanitizarContextoDoProjeto(body) {
+  const projeto = body?.projeto || {}
+  const tarefas = (Array.isArray(body?.tarefas) ? body.tarefas : [])
+    .map((t) => ({
+      titulo: texto(t?.titulo, 200),
+      lista: LISTAS_DO_PROJETO.includes(t?.lista) ? t.lista : 'outras',
+      prazo: DATA_ISO.test(t?.prazo || '') ? t.prazo : null,
+    }))
+    .filter((t) => t.titulo)
+    .slice(0, MAX_TAREFAS_PROJETO)
+  const anotacoes = (Array.isArray(body?.anotacoes) ? body.anotacoes : [])
+    .map((n) => ({ titulo: texto(n?.titulo, 120), trecho: texto(n?.trecho, 1200) }))
+    .filter((n) => n.titulo || n.trecho)
+    .slice(0, MAX_ANOTACOES_PROJETO)
+  const contextos = (Array.isArray(body?.contextos) ? body.contextos : []).map(slugDeContexto).filter(Boolean).slice(0, 20)
+  const alvo = body?.alvo && texto(body.alvo.titulo, 600) ? { titulo: texto(body.alvo.titulo, 600), notas: texto(body.alvo.notas, 1500) } : null
+  return {
+    projeto: {
+      nome: texto(projeto.nome, 120) || 'Projeto',
+      tipo: projeto.tipo === 'rotina' ? 'rotina' : 'projeto',
+      resultado: texto(projeto.resultado, 500),
+      prazo: DATA_ISO.test(projeto.prazo || '') ? projeto.prazo : null,
+    },
+    tarefas,
+    anotacoes,
+    contextos,
+    alvo,
+  }
+}
+
+function blocoDoProjeto(ctx) {
+  const tarefas = ctx.tarefas.length
+    ? ctx.tarefas.map((t) => `- [${t.lista}] ${t.titulo}${t.prazo ? ` (prazo ${t.prazo})` : ''}`).join('\n')
+    : '(nenhuma tarefa ainda)'
+  const anotacoes = ctx.anotacoes.length
+    ? ctx.anotacoes.map((n) => `### ${n.titulo || '(sem título)'}\n${n.trecho}`).join('\n\n')
+    : '(nenhuma anotação)'
+  return `PROJETO: ${ctx.projeto.nome} (${ctx.projeto.tipo === 'rotina' ? 'rotina contínua, como uma reunião periódica' : 'projeto com começo, meio e fim'})
+${ctx.projeto.resultado ? `Resultado esperado / propósito: ${ctx.projeto.resultado}` : 'Resultado esperado: (ainda não definido)'}
+${ctx.projeto.prazo ? `Prazo do projeto: ${ctx.projeto.prazo}` : ''}
+
+TAREFAS (a lista entre colchetes diz onde cada uma está no método GTD):
+${tarefas}
+
+ANOTAÇÕES DO PROJETO (trechos):
+${anotacoes}`
+}
+
+function buildProjetoPrompt(modo, ctx, { today, weekday }) {
+  const cabeca = `Você ajuda alguém que trabalha com atendimento social e gestão pública a tocar seus projetos pelo método GTD (David Allen), em português do Brasil.
+Hoje é ${weekday || ''}, ${today || ''}. Fuso: America/Sao_Paulo.
+
+${blocoDoProjeto(ctx)}
+`
+  if (modo === 'planejar') {
+    return `${cabeca}
+Proponha as próximas ações concretas que fazem este projeto andar em direção ao resultado.
+
+Responda SOMENTE com JSON:
+{
+  "acoes": [
+    { "titulo": "verbo no infinitivo + objeto, ação física e visível, até 90 caracteres", "contexto": "um destes: ${ctx.contextos.join(', ') || 'computador, telefone, rua'} (ou vazio)", "prioridade": "alta|media|baixa", "prazo": "AAAA-MM-DD ou null", "motivo": "por que esta ação, em até 20 palavras" }
+  ]
+}
+
+Regras:
+- De 3 a ${MAX_ACOES_PLANO} ações, na ordem em que fazem sentido.
+- Cada ação é UM passo físico ("Ligar para X para confirmar Y", "Rascunhar o ofício de Z"), nunca um objetivo vago ("Melhorar", "Pensar sobre").
+- Não repita tarefas que já existem na lista acima.
+- Prazo só quando houver motivo claro (prazo do projeto, compromisso citado); senão null. Nunca uma data passada.
+- Use apenas o que está no projeto; não invente nomes de pessoas, órgãos ou fatos.`
+  }
+  if (modo === 'resultado') {
+    return `${cabeca}
+${ctx.projeto.tipo === 'rotina'
+    ? 'Escreva o propósito desta rotina: para que ela serve, em uma frase.'
+    : 'Escreva o resultado esperado deste projeto: como se sabe que ele terminou, em uma frase concreta e verificável (ex.: "Protocolo publicado e equipe treinada").'}
+
+Responda SOMENTE com JSON: { "resultado": "até 200 caracteres" }
+Regras: só com base no que está acima; nada de metas genéricas.`
+  }
+  if (modo === 'dividir') {
+    return `${cabeca}
+A tarefa abaixo foi escrita como uma ideia inteira, não como uma ação. Separe:
+- "acao": o primeiro passo físico e concreto (verbo no infinitivo + objeto, até 90 caracteres);
+- "detalhes": o restante do texto original, reorganizado como notas de apoio (sem perder informação);
+- "mais": os passos seguintes que o texto deixa claros (no máximo 5), cada um como ação curta.
+
+TAREFA:
+"""
+${ctx.alvo?.titulo || ''}
+${ctx.alvo?.notas || ''}
+"""
+
+Responda SOMENTE com JSON: { "acao": "...", "detalhes": "...", "mais": ["...", "..."] }`
+  }
+  return null
+}
+
+export function normalizePlanejar(parsed, { contextos = [], existentes = [], hoje = '' } = {}) {
+  const ja = new Set(existentes.map((t) => t.toLowerCase().trim()))
+  const vistos = new Set()
+  const acoes = []
+  for (const a of Array.isArray(parsed?.acoes) ? parsed.acoes : []) {
+    const titulo = texto(a?.titulo, 120)
+    const chave = titulo.toLowerCase()
+    if (!titulo || ja.has(chave) || vistos.has(chave)) continue
+    vistos.add(chave)
+    const contexto = slugDeContexto(a?.contexto)
+    acoes.push({
+      titulo,
+      contexto: contexto && (contextos.length === 0 || contextos.includes(contexto) || contexto.length <= 20) ? contexto : null,
+      prioridade: ['alta', 'media', 'baixa'].includes(a?.prioridade) ? a.prioridade : 'media',
+      prazo: DATA_ISO.test(a?.prazo || '') && (!hoje || a.prazo >= hoje) ? a.prazo : null,
+      motivo: texto(a?.motivo, 200),
+    })
+    if (acoes.length >= MAX_ACOES_PLANO) break
+  }
+  return { acoes }
+}
+
+export function normalizeResultado(parsed) {
+  return { resultado: texto(parsed?.resultado, 300) }
+}
+
+export function normalizeDividir(parsed) {
+  const mais = (Array.isArray(parsed?.mais) ? parsed.mais : []).map((m) => texto(m, 120)).filter(Boolean).slice(0, 5)
+  return { acao: texto(parsed?.acao, 120), detalhes: texto(parsed?.detalhes, 2000), mais }
+}
+
+const MODOS_DO_PROJETO = ['planejar', 'resultado', 'dividir']
+
+async function handleProjeto(request, env) {
+  const caller = await verifyCaller(request, env)
+  if (!caller) return json({ error: 'Não autorizado.' }, 401)
+  if (!env.GEMINI_API_KEY) return json({ error: 'GEMINI_API_KEY não está configurada neste Worker.' }, 503)
+
+  let body
+  try {
+    body = await request.json()
+  } catch {
+    return json({ error: 'Corpo inválido.' }, 400)
+  }
+
+  const modo = body?.modo
+  if (!MODOS_DO_PROJETO.includes(modo)) return json({ error: 'Modo desconhecido.' }, 400)
+  const ctx = sanitizarContextoDoProjeto(body)
+  if (modo === 'dividir' && !ctx.alvo) return json({ error: 'Envie a tarefa a dividir.' }, 400)
+
+  try {
+    const parsed = await callGemini(env, buildProjetoPrompt(modo, ctx, { today: body.today, weekday: body.weekday }))
+    if (modo === 'planejar') {
+      return json(normalizePlanejar(parsed, { contextos: ctx.contextos, existentes: ctx.tarefas.map((t) => t.titulo), hoje: body.hojeIso }))
+    }
+    if (modo === 'resultado') return json(normalizeResultado(parsed))
+    return json(normalizeDividir(parsed))
+  } catch (err) {
+    return erroDeIA(err)
+  }
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url)
@@ -692,6 +884,11 @@ export default {
     if (url.pathname === '/api/analyze-note') {
       if (request.method !== 'POST') return json({ error: 'Use POST.' }, 405)
       return handleAnalyzeNote(request, env)
+    }
+
+    if (url.pathname === '/api/projeto') {
+      if (request.method !== 'POST') return json({ error: 'Use POST.' }, 405)
+      return handleProjeto(request, env)
     }
 
     if (url.pathname === '/api/search-notes') {
