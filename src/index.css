@@ -2036,7 +2036,16 @@ button.danger:hover { background: var(--urgent-bg); }
 }
 .projeto-linha-topo { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .projeto-linha-nome { font-weight: 600; font-size: var(--body-md); }
-.projeto-linha-acao { font-size: var(--body-sm); color: var(--on-surface); }
+.projeto-linha-acao {
+  font-size: var(--body-sm);
+  color: var(--on-surface);
+  /* Uma "próxima ação" do tamanho de um parágrafo empurrava a lista inteira
+     para baixo: duas linhas bastam para reconhecer, o resto está no projeto. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 .projeto-pill-parado { background: var(--important-container); color: var(--important); }
 .projeto-pill-atraso { background: var(--urgent-container); color: var(--urgent); }
 
@@ -2325,6 +2334,8 @@ button.danger:hover { background: var(--urgent-bg); }
      campo curto da ficha do projeto continua curto. */
   .rail-panel.is-wide textarea { min-height: 55vh; }
   .rail-panel.is-wide .projeto-ficha textarea { min-height: 0; }
+  /* A revisão guiada reaproveita a Entrada: o campo dela continua curto. */
+  .rail-panel.is-wide.tela-sobreposta textarea { min-height: 0; }
 }
 
 /* Computador com janela estreita (notebook pequeno, tela dividida): a barra
@@ -2509,4 +2520,136 @@ button.danger:hover { background: var(--urgent-bg); }
 
 @media (max-width: 700px) {
   .lista-item { grid-template-columns: 84px 8px minmax(0, 1fr); padding: 8px 4px; }
+}
+
+
+/* ---------- Projetos: aviso de ação vaga e visão geral ---------- */
+.projeto-destaque-texto {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.projeto-aviso-ideia {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+  font-size: var(--body-sm);
+  color: var(--important);
+}
+.projeto-aviso-ideia button { padding: 4px 12px; }
+
+.painel-geral { display: flex; flex-direction: column; gap: 18px; padding-bottom: 8px; }
+.painel-geral-bloco { display: flex; flex-direction: column; gap: 6px; }
+.painel-geral-linha {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--shape-sm);
+  background: var(--surface-raised);
+  color: var(--on-surface);
+  text-align: left;
+}
+.painel-geral-linha.is-aviso { box-shadow: inset 4px 0 0 var(--important); }
+.painel-geral-linha.is-urgente { box-shadow: inset 4px 0 0 var(--urgent); }
+.painel-geral-data { flex: 0 0 96px; font-size: var(--body-sm); color: var(--on-surface-variant); }
+.painel-geral-texto { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; overflow-wrap: anywhere; }
+.painel-geral-acao { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
+
+/* ---------- Revisão: porta de entrada no painel e tela guiada ---------- */
+.revisao-entrada { display: flex; flex-direction: column; gap: 12px; align-items: flex-start; }
+.revisao-ultima { margin: 0; font-weight: 600; }
+.revisao-ultima.is-atrasada { color: var(--important); }
+.revisao-resumo { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: var(--body-sm); color: var(--on-surface-variant); }
+.revisao-resumo strong { color: var(--on-surface); }
+
+.revisao-lista { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: var(--body-sm); }
+
+.revisao-carga {
+  padding: 10px 12px;
+  border-radius: var(--shape-sm);
+  background: var(--surface-raised);
+  font-size: var(--body-sm);
+}
+.revisao-carga.is-sobrecarregada { box-shadow: inset 4px 0 0 var(--urgent); color: var(--urgent); }
+
+.revisao-guiada { display: flex; flex-direction: column; gap: 16px; }
+.revisao-etapas { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; }
+.revisao-etapa {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--shape-full);
+  background: transparent;
+  color: var(--on-surface-variant);
+  text-align: left;
+}
+.revisao-etapa.is-atual { border-color: var(--primary); background: var(--primary-container); color: var(--on-primary-container); font-weight: 600; }
+.revisao-etapa.is-passada { color: var(--on-surface); }
+.revisao-etapa-numero {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--shape-full);
+  background: var(--surface-variant);
+  font-size: var(--label-sm);
+}
+.revisao-etapa.is-atual .revisao-etapa-numero { background: var(--primary); color: var(--on-primary); }
+.revisao-etapa-titulo { white-space: nowrap; }
+.revisao-etapa-contagem {
+  min-width: 20px;
+  padding: 0 6px;
+  border-radius: var(--shape-full);
+  background: var(--important-container);
+  color: var(--important);
+  font-size: var(--label-sm);
+  text-align: center;
+}
+
+.revisao-conteudo { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.revisao-conteudo-cabeca h2 { margin: 2px 0 4px; }
+.revisao-ok { margin: 0; color: var(--low); font-weight: 500; }
+.revisao-comentario {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: var(--shape-sm);
+  background: var(--surface-raised);
+  box-shadow: inset 4px 0 0 var(--primary);
+  font-size: var(--body-md);
+  line-height: 1.5;
+}
+.revisao-navegacao {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding-top: 14px;
+  border-top: 1px solid var(--outline-variant);
+}
+.revisao-projeto { align-items: flex-start; }
+.revisao-projeto.is-revisado { opacity: 0.6; }
+.revisao-projeto-check { padding-top: 2px; }
+.revisao-projeto-check input { width: 18px; height: 18px; }
+.revisao-projeto-acao { overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.revisao-projeto-botoes { display: flex; gap: 6px; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; }
+.revisao-projeto-botoes button { padding: 6px 12px; }
+
+/* No computador as etapas viram uma coluna à esquerda, como um índice. */
+@media (min-width: 1000px) {
+  .revisao-guiada { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 28px; align-items: start; }
+  .revisao-etapas { flex-direction: column; overflow: visible; position: sticky; top: 72px; }
+  .revisao-etapa { border-radius: var(--shape-sm); }
+  .revisao-conteudo { max-width: 860px; }
 }

@@ -29,10 +29,12 @@ function Item({ task, subtitulo, onReativar, onConcluir }) {
 // repetir o nome logo abaixo dele era a mesma palavra duas vezes em dois
 // dedos de tela. "Algum dia", mais abaixo, fica — ali o título não repete
 // nada, marca a troca de assunto.
-export default function Aguardando({ aguardando = [], algumDia = [], onReativar, onConcluir }) {
+// `mostrar` existe para a Revisão guiada, que trata Aguardando e Algum dia
+// em etapas separadas — a aba do painel continua mostrando as duas.
+export default function Aguardando({ aguardando = [], algumDia = [], onReativar, onConcluir, mostrar = 'ambos' }) {
   return (
     <div>
-      {aguardando.length === 0 ? (
+      {mostrar !== 'algumDia' && (aguardando.length === 0 ? (
         <p className="muted" style={{ fontSize: 'var(--body-sm)' }}>Ninguém te devendo nada, por enquanto.</p>
       ) : (
         <div className="aguardando-lista">
@@ -57,10 +59,10 @@ export default function Aguardando({ aguardando = [], algumDia = [], onReativar,
             )
           })}
         </div>
-      )}
+      ))}
 
-      <h3 className="t-title" style={{ marginTop: 20 }}>Algum dia</h3>
-      {algumDia.length === 0 ? (
+      {mostrar === 'ambos' && <h3 className="t-title" style={{ marginTop: 20 }}>Algum dia</h3>}
+      {mostrar !== 'aguardando' && (algumDia.length === 0 ? (
         <p className="muted" style={{ fontSize: 'var(--body-sm)' }}>Nada engavetado agora.</p>
       ) : (
         <div className="aguardando-lista">
@@ -68,7 +70,7 @@ export default function Aguardando({ aguardando = [], algumDia = [], onReativar,
             <Item key={task.id} task={task} onReativar={onReativar} onConcluir={onConcluir} />
           ))}
         </div>
-      )}
+      ))}
     </div>
   )
 }

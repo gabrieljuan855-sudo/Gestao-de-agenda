@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { initGoogleAuth, signIn, signOut, retryAuth } from './lib/googleAuth.js'
 import {
   listAllEvents,
@@ -29,6 +29,7 @@ import {
 } from './lib/gtd.js'
 import { enfileirar, descarregar, quantasPendentes } from './lib/outbox.js'
 import { lerCacheDeAgenda, gravarCacheDeAgenda } from './lib/agendaCache.js'
+import { isOverdueTask } from './lib/tasks.js'
 import { parseQuickAdd, decidirDestino } from './lib/nlp.js'
 import { construirRecorrencia } from './lib/recorrencia.js'
 import { rangeForView, shiftReference, isSameDay, toDateInput, fromInputs } from './lib/dates.js'
@@ -46,7 +47,7 @@ import Aguardando from './components/Aguardando.jsx'
 import ProjetosPainel from './components/ProjetosPainel.jsx'
 import useProjetos from './lib/useProjetos.js'
 import useNovaVersao from './lib/useNovaVersao.js'
-import { listarProjetos } from './lib/projetos.js'
+import { listarProjetos, projetosForaDaCobranca } from './lib/projetos.js'
 import Trabalho from './components/Trabalho.jsx'
 import HorarioTrabalho from './components/HorarioTrabalho.jsx'
 import { loadWorkSchedule } from './lib/schedule.js'
@@ -55,6 +56,8 @@ import useAtalhos from './lib/useAtalhos.js'
 import { montarEventoDeConclusao } from './lib/taskDoneEvent.js'
 import useRevisao from './lib/useRevisao.js'
 import Revisao from './components/Revisao.jsx'
+import RevisaoGuiada from './components/RevisaoGuiada.jsx'
+import { lerUltimaRevisao, gravarUltimaRevisao, textoDaRevisao, revisaoAtrasada } from './lib/revisaoRegistro.js'
 import SearchPanel from './components/SearchPanel.jsx'
 import PeriodBar from './components/PeriodBar.jsx'
 import DayView from './components/DayView.jsx'
@@ -428,6 +431,10 @@ export default function App() {
   const [abaTrabalho, setAbaTrabalho] = useState('proximas')
   const [editandoHorario, setEditandoHorario] = useState(false)
 
+  useEffect(() => {
+    if (railAberto !== 'projetos') setProjetoParaAbrir(null)
+  }, [railAberto])
+
   function abrirOuFechar(id) {
     setRailAberto((atual) => (atual === id ? null : id))
   }
@@ -561,6 +568,11 @@ export default function App() {
   const entradaVaziaAgora = !tasks.some(
     (t) => t.status !== 'completed' && Boolean(entradaId) && t.tasklistId === entradaId
   )
+  // Rotinas e projetos pausados/concluídos não são cobrados por próxima ação
+  // na revisão. A lista de projetos só é montada mais abaixo, então ela chega
+  // ao hook por um ref atualizado a cada render.
+  const foraDaCobrancaRef = useRef([])
+  const lerForaDaCobranca = useCallback(() => foraDaCobrancaRef.current, [])
   const revisao = useRevisao({
     idProximas: idDaLista(LISTA_PROXIMAS),
     idAguardando: idDaLista(LISTA_AGUARDANDO),
@@ -568,7 +580,18 @@ export default function App() {
     entradaVazia: entradaVaziaAgora,
     occupies,
     schedule: workSchedule,
+    foraDaCobranca: lerForaDaCobranca,
   })
+  // A revisão guiada é uma tela própria (RevisaoGuiada.jsx). A etapa e as
+  // decisões moram aqui, e não dentro dela, para sair um instante (abrir um
+  // projeto, editar uma tarefa) e voltar de onde parou.
+  const [revisaoAberta, setRevisaoAberta] = useState(false)
+  const [etapaRevisao, setEtapaRevisao] = useState('entrada')
+  const [decisoesRevisao, setDecisoesRevisao] = useState([])
+  const [ultimaRevisao, setUltimaRevisao] = useState(() => lerUltimaRevisao())
+  // Projeto a abrir direto quando a tela de Projetos for aberta por outro
+  // caminho (a etapa Projetos da revisão).
+  const [projetoParaAbrir, setProjetoParaAbrir] = useState(null)
 
   // Uma sugestão da revisão é só um atalho para o que o app já faz na mão —
   // remarcar é editar o prazo, "algum dia" é mover de lista, cobrar é criar
@@ -838,6 +861,7 @@ export default function App() {
     notes: notesState.notes,
     idProximas,
   })
+  foraDaCobrancaRef.current = projetosForaDaCobranca(listaDeProjetos)
   const projetosEmAberto = listaDeProjetos.filter((p) => p.situacao !== 'concluido')
   const projetosUsados = projetosEmAberto.map((p) => p.id).sort()
 
@@ -850,6 +874,40 @@ export default function App() {
   const projetosParados = listaDeProjetos
     .filter((p) => p.semProximaAcao && (p.pendentes > 0 || !p.implicito))
     .map((p) => p.id)
+
+  function abrirRevisao() {
+    setRailAberto(null)
+    setRevisaoAberta(true)
+  }
+
+  // Da etapa Projetos da revisão para a página do projeto: a revisão fecha
+  // (a etapa e as decisões ficam guardadas) e a tela de Projetos abre nele.
+  function abrirProjeto(id) {
+    setRevisaoAberta(false)
+    setProjetoParaAbrir(id)
+    setRailAberto('projetos')
+  }
+
+  async function mudarSituacaoDoProjeto(id, situacao) {
+    projetosState.salvarProjeto({ id, situacao })
+  }
+
+  // Fechar a revisão deixa um registro que atravessa aparelhos (a anotação,
+  // que sincroniza pelo Drive) e a data que alimenta "última revisão há N
+  // dias". Depois disso, a próxima revisão começa do zero.
+  async function concluirRevisao() {
+    const agora = new Date()
+    const { title, body } = textoDaRevisao(
+      { numeros: revisao.numeros, comentario: revisao.comentario, decisoes: decisoesRevisao },
+      agora
+    )
+    notesState.createNote({ title, body })
+    gravarUltimaRevisao(agora)
+    setUltimaRevisao(agora.toISOString())
+    setDecisoesRevisao([])
+    setEtapaRevisao('entrada')
+    setRevisaoAberta(false)
+  }
 
   function abrirNota(id) {
     notesState.setSelectedId(id)
@@ -952,6 +1010,7 @@ export default function App() {
       tecla: 'p',
       render: () => (
         <ProjetosPainel
+          abertoInicial={projetoParaAbrir}
           lista={listaDeProjetos}
           projetosState={projetosState}
           tasks={tasks}
@@ -969,6 +1028,28 @@ export default function App() {
       ),
     },
   ]
+
+  // A Entrada é a mesma na aba do painel e na primeira etapa da revisão.
+  const elementoEntrada = (
+    <Entrada
+      itens={itensDaEntrada}
+      contextos={contextosUsados}
+      projetos={projetosUsados}
+      onProximaAcao={handleProximaAcao}
+      onAguardando={handleAguardando}
+      onAgendar={handleAgendarDaEntrada}
+      onAlgumDia={handleAlgumDia}
+      onReferencia={handleReferencia}
+      onConcluir={handleCompleteTask}
+      onExcluir={handleExcluirTarefa}
+    />
+  )
+
+  // O que venceu e ainda está em jogo (fora de Aguardando e Algum dia, que
+  // têm etapa própria na revisão).
+  const tarefasAtrasadas = tasks.filter(
+    (t) => t.status !== 'completed' && isOverdueTask(t) && !naAguardando(t) && !noAlgumDia(t) && !naEntrada(t)
+  )
 
   // As quatro faces do mesmo material, no painel que fica sempre aberto ao
   // lado da agenda. A ordem é a do método: o que chegou, o que fazer, o que
@@ -994,20 +1075,7 @@ export default function App() {
       // O contador é o convite: uma Entrada com itens parados é o sinal de
       // que há coisa não decidida, e é o único número do app que pede ação.
       badge: itensDaEntrada.length,
-      render: () => (
-        <Entrada
-          itens={itensDaEntrada}
-          contextos={contextosUsados}
-          projetos={projetosUsados}
-          onProximaAcao={handleProximaAcao}
-          onAguardando={handleAguardando}
-          onAgendar={handleAgendarDaEntrada}
-          onAlgumDia={handleAlgumDia}
-          onReferencia={handleReferencia}
-          onConcluir={handleCompleteTask}
-          onExcluir={handleExcluirTarefa}
-        />
-      ),
+      render: () => elementoEntrada,
     },
     {
       id: 'proximas',
@@ -1065,16 +1133,7 @@ export default function App() {
         </svg>
       ),
       render: () => (
-        <Revisao
-          numeros={revisao.numeros}
-          comentario={revisao.comentario}
-          sugestoes={revisao.sugestoes}
-          plano={revisao.plano}
-          carregando={revisao.carregando}
-          onGerar={revisao.gerar}
-          onAplicar={handleSugestaoDaRevisao}
-          onAgendarPlano={handleAgendarPlano}
-        />
+        <Revisao numeros={revisao.numeros} ultimaRevisao={ultimaRevisao} onAbrir={abrirRevisao} />
       ),
     },
   ]
@@ -1249,10 +1308,44 @@ export default function App() {
         </Banner>
       )}
 
-      {new Date().getDay() === 5 && !revisao.numeros && abaTrabalho !== 'revisao' && (
-        <Banner tone="info" actionLabel="Ver revisão" onAction={() => setAbaTrabalho('revisao')}>
+      {new Date().getDay() === 5 && revisaoAtrasada(ultimaRevisao) && !revisaoAberta && (
+        <Banner tone="info" actionLabel="Começar revisão" onAction={abrirRevisao}>
           É sexta — bom momento para revisar a semana.
         </Banner>
+      )}
+
+      {revisaoAberta && (
+        <RevisaoGuiada
+          revisao={revisao}
+          etapa={etapaRevisao}
+          onEtapa={setEtapaRevisao}
+          decisoes={decisoesRevisao}
+          onDecisao={(d) => setDecisoesRevisao((atual) => [...atual, d])}
+          contagens={{
+            entrada: itensDaEntrada.length,
+            acoes: tarefasAtrasadas.length,
+            aguardando: tarefasAguardando.length,
+            projetos: listaDeProjetos.filter((p) => p.semProximaAcao).length,
+            algumdia: 0,
+          }}
+          elementoEntrada={elementoEntrada}
+          elementoAguardando={
+            <Aguardando aguardando={tarefasAguardando} onReativar={handleReativar} onConcluir={handleCompleteTask} mostrar="aguardando" />
+          }
+          elementoAlgumDia={
+            <Aguardando algumDia={tarefasAlgumDia} onReativar={handleReativar} onConcluir={handleCompleteTask} mostrar="algumDia" />
+          }
+          tarefasAtrasadas={tarefasAtrasadas}
+          onEditarTarefa={setEditingTask}
+          onConcluirTarefa={handleCompleteTask}
+          projetos={listaDeProjetos.filter((p) => p.situacao === 'ativo')}
+          onAbrirProjeto={abrirProjeto}
+          onSituacaoProjeto={mudarSituacaoDoProjeto}
+          onAplicar={handleSugestaoDaRevisao}
+          onAgendarPlano={handleAgendarPlano}
+          onConcluir={concluirRevisao}
+          onFechar={() => setRevisaoAberta(false)}
+        />
       )}
 
       {loading && <p className="muted">Atualizando...</p>}

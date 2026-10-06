@@ -22,7 +22,10 @@ const DIAS_PLANO = 7
 // revisão só busca dado quando a pessoa abre a tela: é sob demanda, do jeito
 // que a revisão semanal do GTD é sempre tratada — um momento que a pessoa
 // escolhe entrar, não uma notificação empurrada.
-export default function useRevisao({ idProximas, idAguardando, idAlgumDia, entradaVazia, occupies, schedule }) {
+// `foraDaCobranca` é uma função (e não a lista pronta) porque quem sabe quais
+// projetos são rotina ou estão pausados só existe mais abaixo no App — ela é
+// lida na hora de gerar, já com a lista de projetos atual.
+export default function useRevisao({ idProximas, idAguardando, idAlgumDia, entradaVazia, occupies, schedule, foraDaCobranca = () => [] }) {
   const [numeros, setNumeros] = useState(null)
   const [comentario, setComentario] = useState(null)
   // Cada sugestão/item do plano já vem casado com a tarefa dela, para a tela
@@ -47,13 +50,14 @@ export default function useRevisao({ idProximas, idAguardando, idAlgumDia, entra
         listAllEvents({ timeMin: startOfDay(hoje), timeMax: addDays(startOfDay(hoje), DIAS_PLANO) }),
       ])
 
+      const ignorarProjetos = foraDaCobranca()
       const carga = cargaDaSemana({ tasks, events: eventos, schedule, occupies }, hoje, DIAS_PLANO)
       const numerosCalculados = {
-        ...numerosDaRevisao({ tasks, focusEvents, idProximas, idAguardando, entradaVazia }, hoje),
+        ...numerosDaRevisao({ tasks, focusEvents, idProximas, idAguardando, entradaVazia, ignorarProjetos }, hoje),
         carga,
       }
       const itens = itensDaRevisao(
-        { tasks, idProximas, idAguardando, idAlgumDia, incluirAlgumDia: semanaEstaFolgada(carga) },
+        { tasks, idProximas, idAguardando, idAlgumDia, incluirAlgumDia: semanaEstaFolgada(carga), ignorarProjetos },
         hoje
       )
       const candidatas = candidatasParaAgendar(tasks, idProximas)
@@ -93,7 +97,7 @@ export default function useRevisao({ idProximas, idAguardando, idAlgumDia, entra
     } finally {
       setCarregando(false)
     }
-  }, [idProximas, idAguardando, idAlgumDia, entradaVazia, occupies, schedule])
+  }, [idProximas, idAguardando, idAlgumDia, entradaVazia, occupies, schedule, foraDaCobranca])
 
   return { numeros, comentario, sugestoes, plano, carregando, error, gerar, dismissError: () => setError(null) }
 }

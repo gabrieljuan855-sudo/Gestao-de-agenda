@@ -13,7 +13,7 @@ const DIAS_AGUARDANDO_ENVELHECIDA = 7
 // para comentar por cima destes números — nunca para contá-los, porque contar
 // certo é o tipo de coisa que código determinístico já faz sem chutar.
 export function numerosDaRevisao(
-  { tasks, focusEvents = [], idProximas, idAguardando, entradaVazia },
+  { tasks, focusEvents = [], idProximas, idAguardando, entradaVazia, ignorarProjetos = [] },
   now = new Date()
 ) {
   const pendentes = (tasks || []).filter((t) => t.status !== 'completed')
@@ -42,7 +42,9 @@ export function numerosDaRevisao(
     entradaVazia: Boolean(entradaVazia),
     atrasadas: pendentes.filter((t) => isOverdueTask(t, now)).length,
     paradas: pendentes.filter(isStalledTask).length,
-    projetosParados: projetosSemProximaAcao(tasks, idProximas),
+    // Rotinas e projetos pausados/concluídos não têm de ter próxima ação
+    // (projetosForaDaCobranca, projetos.js).
+    projetosParados: projetosSemProximaAcao(tasks, idProximas).filter((p) => !ignorarProjetos.includes(p)),
     aguardandoEnvelhecendo,
     concluidasNaSemana: concluidasNaSemana.length,
     blocosDeFoco: focoNaSemana.length,
@@ -71,7 +73,7 @@ const MAX_ALGUM_DIA = 5
 // Cada item carrega a própria tarefa (`task`) para o app conseguir executar a
 // ação escolhida — só que ela nunca vai para o Worker (ver aiRevisao.js).
 export function itensDaRevisao(
-  { tasks, idProximas, idAguardando, idAlgumDia, incluirAlgumDia = false },
+  { tasks, idProximas, idAguardando, idAlgumDia, incluirAlgumDia = false, ignorarProjetos = [] },
   now = new Date()
 ) {
   const pendentes = (tasks || []).filter((t) => t.status !== 'completed')
@@ -97,7 +99,9 @@ export function itensDaRevisao(
 
   // Um projeto parado não tem uma tarefa própria para mexer: o que a IA
   // precisa para sugerir o próximo passo são as outras tarefas dele.
-  const projetos = projetosSemProximaAcao(tasks, idProximas).map((projeto) => ({
+  const projetos = projetosSemProximaAcao(tasks, idProximas)
+    .filter((projeto) => !ignorarProjetos.includes(projeto))
+    .map((projeto) => ({
     id: `projeto:${projeto}`,
     tipo: 'projeto',
     titulo: `#${projeto}`,

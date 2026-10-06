@@ -8,7 +8,10 @@ import { parseQuickAdd, descreverQuando } from '../lib/nlp.js'
 import { construirRecorrencia } from '../lib/recorrencia.js'
 import {
   SITUACOES,
+  TIPOS,
   PROJETO_PROP,
+  panoramaDosProjetos,
+  pareceIdeia,
   novoProjeto,
   tarefasDoProjeto,
   eventoDoProjeto,
@@ -62,6 +65,13 @@ function ListaDeProjetos({ lista, onAbrir, onCriar, abertoId }) {
   const [nome, setNome] = useState('')
   const porSituacao = (s) => lista.filter((p) => p.situacao === s)
   const concluidos = porSituacao('concluido')
+  // Rotina ativa tem seção própria: misturada aos projetos, ela parecia um
+  // projeto que nunca anda.
+  const secoes = [
+    { id: 'ativos', titulo: 'Projetos ativos', itens: lista.filter((p) => p.situacao === 'ativo' && p.tipo !== 'rotina') },
+    { id: 'rotinas', titulo: 'Rotinas', itens: lista.filter((p) => p.situacao === 'ativo' && p.tipo === 'rotina') },
+    { id: 'pausados', titulo: 'Pausados', itens: porSituacao('pausado') },
+  ]
 
   function criar(e) {
     e.preventDefault()
@@ -87,12 +97,12 @@ function ListaDeProjetos({ lista, onAbrir, onCriar, abertoId }) {
         </p>
       )}
 
-      {['ativo', 'pausado'].map((s) =>
-        porSituacao(s).length > 0 ? (
-          <section key={s}>
-            <h3 className="projetos-secao">{s === 'ativo' ? 'Ativos' : 'Pausados'}</h3>
+      {secoes.map((secao) =>
+        secao.itens.length > 0 ? (
+          <section key={secao.id}>
+            <h3 className="projetos-secao">{secao.titulo}</h3>
             <div className="projetos-lista">
-              {porSituacao(s).map((p) => (
+              {secao.itens.map((p) => (
                 <LinhaDoProjeto key={p.id} projeto={p} onAbrir={onAbrir} selecionado={p.id === abertoId} />
               ))}
             </div>
@@ -122,6 +132,7 @@ function Ficha({ projeto, onSalvar }) {
   const [nome, setNome] = useState(projeto.nome)
   const [resultado, setResultado] = useState(projeto.resultado || '')
   const [situacao, setSituacao] = useState(projeto.situacao)
+  const [tipo, setTipo] = useState(projeto.tipo || 'projeto')
   const [prazo, setPrazo] = useState(projeto.prazo || '')
   const [salvo, setSalvo] = useState(false)
 
@@ -129,6 +140,7 @@ function Ficha({ projeto, onSalvar }) {
     setNome(projeto.nome)
     setResultado(projeto.resultado || '')
     setSituacao(projeto.situacao)
+    setTipo(projeto.tipo || 'projeto')
     setPrazo(projeto.prazo || '')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projeto.id, projeto.updatedAt])
@@ -138,11 +150,12 @@ function Ficha({ projeto, onSalvar }) {
     nome.trim() !== projeto.nome ||
     resultado !== (projeto.resultado || '') ||
     situacao !== projeto.situacao ||
+    tipo !== (projeto.tipo || 'projeto') ||
     prazo !== (projeto.prazo || '')
 
   function salvar(e) {
     e.preventDefault()
-    onSalvar({ id: projeto.id, nome: nome.trim() || projeto.id, resultado, situacao, prazo: prazo || null })
+    onSalvar({ id: projeto.id, nome: nome.trim() || projeto.id, resultado, situacao, tipo, prazo: prazo || null })
     setSalvo(true)
     setTimeout(() => setSalvo(false), 2000)
   }
@@ -162,8 +175,23 @@ function Ficha({ projeto, onSalvar }) {
       {/* A pergunta do GTD para um projeto: sem um "pronto" descrito, ele
           nunca termina — só vai sendo abandonado. */}
       <label className="field">
-        <span>Como sei que terminou?</span>
-        <textarea rows={2} value={resultado} onChange={(e) => setResultado(e.target.value)} placeholder="O resultado esperado (ex.: acordo homologado e arquivado)" />
+        <span>Tipo</span>
+        <select value={tipo} onChange={(e) => setTipo(e.target.value)}>
+          {TIPOS.map((t) => (
+            <option key={t.id} value={t.id}>{t.label}</option>
+          ))}
+        </select>
+      </label>
+      {/* Rotina não termina: a pergunta dela é para que serve, não quando
+          acaba. */}
+      <label className="field">
+        <span>{tipo === 'rotina' ? 'Para que serve?' : 'Como sei que terminou?'}</span>
+        <textarea
+          rows={2}
+          value={resultado}
+          onChange={(e) => setResultado(e.target.value)}
+          placeholder={tipo === 'rotina' ? 'O propósito (ex.: alinhar os casos da semana com a equipe)' : 'O resultado esperado (ex.: acordo homologado e arquivado)'}
+        />
       </label>
       <div className="field-row">
         <label className="field">
@@ -486,8 +514,17 @@ function PaginaDoProjeto({
 
       {projeto.proximaAcao && (
         <div className="projeto-destaque">
-          <span className="t-label-sm">Próxima ação</span>
-          <strong>{projeto.proximaAcao.title}</strong>
+          <span className="t-label-sm">{projeto.tipo === 'rotina' ? 'Próximo item da pauta' : 'Próxima ação'}</span>
+          <strong className="projeto-destaque-texto">{projeto.proximaAcao.title}</strong>
+          {/* Uma "ação" do tamanho de um parágrafo é uma ideia inteira: quem
+              lê não sabe por onde começar. O aviso pede o primeiro passo
+              físico — e o resto do texto pode ir para as notas da tarefa. */}
+          {pareceIdeia(projeto.proximaAcao.title) && (
+            <div className="projeto-aviso-ideia">
+              <span>Isso parece uma ideia inteira, não uma ação. Qual é o primeiro passo concreto?</span>
+              <button type="button" onClick={() => onEditarTarefa(projeto.proximaAcao)}>Reescrever</button>
+            </div>
+          )}
         </div>
       )}
 
@@ -503,9 +540,13 @@ function PaginaDoProjeto({
       />
 
       <section>
-        <h3 className="projetos-secao">Tarefas</h3>
-        {Object.values(grupos).every((g) => g.length === 0) && <p className="muted">Nenhuma tarefa neste projeto ainda.</p>}
-        <GrupoDeTarefas titulo="Próximas ações" tarefas={grupos.proximas} onEditar={onEditarTarefa} onConcluir={onConcluirTarefa} />
+        <h3 className="projetos-secao">{projeto.tipo === 'rotina' ? 'Pauta' : 'Tarefas'}</h3>
+        {Object.values(grupos).every((g) => g.length === 0) && (
+          <p className="muted">
+            {projeto.tipo === 'rotina' ? 'Pauta vazia. Use o campo acima para anotar o que levar ao próximo encontro.' : 'Nenhuma tarefa neste projeto ainda.'}
+          </p>
+        )}
+        <GrupoDeTarefas titulo={projeto.tipo === 'rotina' ? 'Na pauta' : 'Próximas ações'} tarefas={grupos.proximas} onEditar={onEditarTarefa} onConcluir={onConcluirTarefa} />
         <GrupoDeTarefas titulo="Aguardando" tarefas={grupos.aguardando} onEditar={onEditarTarefa} onConcluir={onConcluirTarefa} />
         <GrupoDeTarefas titulo="Na Entrada" tarefas={grupos.entrada} onEditar={onEditarTarefa} onConcluir={onConcluirTarefa} />
         <GrupoDeTarefas titulo="Outras listas" tarefas={grupos.outras} onEditar={onEditarTarefa} onConcluir={onConcluirTarefa} />
@@ -568,13 +609,81 @@ function PaginaDoProjeto({
   )
 }
 
+// O que aparece no lugar vazio quando nenhum projeto está aberto: a revisão
+// dos projetos, respondida de olhar. Cada linha leva direto ao projeto (ou à
+// tarefa) que pede atenção.
+function PainelGeral({ lista, tasks, onAbrir, onEditarTarefa }) {
+  const p = panoramaDosProjetos(lista, tasks)
+  const blocos = [
+    { id: 'parados', titulo: 'Sem próxima ação', dica: 'Parados: falta decidir o próximo passo.', itens: p.parados, tom: 'aviso' },
+    { id: 'atrasados', titulo: 'Com tarefa atrasada', itens: p.atrasados, tom: 'urgente', extra: (x) => `${x.atrasadas} atrasada(s)` },
+    { id: 'vaga', titulo: 'Próxima ação vaga', dica: 'A ação escrita é uma ideia inteira; reescreva como primeiro passo.', itens: p.acaoVaga },
+    { id: 'esquecidos', titulo: 'Esquecidos', dica: 'Sem nenhum movimento há duas semanas ou mais.', itens: p.esquecidos, extra: (x) => `há ${x.diasSemAtividade} dias` },
+    { id: 'semResultado', titulo: 'Sem resultado definido', dica: 'Falta dizer como se sabe que terminou.', itens: p.semResultado },
+  ]
+  const ativos = lista.filter((x) => x.situacao === 'ativo')
+  const tudoEmDia = blocos.every((b) => b.itens.length === 0) && p.prazos.length === 0
+
+  return (
+    <div className="painel-geral">
+      <header>
+        <h2 className="t-headline" style={{ margin: 0 }}>Visão geral</h2>
+        <p className="muted" style={{ margin: '4px 0 0' }}>
+          {ativos.length} ativo(s). {tudoEmDia ? 'Tudo andando — nada pedindo atenção agora.' : 'O que pede atenção, de cima para baixo.'}
+        </p>
+      </header>
+
+      {p.prazos.length > 0 && (
+        <section className="painel-geral-bloco">
+          <h3 className="projetos-secao">Prazos nos próximos 14 dias</h3>
+          {p.prazos.map((x, i) => (
+            <button
+              key={i}
+              type="button"
+              className="painel-geral-linha"
+              onClick={() => (x.task && onEditarTarefa ? onEditarTarefa(x.task) : onAbrir(x.projeto.id))}
+            >
+              <span className="painel-geral-data">{x.data.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: 'short' })}</span>
+              <span className="painel-geral-texto">
+                <strong>{x.titulo}</strong>
+                <span className="muted t-label-sm">{x.projeto.nome}</span>
+              </span>
+            </button>
+          ))}
+        </section>
+      )}
+
+      {blocos
+        .filter((b) => b.itens.length > 0)
+        .map((b) => (
+          <section key={b.id} className="painel-geral-bloco">
+            <h3 className="projetos-secao">
+              {b.titulo} ({b.itens.length})
+            </h3>
+            {b.dica && <p className="muted t-label" style={{ margin: 0 }}>{b.dica}</p>}
+            {b.itens.map((x) => (
+              <button key={x.id} type="button" className={`painel-geral-linha${b.tom ? ` is-${b.tom}` : ''}`} onClick={() => onAbrir(x.id)}>
+                <span className="painel-geral-texto">
+                  <strong>{x.nome}</strong>
+                  {x.proximaAcao && b.id === 'vaga' && <span className="muted t-label-sm painel-geral-acao">{x.proximaAcao.title}</span>}
+                </span>
+                {b.extra && <span className="muted t-label-sm">{b.extra(x)}</span>}
+              </button>
+            ))}
+          </section>
+        ))}
+    </div>
+  )
+}
+
 // A tela de Projetos: a lista e a página do projeto aberto — um lugar só
 // onde o caso inteiro (tarefas, anotações, compromissos) fica à vista. Com
 // largura (computador), as duas ficam lado a lado, como uma caixa de e-mail:
 // trocar de projeto é um clique, sem voltar. Sem largura (celular), uma de
 // cada vez — quem decide é o CSS, pela largura da própria tela.
-export default function ProjetosPainel({ lista, projetosState, tasks, notes, ids, ...acoes }) {
-  const [abertoId, setAbertoId] = useState(null)
+export default function ProjetosPainel({ lista, projetosState, tasks, notes, ids, abertoInicial = null, ...acoes }) {
+  // `abertoInicial`: a revisão (etapa Projetos) abre esta tela já no projeto.
+  const [abertoId, setAbertoId] = useState(abertoInicial)
   const aberto = lista.find((p) => p.id === abertoId)
 
   function criar(nome) {
@@ -610,9 +719,11 @@ export default function ProjetosPainel({ lista, projetosState, tasks, notes, ids
               {...acoes}
             />
           ) : (
-            <div className="projetos-vazio muted">
-              {lista.length > 0 ? 'Escolha um projeto na lista para ver tudo o que ele tem.' : 'Crie o primeiro projeto ao lado.'}
-            </div>
+            lista.length > 0 ? (
+              <PainelGeral lista={lista} tasks={tasks} onAbrir={setAbertoId} onEditarTarefa={acoes.onEditarTarefa} />
+            ) : (
+              <div className="projetos-vazio muted">Crie o primeiro projeto ao lado.</div>
+            )
           )}
         </div>
       </div>
