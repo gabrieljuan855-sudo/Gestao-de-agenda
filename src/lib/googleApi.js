@@ -99,6 +99,9 @@ async function listAcrossCalendars(calendars, params) {
             calendarSummary: cal.summaryOverride || cal.summary,
             calendarColor: cal.backgroundColor,
             calendarIsPrimary: Boolean(cal.primary),
+            // Para os avisos no modo "seguir o Google Agenda": evento que usa
+            // o lembrete padrão só sabe quantos minutos são olhando a agenda.
+            calendarDefaultReminders: cal.defaultReminders || [],
           }))
         )
         .catch((err) => {

@@ -82,7 +82,10 @@ import {
   isInformational,
   needsPresence,
   isDeclined,
+  avisaDoEvento,
 } from './lib/calendarPrefs.js'
+import { lerConfigDeAvisos, gravarConfigDeAvisos } from './lib/lembretes.js'
+import useLembretes from './lib/useLembretes.js'
 
 // O Worker devolve o motivo de um login que falhou em /?erro_login=<codigo>
 // (ver worker/auth.js). Sem traduzir isso para a tela, o usuário só via a tela
@@ -150,6 +153,7 @@ export default function App() {
   const [calendarPrefs, setCalendarPrefs] = useState({})
   const [presence, setPresenceState] = useState(() => loadPresence())
   const [showCalendarSettings, setShowCalendarSettings] = useState(false)
+  const [configDeAvisos, setConfigDeAvisos] = useState(lerConfigDeAvisos)
   const [authStatus, setAuthStatus] = useState('loading')
   const [loadError, setLoadError] = useState(null)
   const [loginError] = useState(motivoDoLogin)
@@ -463,6 +467,12 @@ export default function App() {
     ajuda: () => setMostrandoAtalhos((atual) => !atual),
   })
   const occupies = (event) => occupiesTime(event, calendarPrefs, presence)
+
+  useLembretes({
+    signedIn,
+    config: configDeAvisos,
+    deveAvisar: (event) => avisaDoEvento(event, calendarPrefs, presence),
+  })
   const declined = (event) => isDeclined(event, presence)
 
   async function handleSetPresence(event, value) {
@@ -1372,6 +1382,11 @@ export default function App() {
           calendars={calendars}
           prefs={calendarPrefs}
           onChange={handleCalendarPrefs}
+          avisos={configDeAvisos}
+          onAvisos={(c) => {
+            setConfigDeAvisos(c)
+            gravarConfigDeAvisos(c)
+          }}
           onClose={() => setShowCalendarSettings(false)}
         />
       )}
