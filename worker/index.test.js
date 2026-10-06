@@ -408,3 +408,50 @@ describe('normalizeEsclarecer', () => {
     expect(normalizeEsclarecer(null).tipo).toBe(null)
   })
 })
+
+describe('assistente do projeto', () => {
+  it('sanitiza o contexto: corta tamanhos, lista desconhecida vira "outras", descarta lixo', async () => {
+    const { sanitizarContextoDoProjeto } = await import('./index.js')
+    const ctx = sanitizarContextoDoProjeto({
+      projeto: { nome: 'App FICAI', tipo: 'qualquer', resultado: 'x'.repeat(900), prazo: 'amanhã' },
+      tarefas: [{ titulo: 'Ligar', lista: 'inventada', prazo: '2026-10-10' }, { titulo: '' }, null],
+      anotacoes: [{ titulo: 'Reunião', trecho: 'y'.repeat(5000) }],
+      contextos: ['@Telefone', 'rua', 42],
+    })
+    expect(ctx.projeto).toMatchObject({ nome: 'App FICAI', tipo: 'projeto', prazo: null })
+    expect(ctx.projeto.resultado).toHaveLength(500)
+    expect(ctx.tarefas).toEqual([{ titulo: 'Ligar', lista: 'outras', prazo: '2026-10-10' }])
+    expect(ctx.anotacoes[0].trecho).toHaveLength(1200)
+    expect(ctx.contextos).toEqual(['telefone', 'rua'])
+    expect(ctx.alvo).toBe(null)
+  })
+
+  it('planejar: valida cada ação, tira repetidas e as que já existem, recusa prazo passado', async () => {
+    const { normalizePlanejar } = await import('./index.js')
+    const r = normalizePlanejar(
+      {
+        acoes: [
+          { titulo: 'Ligar para a escola', contexto: '@Telefone', prioridade: 'urgentíssima', prazo: '2026-10-01', motivo: 'm' },
+          { titulo: 'ligar para a escola' },
+          { titulo: 'Já existe' },
+          { titulo: 'Rascunhar ofício', prazo: '2026-10-20', prioridade: 'alta' },
+          { titulo: '' },
+          'lixo',
+        ],
+      },
+      { contextos: ['telefone'], existentes: ['já existe'], hoje: '2026-10-06' }
+    )
+    expect(r.acoes).toEqual([
+      { titulo: 'Ligar para a escola', contexto: 'telefone', prioridade: 'media', prazo: null, motivo: 'm' },
+      { titulo: 'Rascunhar ofício', contexto: null, prioridade: 'alta', prazo: '2026-10-20', motivo: '' },
+    ])
+  })
+
+  it('resultado e dividir só deixam passar texto, com tamanho limitado', async () => {
+    const { normalizeResultado, normalizeDividir } = await import('./index.js')
+    expect(normalizeResultado({ resultado: '  Protocolo publicado  ' })).toEqual({ resultado: 'Protocolo publicado' })
+    expect(normalizeResultado({ resultado: 42 })).toEqual({ resultado: '' })
+    const d = normalizeDividir({ acao: 'Listar campos', detalhes: 'z', mais: ['a', '', 7, 'b', 'c', 'd', 'e', 'f'] })
+    expect(d).toEqual({ acao: 'Listar campos', detalhes: 'z', mais: ['a', 'b', 'c', 'd', 'e'] })
+  })
+})
