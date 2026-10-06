@@ -11,6 +11,9 @@ import {
   normalizarLink,
   nomeSugerido,
   vincularArquivo,
+  panoramaDosProjetos,
+  projetosForaDaCobranca,
+  pareceIdeia,
 } from './projetos.js'
 
 const PROXIMAS = 'l-proximas'
@@ -33,7 +36,7 @@ describe('novoProjeto', () => {
 
 describe('normalizarProjeto', () => {
   it('mantém uma ficha válida', () => {
-    const p = { id: 'x', nome: 'X', resultado: 'r', situacao: 'pausado', prazo: '2026-10-01', createdAt: 'a', updatedAt: 'b', arquivos: [] }
+    const p = { id: 'x', nome: 'X', resultado: 'r', situacao: 'pausado', tipo: 'rotina', prazo: '2026-10-01', createdAt: 'a', updatedAt: 'b', arquivos: [] }
     expect(normalizarProjeto(p, agora)).toEqual(p)
   })
 
@@ -44,6 +47,7 @@ describe('normalizarProjeto', () => {
       nome: 'x',
       resultado: '',
       situacao: 'ativo',
+      tipo: 'projeto',
       prazo: null,
       createdAt: agora.toISOString(),
       updatedAt: agora.toISOString(),
@@ -174,5 +178,54 @@ describe('arquivos vinculados', () => {
     const p = normalizarProjeto({ id: 'x', arquivos: [{ id: 'a', url: 'javascript:x' }, { id: 'b', url: 'https://a.com/x.pdf' }, 'lixo'] })
     expect(p.arquivos.map((a) => a.id)).toEqual(['b'])
     expect(p.arquivos[0].nome).toBe('x.pdf')
+  })
+})
+
+describe('rotina', () => {
+  it('rotina ativa sem próxima ação não é cobrada como parada', () => {
+    const lista = listarProjetos({ registros: [{ id: 'reuniao', nome: 'Reunião', situacao: 'ativo', tipo: 'rotina' }], tasks: [], notes: [], idProximas: 'P' })
+    expect(lista[0]).toMatchObject({ tipo: 'rotina', semProximaAcao: false })
+  })
+
+  it('fica fora da cobrança da revisão, junto com pausados e concluídos', () => {
+    const lista = [
+      { id: 'a', tipo: 'projeto', situacao: 'ativo' },
+      { id: 'b', tipo: 'rotina', situacao: 'ativo' },
+      { id: 'c', tipo: 'projeto', situacao: 'pausado' },
+      { id: 'd', tipo: 'projeto', situacao: 'concluido' },
+    ]
+    expect(projetosForaDaCobranca(lista)).toEqual(['b', 'c', 'd'])
+  })
+})
+
+describe('panoramaDosProjetos', () => {
+  const agora = new Date(2026, 9, 6, 12)
+  const lista = [
+    { id: 'parado', nome: 'Parado', situacao: 'ativo', tipo: 'projeto', resultado: '', semProximaAcao: true, atrasadas: 0, diasSemAtividade: 30, proximaAcao: null },
+    { id: 'andando', nome: 'Andando', situacao: 'ativo', tipo: 'projeto', resultado: 'Pronto', semProximaAcao: false, atrasadas: 1, diasSemAtividade: 20, proximaAcao: { title: 'x'.repeat(90) }, prazo: '2026-10-10' },
+    { id: 'reuniao', nome: 'Reunião', situacao: 'ativo', tipo: 'rotina', resultado: '', semProximaAcao: false, atrasadas: 0, diasSemAtividade: 40, proximaAcao: null },
+    { id: 'pausado', nome: 'Pausado', situacao: 'pausado', tipo: 'projeto', resultado: '', semProximaAcao: false, atrasadas: 2, diasSemAtividade: 90 },
+  ]
+  const tasks = [
+    { id: 't1', projeto: 'reuniao', title: 'Levar pauta', status: 'needsAction', due: '2026-10-08T00:00:00.000Z' },
+    { id: 't2', projeto: 'andando', title: 'Longe', status: 'needsAction', due: '2026-12-01T00:00:00.000Z' },
+  ]
+  const p = panoramaDosProjetos(lista, tasks, agora)
+  const ids = (xs) => xs.map((x) => x.id)
+
+  it('parados, sem resultado e esquecidos só olham projetos ativos (não rotinas)', () => {
+    expect(ids(p.parados)).toEqual(['parado'])
+    expect(ids(p.semResultado)).toEqual(['parado'])
+    expect(ids(p.esquecidos)).toEqual(['andando'])
+  })
+
+  it('atrasados e prazos incluem rotina ativa, nunca o pausado', () => {
+    expect(ids(p.atrasados)).toEqual(['andando'])
+    expect(p.prazos.map((x) => x.titulo)).toEqual(['Levar pauta', 'Prazo do projeto'])
+  })
+
+  it('aponta a próxima ação que parece uma ideia inteira', () => {
+    expect(ids(p.acaoVaga)).toEqual(['andando'])
+    expect(pareceIdeia('Ligar para o cartório')).toBe(false)
   })
 })

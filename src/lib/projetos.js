@@ -17,6 +17,15 @@ export const SITUACOES = [
 ]
 const ORDEM_SITUACAO = { ativo: 0, pausado: 1, concluido: 2 }
 
+// Projeto tem chegada; rotina não. "Reunião de Equipe" não termina nunca —
+// é uma pauta que se renova a cada encontro —, e tratá-la como projeto a
+// deixava sempre "atrasada" e cobrada por próxima ação, distorcendo a lista
+// inteira. Rotina não entra na cobrança de "parado" nem de "sem resultado".
+export const TIPOS = [
+  { id: 'projeto', label: 'Projeto — tem um resultado e termina' },
+  { id: 'rotina', label: 'Rotina — reunião ou área que continua sempre' },
+]
+
 // Marca privada no evento do Calendar que diz a qual projeto ele pertence —
 // o mesmo mecanismo que os blocos de foco e os registros de conclusão já usam
 // para se reconhecer (extendedProperties.private).
@@ -35,6 +44,7 @@ export function normalizarProjeto(p, agora = new Date()) {
     nome: typeof p.nome === 'string' && p.nome.trim() ? p.nome.trim() : p.id,
     resultado: typeof p.resultado === 'string' ? p.resultado : '',
     situacao: ORDEM_SITUACAO[p.situacao] !== undefined ? p.situacao : 'ativo',
+    tipo: p.tipo === 'rotina' ? 'rotina' : 'projeto',
     prazo: DATA_ISO.test(p.prazo || '') ? p.prazo : null,
     createdAt: typeof p.createdAt === 'string' ? p.createdAt : iso,
     updatedAt: typeof p.updatedAt === 'string' ? p.updatedAt : iso,
@@ -133,7 +143,7 @@ export function novoProjeto(nome, agora = new Date()) {
   const id = etiqueta(nome)
   if (!id) return null
   const iso = agora.toISOString()
-  return { id, nome: nome.trim(), resultado: '', situacao: 'ativo', prazo: null, createdAt: iso, updatedAt: iso, arquivos: [] }
+  return { id, nome: nome.trim(), resultado: '', situacao: 'ativo', tipo: 'projeto', prazo: null, createdAt: iso, updatedAt: iso, arquivos: [] }
 }
 
 function maisRecente(...datas) {
@@ -154,7 +164,7 @@ export function listarProjetos({ registros = [], tasks = [], notes = [], idProxi
   const etiquetasSoltas = [...tasks.map((t) => t.projeto), ...notes.map((n) => n.projeto)].filter(Boolean)
   for (const id of etiquetasSoltas) {
     if (!porId.has(id)) {
-      porId.set(id, { id, nome: id, resultado: '', situacao: 'ativo', prazo: null, createdAt: null, updatedAt: null, arquivos: [], implicito: true })
+      porId.set(id, { id, nome: id, resultado: '', situacao: 'ativo', tipo: 'projeto', prazo: null, createdAt: null, updatedAt: null, arquivos: [], implicito: true })
     }
   }
 
@@ -173,7 +183,8 @@ export function listarProjetos({ registros = [], tasks = [], notes = [], idProxi
         // Projeto ativo sem próxima ação é o sinal que o GTD mais cobra: ele
         // parou de andar e nada na tela avisa. Pausado e concluído não
         // precisam de próxima ação — é justamente o que os distingue.
-        semProximaAcao: p.situacao === 'ativo' && !proximaAcao,
+        // Rotina também não: ela não anda para uma chegada, só acumula pauta.
+        semProximaAcao: p.situacao === 'ativo' && (p.tipo || 'projeto') === 'projeto' && !proximaAcao,
         ultimaAtividade: maisRecente(
           p.updatedAt,
           ...tasks.filter((t) => t.projeto === p.id).map((t) => t.updated),
@@ -181,6 +192,11 @@ export function listarProjetos({ registros = [], tasks = [], notes = [], idProxi
         ),
       }
     })
+    .map((p) => ({
+      ...p,
+      tipo: p.tipo || 'projeto',
+      diasSemAtividade: p.ultimaAtividade ? Math.floor((now - new Date(p.ultimaAtividade)) / 86400000) : null,
+    }))
     .sort((a, b) => ORDEM_SITUACAO[a.situacao] - ORDEM_SITUACAO[b.situacao] || a.nome.localeCompare(b.nome))
 }
 
@@ -216,4 +232,62 @@ export function eventoDoProjeto(event, projetoId) {
   const escapado = projetoId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   const re = new RegExp(`(^|\\s)#${escapado}(?![\\w-])`, 'i')
   return re.test(event.summary || '') || re.test(event.description || '')
+}
+
+// ---------- panorama: a visão de cima de todos os projetos ----------
+
+// Uma próxima ação com mais que isso costuma ser uma ideia inteira escrita no
+// lugar da ação ("Colocar protocolo no app, deve ser possível que cada
+// profissional..."). Quem lê não sabe por onde começar — o sinal é o tamanho.
+const LIMITE_DE_ACAO = 80
+
+export function pareceIdeia(titulo) {
+  return typeof titulo === 'string' && titulo.trim().length > LIMITE_DE_ACAO
+}
+
+// Projeto ativo sem mexer há esse tempo está esquecido, mesmo que tenha
+// próxima ação: a ação existe, mas ninguém está fazendo.
+const DIAS_ESQUECIDO = 14
+const DIAS_DE_PRAZO = 14
+
+// O que o painel geral mostra quando nenhum projeto está aberto: cada lista
+// é uma pergunta da revisão de projetos do GTD, respondida de olhar. Rotina
+// só entra em atrasadas e prazos — "parado", "sem resultado" e "esquecido"
+// são perguntas de quem tem chegada.
+export function panoramaDosProjetos(lista, tasks = [], now = new Date()) {
+  const ativos = (lista || []).filter((p) => p.situacao === 'ativo')
+  const projetos = ativos.filter((p) => p.tipo !== 'rotina')
+  const hoje = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const limite = new Date(hoje.getTime() + DIAS_DE_PRAZO * 86400000)
+  const porId = new Map(ativos.map((p) => [p.id, p]))
+
+  const prazos = []
+  for (const p of ativos) {
+    if (!p.prazo) continue
+    const [a, m, d] = p.prazo.split('-').map(Number)
+    const data = new Date(a, m - 1, d)
+    if (data >= hoje && data <= limite) prazos.push({ projeto: p, titulo: 'Prazo do projeto', data })
+  }
+  for (const t of tasks) {
+    if (t.status === 'completed' || !t.due || !porId.has(t.projeto)) continue
+    const data = new Date(String(t.due).slice(0, 10) + 'T00:00:00')
+    if (data >= hoje && data <= limite) prazos.push({ projeto: porId.get(t.projeto), titulo: t.title, data, task: t })
+  }
+  prazos.sort((x, y) => x.data - y.data)
+
+  return {
+    parados: projetos.filter((p) => p.semProximaAcao),
+    atrasados: ativos.filter((p) => p.atrasadas > 0),
+    prazos,
+    semResultado: projetos.filter((p) => !p.resultado?.trim()),
+    esquecidos: projetos.filter((p) => !p.semProximaAcao && p.diasSemAtividade !== null && p.diasSemAtividade >= DIAS_ESQUECIDO),
+    acaoVaga: projetos.filter((p) => pareceIdeia(p.proximaAcao?.title)),
+  }
+}
+
+// O que a revisão não deve cobrar como "projeto sem próxima ação": rotinas
+// (não têm chegada) e o que está pausado ou concluído (não ter próxima ação é
+// o que esses estados significam).
+export function projetosForaDaCobranca(lista) {
+  return (lista || []).filter((p) => p.tipo === 'rotina' || p.situacao !== 'ativo').map((p) => p.id)
 }

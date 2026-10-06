@@ -230,3 +230,18 @@ describe('cargaDaSemana e semanaEstaFolgada', () => {
     expect(semanaEstaFolgada({ minutosTarefas: 500, minutosLivres: 780 })).toBe(false)
   })
 })
+
+describe('revisão não cobra rotina nem projeto pausado', () => {
+  it('ignorarProjetos tira o projeto da contagem e dos itens', async () => {
+    const { numerosDaRevisao, itensDaRevisao } = await import('./revisao.js')
+    const tasks = [
+      { id: 'a', title: 'Pauta', projeto: 'reuniao', tasklistId: 'A', status: 'needsAction', updated: '2026-10-01T00:00:00Z' },
+      { id: 'b', title: 'Algo', projeto: 'app', tasklistId: 'A', status: 'needsAction', updated: '2026-10-01T00:00:00Z' },
+    ]
+    const agora = new Date(2026, 9, 6)
+    const n = numerosDaRevisao({ tasks, idProximas: 'P', idAguardando: 'X', ignorarProjetos: ['reuniao'] }, agora)
+    expect(n.projetosParados).toEqual(['app'])
+    const itens = itensDaRevisao({ tasks, idProximas: 'P', idAguardando: 'X', idAlgumDia: 'S', ignorarProjetos: ['reuniao'] }, agora)
+    expect(itens.filter((i) => i.tipo === 'projeto').map((i) => i.projeto)).toEqual(['app'])
+  })
+})

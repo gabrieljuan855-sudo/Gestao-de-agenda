@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { formatDuration } from '../lib/dates.js'
+import { descreverUltimaRevisao, revisaoAtrasada } from '../lib/revisaoRegistro.js'
 
 function dataCurta(iso) {
   const [, mes, dia] = iso.split('-')
@@ -15,7 +16,7 @@ function somarMinutos(hora, minutos) {
 }
 
 // O que o item é, numa linha — para a sugestão ser lida sem abrir nada.
-function descreverItem(item) {
+export function descreverItem(item) {
   if (item.tipo === 'atrasada') return `"${item.titulo}" · atrasada há ${item.dias} dia(s)`
   if (item.tipo === 'aguardando') return `"${item.titulo}" · esperando ${item.quem} há ${item.dias} dias`
   if (item.tipo === 'projeto') return `${item.titulo} · projeto sem próxima ação`
@@ -25,7 +26,7 @@ function descreverItem(item) {
 
 // O rótulo diz exatamente o que o clique faz — é um atalho que grava na conta
 // do Google, então não pode ser vago tipo "Aplicar".
-function rotuloDaAcao(s) {
+export function rotuloDaAcao(s) {
   if (s.acao === 'remarcar') return `Remarcar para ${dataCurta(s.data)}`
   if (s.acao === 'algum_dia') return 'Mover para Algum dia'
   if (s.acao === 'concluir') return 'Marcar como feita'
@@ -35,201 +36,185 @@ function rotuloDaAcao(s) {
   return `Criar: ${s.titulo}${s.contexto ? ` @${s.contexto}` : ''}`
 }
 
-// A revisão semanal do GTD, sem o ritual: os números que o app calcula
-// sozinho e, por cima, uma ação sugerida para cada coisa que pede decisão —
-// um clique resolve, "Ignorar" deixa como está. Não é um checklist
-// obrigatório, só a tela pronta para destravar a semana.
-export default function Revisao({
-  numeros,
-  comentario,
-  sugestoes = [],
-  plano = [],
-  carregando,
-  onGerar,
-  onAplicar,
-  onAgendarPlano,
-}) {
-  // Estado de cada sugestão pelo id do item: 'aplicando', 'feito',
-  // 'ignorado', ou a mensagem de erro. Recalcular traz uma lista nova, e o
-  // estado da anterior não vale mais para ela.
+// Uma ação sugerida por item que pede decisão — um clique resolve,
+// "Ignorar" deixa como está. `onDecisao` recebe uma linha legível de cada
+// coisa resolvida, para o registro do fechamento da revisão.
+export function SugestoesDaRevisao({ sugestoes = [], onAplicar, onDecisao }) {
   const [estado, setEstado] = useState({})
   useEffect(() => setEstado({}), [sugestoes])
-
-  // O plano usa o "tarefaId" como chave — não tem o mesmo id de sugestões,
-  // mas o mesmo ciclo de vida (aplicando/feito/ignorado/erro).
-  const [estadoPlano, setEstadoPlano] = useState({})
-  useEffect(() => setEstadoPlano({}), [plano])
 
   async function aplicar(sugestao) {
     setEstado((e) => ({ ...e, [sugestao.itemId]: 'aplicando' }))
     try {
       await onAplicar(sugestao)
       setEstado((e) => ({ ...e, [sugestao.itemId]: 'feito' }))
+      onDecisao?.(`${rotuloDaAcao(sugestao)} — ${descreverItem(sugestao.item)}`)
     } catch (err) {
       setEstado((e) => ({ ...e, [sugestao.itemId]: `Não deu certo: ${err.message}` }))
     }
   }
 
+  const visiveis = sugestoes.filter((s) => estado[s.itemId] !== 'ignorado')
+  if (visiveis.length === 0) return null
+  return (
+    <div className="revisao-sugestoes">
+      {visiveis.map((s) => {
+        const st = estado[s.itemId]
+        return (
+          <div key={s.itemId} className="revisao-sugestao">
+            <div className="revisao-sugestao-item">{descreverItem(s.item)}</div>
+            {s.motivo && <div className="muted revisao-sugestao-motivo">{s.motivo}</div>}
+            {st === 'feito' ? (
+              <div className="muted revisao-sugestao-motivo">✓ Feito.</div>
+            ) : (
+              <div className="revisao-sugestao-acoes">
+                <button type="button" className="primary" disabled={st === 'aplicando'} onClick={() => aplicar(s)}>
+                  {st === 'aplicando' ? 'Aplicando...' : rotuloDaAcao(s)}
+                </button>
+                <button
+                  type="button"
+                  disabled={st === 'aplicando'}
+                  onClick={() => setEstado((e) => ({ ...e, [s.itemId]: 'ignorado' }))}
+                >
+                  Ignorar
+                </button>
+              </div>
+            )}
+            {st && !['aplicando', 'feito'].includes(st) && <div className="form-error">{st}</div>}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// "Sobrecarregada" é só o oposto de semanaEstaFolgada (revisao.js): as
+// tarefas com prazo já tomam mais de 60% do vão livre da semana.
+export function semanaSobrecarregada(carga) {
+  return Boolean(carga && carga.minutosLivres > 0 && carga.minutosTarefas > carga.minutosLivres * 0.6)
+}
+
+export function LinhaDeCarga({ carga }) {
+  if (!carga) return null
+  const sobrecarregada = semanaSobrecarregada(carga)
+  return (
+    <div className={`revisao-carga${sobrecarregada ? ' is-sobrecarregada' : ''}`}>
+      <strong>Próximos 7 dias:</strong> {formatDuration(carga.minutosTarefas)} de tarefas com prazo,{' '}
+      {formatDuration(carga.minutosLivres)} livres na agenda
+      {sobrecarregada ? ' — mais tarefa do que espaço. Vale adiar ou delegar algo antes de agendar mais.' : '.'}
+    </div>
+  )
+}
+
+// O plano da semana da IA: cada próxima ação forte num vão livre real.
+export function PlanoDaSemana({ plano = [], onAgendar, onDecisao }) {
+  const [estado, setEstado] = useState({})
+  useEffect(() => setEstado({}), [plano])
+
   async function agendar(p) {
-    setEstadoPlano((e) => ({ ...e, [p.tarefaId]: 'aplicando' }))
+    setEstado((e) => ({ ...e, [p.tarefaId]: 'aplicando' }))
     try {
-      await onAgendarPlano(p)
-      setEstadoPlano((e) => ({ ...e, [p.tarefaId]: 'feito' }))
+      await onAgendar(p)
+      setEstado((e) => ({ ...e, [p.tarefaId]: 'feito' }))
+      onDecisao?.(`Agendado: "${p.candidata.titulo}" em ${dataCurta(p.dia)} às ${p.hora}`)
     } catch (err) {
-      setEstadoPlano((e) => ({ ...e, [p.tarefaId]: `Não deu certo: ${err.message}` }))
+      setEstado((e) => ({ ...e, [p.tarefaId]: `Não deu certo: ${err.message}` }))
     }
   }
 
-  const visiveis = sugestoes.filter((s) => estado[s.itemId] !== 'ignorado')
-  const planoVisivel = plano.filter((p) => estadoPlano[p.tarefaId] !== 'ignorado')
-  const carga = numeros?.carga
-  // "Sobrecarregada" aqui é só o oposto de semanaEstaFolgada (revisao.js):
-  // as tarefas com prazo já tomam mais de 60% do vão livre da semana.
-  const sobrecarregada = carga && carga.minutosLivres > 0 && carga.minutosTarefas > carga.minutosLivres * 0.6
-
+  const visivel = plano.filter((p) => estado[p.tarefaId] !== 'ignorado')
+  if (visivel.length === 0) return null
   return (
-    <div className="card">
-      <div className="muted" style={{ marginBottom: 10 }}>Revisão da semana</div>
-
-      {!numeros && (
-        <>
-          <p className="muted" style={{ fontSize: 'var(--body-sm)' }}>
-            O que ficou parado, o que está esperando há tempo demais, o que foi para a frente.
-          </p>
-          <button type="button" className="primary" onClick={onGerar} disabled={carregando}>
-            {carregando ? 'Calculando...' : 'Gerar revisão'}
-          </button>
-        </>
-      )}
-
-      {numeros && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {comentario && <p style={{ fontSize: 'var(--body-md)', margin: 0 }}>{comentario}</p>}
-
-          {planoVisivel.length > 0 && (
-            <div>
-              <div className="revisao-sugestao-item" style={{ marginBottom: 6 }}>Plano da semana</div>
-              <div className="revisao-sugestoes">
-                {planoVisivel.map((p) => {
-                  const st = estadoPlano[p.tarefaId]
-                  const minutos = p.candidata.duracao || 30
-                  return (
-                    <div key={p.tarefaId} className="revisao-sugestao">
-                      <div className="revisao-sugestao-item">
-                        "{p.candidata.titulo}" · {dataCurta(p.dia)}, {p.hora}–{somarMinutos(p.hora, minutos)}
-                      </div>
-                      {p.motivo && <div className="muted revisao-sugestao-motivo">{p.motivo}</div>}
-                      {st === 'feito' ? (
-                        <div className="muted revisao-sugestao-motivo">✓ Agendado.</div>
-                      ) : (
-                        <div className="revisao-sugestao-acoes">
-                          <button type="button" className="primary" disabled={st === 'aplicando'} onClick={() => agendar(p)}>
-                            {st === 'aplicando' ? 'Agendando...' : 'Agendar'}
-                          </button>
-                          <button
-                            type="button"
-                            disabled={st === 'aplicando'}
-                            onClick={() => setEstadoPlano((e) => ({ ...e, [p.tarefaId]: 'ignorado' }))}
-                          >
-                            Ignorar
-                          </button>
-                        </div>
-                      )}
-                      {st && !['aplicando', 'feito'].includes(st) && <div className="form-error">{st}</div>}
-                    </div>
-                  )
-                })}
+    <div className="revisao-sugestoes">
+      {visivel.map((p) => {
+        const st = estado[p.tarefaId]
+        const minutos = p.candidata.duracao || 30
+        return (
+          <div key={p.tarefaId} className="revisao-sugestao">
+            <div className="revisao-sugestao-item">
+              "{p.candidata.titulo}" · {dataCurta(p.dia)}, {p.hora}–{somarMinutos(p.hora, minutos)}
+            </div>
+            {p.motivo && <div className="muted revisao-sugestao-motivo">{p.motivo}</div>}
+            {st === 'feito' ? (
+              <div className="muted revisao-sugestao-motivo">✓ Agendado.</div>
+            ) : (
+              <div className="revisao-sugestao-acoes">
+                <button type="button" className="primary" disabled={st === 'aplicando'} onClick={() => agendar(p)}>
+                  {st === 'aplicando' ? 'Agendando...' : 'Agendar'}
+                </button>
+                <button type="button" disabled={st === 'aplicando'} onClick={() => setEstado((e) => ({ ...e, [p.tarefaId]: 'ignorado' }))}>
+                  Ignorar
+                </button>
               </div>
-            </div>
-          )}
-
-          {visiveis.length > 0 && (
-            <div className="revisao-sugestoes">
-              {visiveis.map((s) => {
-                const st = estado[s.itemId]
-                return (
-                  <div key={s.itemId} className="revisao-sugestao">
-                    <div className="revisao-sugestao-item">{descreverItem(s.item)}</div>
-                    {s.motivo && <div className="muted revisao-sugestao-motivo">{s.motivo}</div>}
-                    {st === 'feito' ? (
-                      <div className="muted revisao-sugestao-motivo">✓ Feito.</div>
-                    ) : (
-                      <div className="revisao-sugestao-acoes">
-                        <button
-                          type="button"
-                          className="primary"
-                          disabled={st === 'aplicando'}
-                          onClick={() => aplicar(s)}
-                        >
-                          {st === 'aplicando' ? 'Aplicando...' : rotuloDaAcao(s)}
-                        </button>
-                        <button
-                          type="button"
-                          disabled={st === 'aplicando'}
-                          onClick={() => setEstado((e) => ({ ...e, [s.itemId]: 'ignorado' }))}
-                        >
-                          Ignorar
-                        </button>
-                      </div>
-                    )}
-                    {st && !['aplicando', 'feito'].includes(st) && <div className="form-error">{st}</div>}
-                  </div>
-                )
-              })}
-            </div>
-          )}
-
-          <ul
-            className="revisao-lista"
-            style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 6, fontSize: 'var(--body-sm)' }}
-          >
-            {carga && (
-              <li style={sobrecarregada ? { fontWeight: 600, color: 'var(--urgent)' } : undefined}>
-                Próximos 7 dias: {formatDuration(carga.minutosTarefas)} de tarefas com prazo,{' '}
-                {formatDuration(carga.minutosLivres)} livres na agenda
-                {sobrecarregada ? ' — mais tarefa do que espaço.' : '.'}
-              </li>
             )}
-            <li>
-              {numeros.entradaVazia
-                ? 'Entrada vazia — nada esperando ser esclarecido.'
-                : 'Ainda há algo na Entrada esperando ser esclarecido.'}
-            </li>
-            <li>{numeros.atrasadas === 0 ? 'Nenhuma tarefa atrasada.' : `${numeros.atrasadas} tarefa(s) atrasada(s).`}</li>
-            <li>
-              {numeros.paradas === 0
-                ? 'Nada parado há mais de 3 dias.'
-                : `${numeros.paradas} tarefa(s) parada(s) há mais de 3 dias.`}
-            </li>
-            <li>
-              {numeros.projetosParados.length === 0
-                ? 'Todo projeto tem alguma próxima ação.'
-                : `Projeto(s) sem próxima ação: ${numeros.projetosParados.map((p) => `#${p}`).join(', ')}.`}
-            </li>
-            <li>
-              {numeros.aguardandoEnvelhecendo.length === 0
-                ? 'Nenhuma espera com mais de uma semana.'
-                : `Esperando há mais de uma semana: ${numeros.aguardandoEnvelhecendo
-                    .map((a) => `"${a.title}" (${a.dias}d)`)
-                    .join(', ')}.`}
-            </li>
-            <li>
-              {numeros.concluidasNaSemana === 0
-                ? 'Nenhuma tarefa concluída ainda esta semana.'
-                : `${numeros.concluidasNaSemana} tarefa(s) concluída(s) esta semana.`}
-            </li>
-            <li>
-              {numeros.blocosDeFoco === 0
-                ? 'Nenhum bloco de foco esta semana.'
-                : `${numeros.blocosDeFoco} bloco(s) de foco, ${formatDuration(numeros.minutosDeFoco)}.`}
-            </li>
-          </ul>
+            {st && !['aplicando', 'feito'].includes(st) && <div className="form-error">{st}</div>}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
 
-          <button type="button" onClick={onGerar} disabled={carregando}>
-            {carregando ? 'Recalculando...' : 'Recalcular'}
-          </button>
+// Os números que o app calcula sozinho, sem IA.
+export function NumerosDaRevisao({ numeros }) {
+  if (!numeros) return null
+  return (
+    <ul className="revisao-lista">
+      <li>
+        {numeros.entradaVazia
+          ? 'Entrada vazia — nada esperando ser esclarecido.'
+          : 'Ainda há algo na Entrada esperando ser esclarecido.'}
+      </li>
+      <li>{numeros.atrasadas === 0 ? 'Nenhuma tarefa atrasada.' : `${numeros.atrasadas} tarefa(s) atrasada(s).`}</li>
+      <li>{numeros.paradas === 0 ? 'Nada parado há mais de 3 dias.' : `${numeros.paradas} tarefa(s) parada(s) há mais de 3 dias.`}</li>
+      <li>
+        {numeros.projetosParados.length === 0
+          ? 'Todo projeto tem alguma próxima ação.'
+          : `Projeto(s) sem próxima ação: ${numeros.projetosParados.map((p) => `#${p}`).join(', ')}.`}
+      </li>
+      <li>
+        {numeros.aguardandoEnvelhecendo.length === 0
+          ? 'Nenhuma espera com mais de uma semana.'
+          : `Esperando há mais de uma semana: ${numeros.aguardandoEnvelhecendo.map((a) => `"${a.title}" (${a.dias}d)`).join(', ')}.`}
+      </li>
+      <li>
+        {numeros.concluidasNaSemana === 0
+          ? 'Nenhuma tarefa concluída ainda esta semana.'
+          : `${numeros.concluidasNaSemana} tarefa(s) concluída(s) esta semana.`}
+      </li>
+      <li>
+        {numeros.blocosDeFoco === 0
+          ? 'Nenhum bloco de foco esta semana.'
+          : `${numeros.blocosDeFoco} bloco(s) de foco, ${formatDuration(numeros.minutosDeFoco)}.`}
+      </li>
+    </ul>
+  )
+}
+
+// A aba Revisão do painel é só a porta de entrada: quando foi a última, o
+// essencial dos números se já calculados, e o botão que abre a revisão
+// guiada em tela própria (RevisaoGuiada.jsx). Antes a revisão inteira —
+// sugestões da IA, plano da semana, números — se espremia aqui, numa coluna
+// de 400px, justo a parte do app que mais pede espaço.
+export default function Revisao({ numeros, ultimaRevisao, onAbrir }) {
+  const atrasada = revisaoAtrasada(ultimaRevisao)
+  return (
+    <div className="revisao-entrada">
+      <p className={`revisao-ultima${atrasada ? ' is-atrasada' : ''}`}>{descreverUltimaRevisao(ultimaRevisao)}</p>
+      <p className="muted" style={{ margin: 0 }}>
+        Um passo de cada vez: esvaziar a Entrada, decidir o que está atrasado e parado, cobrar quem você espera,
+        olhar cada projeto, reavaliar o Algum dia e planejar a semana.
+      </p>
+      {numeros && (
+        <div className="revisao-resumo">
+          <span><strong>{numeros.atrasadas}</strong> atrasada(s)</span>
+          <span><strong>{numeros.projetosParados.length}</strong> projeto(s) parado(s)</span>
+          <span><strong>{numeros.concluidasNaSemana}</strong> concluída(s) na semana</span>
         </div>
       )}
+      <button type="button" className="primary" onClick={onAbrir}>
+        {numeros ? 'Continuar a revisão' : 'Começar a revisão'}
+      </button>
     </div>
   )
 }
