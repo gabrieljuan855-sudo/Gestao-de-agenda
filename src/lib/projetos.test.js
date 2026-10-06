@@ -14,6 +14,11 @@ import {
   panoramaDosProjetos,
   projetosForaDaCobranca,
   pareceIdeia,
+  normalizarMarcos,
+  adicionarMarco,
+  alternarMarco,
+  removerMarco,
+  proximoMarco,
 } from './projetos.js'
 
 const PROXIMAS = 'l-proximas'
@@ -227,5 +232,38 @@ describe('panoramaDosProjetos', () => {
   it('aponta a próxima ação que parece uma ideia inteira', () => {
     expect(ids(p.acaoVaga)).toEqual(['andando'])
     expect(pareceIdeia('Ligar para o cartório')).toBe(false)
+  })
+})
+
+describe('marcos', () => {
+  const base = [
+    { id: 'a', titulo: 'Sem data', data: null, feito: false },
+    { id: 'b', titulo: 'Relatório', data: '2026-11-30', feito: false },
+    { id: 'c', titulo: 'Já feito', data: '2026-09-01', feito: true },
+    { id: 'd', titulo: 'Reunião', data: '2026-10-01', feito: false },
+  ]
+
+  it('ordena pendentes por data, sem data no fim e feitos por último; descarta lixo', () => {
+    expect(normalizarMarcos([...base, null, { id: 'x', titulo: '  ' }, { titulo: 'sem id' }]).map((m) => m.id)).toEqual(['d', 'b', 'a', 'c'])
+    expect(normalizarMarcos([{ id: 'z', titulo: 'X', data: 'amanhã', feito: 'sim' }])).toEqual([{ id: 'z', titulo: 'X', data: null, feito: false }])
+  })
+
+  it('fica de fora da ficha quando não há nenhum', () => {
+    expect(normalizarProjeto({ id: 'p' }, agora).marcos).toBeUndefined()
+    expect(normalizarProjeto({ id: 'p', marcos: base }, agora).marcos).toHaveLength(4)
+  })
+
+  it('adiciona, alterna e remove', () => {
+    const com = adicionarMarco(base, { titulo: '  Novo ', data: '2026-10-15' }, agora)
+    expect(com.map((m) => m.titulo)).toContain('Novo')
+    expect(adicionarMarco(base, { titulo: '   ' })).toHaveLength(4)
+    expect(alternarMarco(base, 'c').find((m) => m.id === 'c').feito).toBe(false)
+    expect(removerMarco(base, 'a').map((m) => m.id)).toEqual(['d', 'b', 'c'])
+  })
+
+  it('aponta o próximo marco e se ele já venceu', () => {
+    expect(proximoMarco(base, '2026-10-06')).toMatchObject({ id: 'd', atrasado: true })
+    expect(proximoMarco(base, '2026-09-20')).toMatchObject({ id: 'd', atrasado: false })
+    expect(proximoMarco([base[2]], '2026-10-06')).toBeNull()
   })
 })

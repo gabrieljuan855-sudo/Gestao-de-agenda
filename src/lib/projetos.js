@@ -51,7 +51,56 @@ export function normalizarProjeto(p, agora = new Date()) {
     arquivos: normalizarArquivos(p.arquivos),
     // Projeto com dados sensíveis (um caso atendido) pode recusar a IA de vez.
     ...(p.semIA === true ? { semIA: true } : {}),
+    // Opcional como semIA: ficha sem marcos continua com o formato de antes.
+    ...(Array.isArray(p.marcos) && normalizarMarcos(p.marcos).length ? { marcos: normalizarMarcos(p.marcos) } : {}),
   }
+}
+
+// ---------- marcos ----------
+//
+// Próxima ação diz o que fazer agora; marco diz onde o projeto precisa estar
+// e quando ("relatório entregue até 30/11"). Sem eles, um projeto longo só
+// tem o prazo final — e descobre-se atrasado no último mês.
+
+export function normalizarMarcos(lista) {
+  return (Array.isArray(lista) ? lista : [])
+    .filter((m) => m && typeof m.id === 'string' && typeof m.titulo === 'string' && m.titulo.trim())
+    .map((m) => ({
+      id: m.id,
+      titulo: m.titulo.trim().slice(0, 120),
+      data: DATA_ISO.test(m.data || '') ? m.data : null,
+      feito: m.feito === true,
+    }))
+    .sort(compararMarcos)
+}
+
+// Pendentes antes dos feitos; entre eles, por data, e sem data por último.
+function compararMarcos(a, b) {
+  if (a.feito !== b.feito) return a.feito ? 1 : -1
+  if (a.data !== b.data) return !a.data ? 1 : !b.data ? -1 : a.data < b.data ? -1 : 1
+  return 0
+}
+
+export function adicionarMarco(marcos, { titulo, data }, agora = new Date()) {
+  const limpo = typeof titulo === 'string' ? titulo.trim() : ''
+  if (!limpo) return normalizarMarcos(marcos)
+  const id = `m${agora.getTime().toString(36)}${Math.random().toString(36).slice(2, 6)}`
+  return normalizarMarcos([...(marcos || []), { id, titulo: limpo, data, feito: false }])
+}
+
+export function alternarMarco(marcos, id) {
+  return normalizarMarcos((marcos || []).map((m) => (m.id === id ? { ...m, feito: !m.feito } : m)))
+}
+
+export function removerMarco(marcos, id) {
+  return normalizarMarcos((marcos || []).filter((m) => m.id !== id))
+}
+
+// O marco pendente mais próximo, e se já passou da data.
+export function proximoMarco(marcos, hojeIso) {
+  const m = normalizarMarcos(marcos).find((x) => !x.feito)
+  if (!m) return null
+  return { ...m, atrasado: Boolean(m.data && hojeIso && m.data < hojeIso) }
 }
 
 // ---------- arquivos vinculados ----------

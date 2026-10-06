@@ -2685,3 +2685,49 @@ button.danger:hover { background: var(--urgent-bg); }
 /* O textarea geral do painel largo herda altura de editor de nota; aqui é
    uma frase só. */
 .rail-panel.is-wide .assistente textarea { min-height: 0; }
+.assistente-botoes button.is-ativo {
+  background: var(--primary-container);
+  color: var(--on-primary-container);
+  border-color: transparent;
+}
+.rail-panel.is-wide .assistente textarea.assistente-documento { min-height: 40vh; font-size: var(--body-sm); }
+.assistente-pergunta { display: flex; gap: 6px; }
+.assistente-pergunta input { flex: 1; min-width: 0; }
+.assistente-resposta {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: var(--shape-sm);
+  background: var(--surface-raised);
+  overflow-wrap: anywhere;
+}
+/* Botão de texto do MD3, dentro de uma frase. */
+.link-btn {
+  border: none;
+  background: transparent;
+  color: var(--primary);
+  padding: 2px 6px;
+  font-weight: 600;
+  border-radius: var(--shape-xs);
+}
+
+/* ---------- Marcos do projeto ---------- */
+.projeto-marcos { display: flex; flex-direction: column; gap: 6px; }
+.projeto-marco {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 4px 6px 10px;
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--shape-sm);
+  background: var(--surface-raised);
+}
+.projeto-marco-check { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; cursor: pointer; }
+.projeto-marco-check input { width: 16px; height: 16px; flex-shrink: 0; }
+.projeto-marco-titulo { overflow-wrap: anywhere; }
+.projeto-marco.is-feito .projeto-marco-titulo { text-decoration: line-through; color: var(--on-surface-muted); }
+.projeto-marco.is-atrasado { border-color: var(--urgent); }
+.projeto-marco.is-atrasado .projeto-evento-quando { color: var(--urgent); }
+.projeto-linha-marco { color: var(--on-surface-variant); }
+.projeto-linha-marco.is-atrasado { color: var(--urgent); }

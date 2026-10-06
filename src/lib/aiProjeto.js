@@ -51,7 +51,9 @@ export function descreverEnvio(ctx) {
   return `Vai para a IA: ${partes.length ? `${partes.join(', ')} e ${ultimo}` : ultimo} deste projeto.`
 }
 
-export async function pedirAoProjeto(modo, contexto) {
+// `extra` leva o que só um modo usa: { documento: {tipo, instrucao} } ou
+// { pergunta }.
+export async function pedirAoProjeto(modo, contexto, extra = {}) {
   const token = await ensureToken()
   if (!token) throw new Error('Faça login primeiro.')
   const agora = new Date()
@@ -61,6 +63,7 @@ export async function pedirAoProjeto(modo, contexto) {
     body: JSON.stringify({
       modo,
       ...contexto,
+      ...extra,
       today: agora.toLocaleDateString('pt-BR'),
       weekday: agora.toLocaleDateString('pt-BR', { weekday: 'long' }),
       hojeIso: toDateInput(agora),
