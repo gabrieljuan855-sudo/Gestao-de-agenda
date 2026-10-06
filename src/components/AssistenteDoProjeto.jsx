@@ -92,7 +92,7 @@ export default function AssistenteDoProjeto({
     } catch (err) {
       setErro(
         err.transiente
-          ? 'A IA está sobrecarregada ou sem cota agora — tente de novo daqui a pouco.'
+          ? err.message
           : `Não deu para falar com a IA: ${err.message}`
       )
     } finally {

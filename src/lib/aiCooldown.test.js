@@ -10,6 +10,8 @@ describe('duracaoDaPausa', () => {
     // justamente o que mantinha o limite estourado.
     expect(duracaoDaPausa('limite')).toBe(60 * MINUTO)
     expect(duracaoDaPausa('sobrecarga')).toBe(5 * MINUTO)
+    expect(duracaoDaPausa('dia')).toBe(60 * MINUTO)
+    expect(duracaoDaPausa('minuto')).toBe(MINUTO)
   })
 
   it('não pausa nada por um erro comum', () => {

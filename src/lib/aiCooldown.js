@@ -49,8 +49,13 @@ const PAUSA_LIMITE_MS = 60 * 60 * 1000
 // tentativa na outra dentro da mesma rajada.
 const PAUSA_SOBRECARGA_MS = 5 * 60 * 1000
 
+// 'dia' e 'minuto' vêm do Worker desde que ele passou a ler qual cota do
+// Gemini estourou; 'limite' é o nome antigo, de antes dessa distinção.
+const PAUSA_MINUTO_MS = 60 * 1000
+
 export function duracaoDaPausa(motivo) {
-  if (motivo === 'limite') return PAUSA_LIMITE_MS
+  if (motivo === 'limite' || motivo === 'dia') return PAUSA_LIMITE_MS
+  if (motivo === 'minuto') return PAUSA_MINUTO_MS
   if (motivo === 'sobrecarga') return PAUSA_SOBRECARGA_MS
   return 0
 }

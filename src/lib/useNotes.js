@@ -371,7 +371,7 @@ export default function useNotes({ signedIn }) {
       console.error('Não foi possível analisar a anotação:', err)
       setAiError(
         err.transiente
-          ? 'A IA está sobrecarregada ou sem cota por agora — as sugestões voltam sozinhas mais tarde.'
+          ? err.message
           : `Não deu para revisar essa anotação com a IA agora (${err.message}).`
       )
     } finally {
@@ -400,7 +400,7 @@ export default function useNotes({ signedIn }) {
       console.error('Não foi possível buscar nas anotações:', err)
       setSearchError(
         err.transiente
-          ? 'A IA está sobrecarregada ou sem cota por agora — tenta de novo daqui a pouco.'
+          ? err.message
           : `Não deu para buscar agora (${err.message}).`
       )
     } finally {

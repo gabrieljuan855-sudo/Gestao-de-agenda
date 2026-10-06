@@ -44,40 +44,90 @@ async function verifyCaller(request, env) {
   return info
 }
 
-async function callGemini(env, prompt) {
+// Quanto esperar entre uma tentativa e outra quando o Gemini responde 503.
+// Sobrecarga do lado do Google costuma durar segundos; antes, o primeiro 503
+// já virava o aviso vermelho na tela, e a pessoa tentava de novo na mão —
+// exatamente o que a segunda tentativa automática faz, sem o susto.
+const ESPERAS_SOBRECARGA_MS = [1000, 2500]
+// Limite por minuto com espera curta: vale aguardar aqui dentro, uma vez.
+const ESPERA_MAXIMA_POR_MINUTO_S = 8
+
+const dormir = (ms) => new Promise((r) => setTimeout(r, ms))
+
+// Lê o corpo de erro do Gemini e diz QUAL limite foi: sobrecarga do
+// servidor (503), limite por minuto ou cota do dia (429). O Google manda
+// isso em `error.details` (QuotaFailure com o quotaId, RetryInfo com a
+// espera). Antes o corpo era jogado fora, e "sobrecarregada ou sem cota"
+// misturava dois problemas com soluções opostas: um passa sozinho em
+// segundos, o outro só no dia seguinte.
+export function classificarErroGemini(status, corpo) {
+  if (status === 503 || status === 500) return { motivo: 'sobrecarga', esperaS: null, cota: '' }
+  if (status !== 429) return null
+  let detalhes = []
+  try {
+    detalhes = JSON.parse(corpo)?.error?.details || []
+  } catch {
+    detalhes = []
+  }
+  const cota = detalhes
+    .flatMap((d) => (Array.isArray(d?.violations) ? d.violations : []))
+    .map((v) => v?.quotaId || '')
+    .find(Boolean) || ''
+  const atraso = detalhes.map((d) => d?.retryDelay).find((r) => typeof r === 'string') || ''
+  const esperaS = /^\d+(\.\d+)?s$/.test(atraso) ? Math.ceil(parseFloat(atraso)) : null
+  // Sem quotaId, uma espera longa indica cota diária; curta, por minuto.
+  const diaria = /PerDay/i.test(cota) || (!cota && esperaS !== null && esperaS > 120)
+  return { motivo: diaria ? 'dia' : 'minuto', esperaS, cota }
+}
+
+function mensagemDoLimite({ motivo, esperaS }) {
+  if (motivo === 'sobrecarga') {
+    return 'Os servidores do Gemini estão sobrecarregados (tentei 3 vezes). Costuma passar em poucos minutos.'
+  }
+  if (motivo === 'dia') {
+    return 'A cota diária gratuita do Gemini acabou. Ela renova à meia-noite do horário do Pacífico (4h ou 5h em Brasília).'
+  }
+  return `Muitos pedidos à IA no mesmo minuto. Tente de novo em ${esperaS ? `uns ${esperaS} segundos` : 'um minuto'}.`
+}
+
+async function callGemini(env, prompt, { esperar = dormir } = {}) {
   const model = env.GEMINI_MODEL || DEFAULT_MODEL
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(env.GEMINI_API_KEY)}`
-
-  const res = await fetch(url, {
+  const pedido = {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
       generationConfig: { temperature: 0, responseMimeType: 'application/json' },
     }),
-  })
+  }
 
-  if (!res.ok) {
-    const detail = await res.text()
-    // 503 (sobrecarga) e 429 (limite de uso) são passageiros: o modelo
-    // costuma voltar em segundos. Quem chama precisa saber disso para
-    // decidir se vale tentar de novo em silêncio em vez de alarmar a
-    // pessoa com um erro que se resolve sozinho.
-    if (res.status === 503 || res.status === 429) {
-      const limite = res.status === 429
-      const err = new Error(
-        limite
-          ? 'A IA do Google atingiu o limite de uso por agora.'
-          : 'A IA do Google está sobrecarregada agora.'
-      )
-      err.transiente = true
-      // Os dois são passageiros, mas em escalas bem diferentes: sobrecarga
-      // passa em segundos, cota estourada leva o resto da janela de cobrança.
-      // Insistir num limite de cota só queima mais cota.
-      err.motivo = limite ? 'limite' : 'sobrecarga'
-      throw err
+  let res
+  let limite = null
+  let esperouPorMinuto = false
+  for (let tentativa = 0; ; tentativa++) {
+    res = await fetch(url, pedido)
+    if (res.ok) break
+    const detalhe = await res.text()
+    limite = classificarErroGemini(res.status, detalhe)
+    // Fica nos logs do Worker (Cloudflare > Workers > Logs): é por aqui que
+    // se descobre, depois, qual limite está batendo e com que frequência.
+    console.warn('gemini', res.status, model, limite?.motivo || '', limite?.cota || '', detalhe.slice(0, 200))
+    if (!limite) throw new Error(`Gemini respondeu ${res.status}: ${detalhe.slice(0, 300)}`)
+    if (limite.motivo === 'sobrecarga' && tentativa < ESPERAS_SOBRECARGA_MS.length) {
+      await esperar(ESPERAS_SOBRECARGA_MS[tentativa])
+      continue
     }
-    throw new Error(`Gemini respondeu ${res.status}: ${detail.slice(0, 300)}`)
+    if (limite.motivo === 'minuto' && !esperouPorMinuto && limite.esperaS !== null && limite.esperaS <= ESPERA_MAXIMA_POR_MINUTO_S) {
+      esperouPorMinuto = true
+      await esperar(limite.esperaS * 1000)
+      continue
+    }
+    const err = new Error(mensagemDoLimite(limite))
+    err.transiente = true
+    err.motivo = limite.motivo
+    err.esperaS = limite.esperaS
+    throw err
   }
 
   const data = await res.json()
@@ -93,13 +143,15 @@ async function callGemini(env, prompt) {
     return JSON.parse(match[0])
   }
 }
+export { callGemini as _callGeminiParaTeste }
 
 // A resposta de erro das rotas de IA. `transiente` é o que permite ao app
 // distinguir "tenta de novo daqui a pouco que passa" de "isso não vai se
 // resolver sozinho" — sem essa marca, os dois viram o mesmo aviso vermelho.
+// `motivo` diz qual limite foi, e a mensagem já vem escrita para a tela.
 function erroDeIA(err) {
   return json(
-    { error: err.message, transiente: err.transiente === true, motivo: err.motivo || '' },
+    { error: err.message, transiente: err.transiente === true, motivo: err.motivo || '', esperaS: err.esperaS ?? null },
     502
   )
 }

@@ -113,7 +113,7 @@ export default function Entrada({
     } catch (err) {
       setErro(
         err.transiente
-          ? 'A IA está sobrecarregada ou sem cota por agora — dá para decidir na mão normalmente.'
+          ? `${err.message} Dá para decidir na mão normalmente.`
           : `Não deu para pedir ajuda da IA (${err.message}).`
       )
     } finally {

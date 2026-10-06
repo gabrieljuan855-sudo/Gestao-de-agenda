@@ -483,3 +483,85 @@ describe('assistente do projeto: documentos e perguntas', () => {
     expect(normalizePergunta({}, anotacoes)).toEqual({ resposta: '', fontes: [] })
   })
 })
+
+describe('erros do Gemini', () => {
+  const corpo429 = (quotaId, retryDelay) =>
+    JSON.stringify({
+      error: {
+        code: 429,
+        details: [
+          { '@type': 'type.googleapis.com/google.rpc.QuotaFailure', violations: [{ quotaId }] },
+          { '@type': 'type.googleapis.com/google.rpc.RetryInfo', retryDelay },
+        ],
+      },
+    })
+
+  it('separa sobrecarga, limite por minuto e cota do dia', async () => {
+    const { classificarErroGemini } = await import('./index.js')
+    expect(classificarErroGemini(503, '')).toMatchObject({ motivo: 'sobrecarga' })
+    expect(classificarErroGemini(429, corpo429('GenerateRequestsPerMinutePerProjectPerModel-FreeTier', '6s'))).toEqual({
+      motivo: 'minuto',
+      esperaS: 6,
+      cota: 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier',
+    })
+    expect(classificarErroGemini(429, corpo429('GenerateRequestsPerDayPerProjectPerModel-FreeTier', '40s'))).toMatchObject({ motivo: 'dia' })
+    expect(classificarErroGemini(429, 'não é json')).toEqual({ motivo: 'minuto', esperaS: null, cota: '' })
+    expect(classificarErroGemini(400, '')).toBeNull()
+  })
+
+  const resposta = (status, corpo) => ({
+    ok: status === 200,
+    status,
+    text: async () => corpo,
+    json: async () => JSON.parse(corpo),
+  })
+  const ok = resposta(200, JSON.stringify({ candidates: [{ content: { parts: [{ text: '{"a":1}' }] } }] }))
+
+  async function chamar(respostas) {
+    const { _callGeminiParaTeste } = await import('./index.js')
+    const fila = [...respostas]
+    const original = globalThis.fetch
+    const esperas = []
+    let chamadas = 0
+    globalThis.fetch = async () => {
+      chamadas++
+      return fila.shift()
+    }
+    const aviso = console.warn
+    console.warn = () => {}
+    try {
+      const r = await _callGeminiParaTeste({ GEMINI_API_KEY: 'k' }, 'p', { esperar: async (ms) => esperas.push(ms) })
+      return { r, chamadas, esperas }
+    } catch (err) {
+      return { err, chamadas, esperas }
+    } finally {
+      globalThis.fetch = original
+      console.warn = aviso
+    }
+  }
+
+  it('tenta de novo sozinho quando o servidor está sobrecarregado', async () => {
+    const { r, chamadas, esperas } = await chamar([resposta(503, ''), resposta(503, ''), ok])
+    expect(r).toEqual({ a: 1 })
+    expect(chamadas).toBe(3)
+    expect(esperas).toEqual([1000, 2500])
+  })
+
+  it('desiste depois de 3 sobrecargas, com motivo', async () => {
+    const { err, chamadas } = await chamar([resposta(503, ''), resposta(503, ''), resposta(503, '')])
+    expect(chamadas).toBe(3)
+    expect(err).toMatchObject({ transiente: true, motivo: 'sobrecarga' })
+  })
+
+  it('espera uma vez no limite por minuto curto, nunca na cota do dia', async () => {
+    const minuto = resposta(429, corpo429('GenerateRequestsPerMinutePerProjectPerModel-FreeTier', '5s'))
+    const a = await chamar([minuto, ok])
+    expect(a.r).toEqual({ a: 1 })
+    expect(a.esperas).toEqual([5000])
+
+    const dia = await chamar([resposta(429, corpo429('GenerateRequestsPerDayPerProjectPerModel-FreeTier', '30000s'))])
+    expect(dia.chamadas).toBe(1)
+    expect(dia.err).toMatchObject({ motivo: 'dia', transiente: true })
+    expect(dia.err.message).toMatch(/cota diária/)
+  })
+})
