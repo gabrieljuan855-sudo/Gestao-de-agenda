@@ -3,7 +3,7 @@
 // sempre precisa da API do Google. "Rede primeiro, cache como reserva": toda
 // resposta boa atualiza o cache, e só quando a rede falha é que o que já foi
 // visto antes entra em cena, em vez de uma tela branca.
-const CACHE_NAME = 'gestao-agenda-v2'
+const CACHE_NAME = 'gestao-agenda-v3'
 
 // Só o essencial para a página conseguir montar sozinha: os arquivos com hash
 // do build (JS/CSS) entram no cache sozinhos, na primeira vez que passam por
@@ -38,6 +38,19 @@ self.addEventListener('activate', (event) => {
       .keys()
       .then((keys) => Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))))
       .then(() => self.clients.claim())
+  )
+})
+
+// Clicar no aviso de compromisso traz o app para a frente: a aba que já
+// estiver aberta, ou uma nova se não houver nenhuma.
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close()
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((abertas) => {
+      const aba = abertas.find((c) => new URL(c.url).origin === self.location.origin)
+      if (aba) return aba.focus()
+      return self.clients.openWindow(event.notification.data?.url || '/')
+    })
   )
 })
 

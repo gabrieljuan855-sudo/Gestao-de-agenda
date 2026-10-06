@@ -27,9 +27,10 @@ function normalize(text) {
 // confirmação de presença. Tudo isso é editável no painel de agendas.
 function defaultsFor(calendar) {
   const name = normalize(calendar.summaryOverride || calendar.summary)
-  if (name.includes('informa')) return { occupies: false, needsPresence: false }
-  if (name.includes('gest')) return { occupies: true, needsPresence: true }
-  return { occupies: true, needsPresence: false }
+  if (name.includes('informa')) return { occupies: false, needsPresence: false, avisa: false }
+  if (name.includes('gest')) return { occupies: true, needsPresence: true, avisa: true }
+  if (name.includes('feriado')) return { occupies: true, needsPresence: false, avisa: false }
+  return { occupies: true, needsPresence: false, avisa: true }
 }
 
 export function loadCalendarPrefs(calendars) {
@@ -101,6 +102,13 @@ export function occupiesTime(event, prefs, presence) {
   if (!pref.occupies) return false
   if (pref.needsPresence) return presenceOf(event, presence) === 'vou'
   return true
+}
+
+// Agenda sem preferência salva (recém-criada) avisa: é melhor um aviso a
+// mais do que perder um compromisso. Quem marcou "não vou" não é avisado.
+export function avisaDoEvento(event, prefs, presence) {
+  if (prefs[event.calendarId]?.avisa === false) return false
+  return !isDeclined(event, presence)
 }
 
 export function isInformational(event, prefs) {

@@ -2731,3 +2731,14 @@ button.danger:hover { background: var(--urgent-bg); }
 .projeto-marco.is-atrasado .projeto-evento-quando { color: var(--urgent); }
 .projeto-linha-marco { color: var(--on-surface-variant); }
 .projeto-linha-marco.is-atrasado { color: var(--urgent); }
+
+/* ---------- Avisos no computador ---------- */
+.avisos-config {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-radius: var(--shape-md);
+  background: var(--surface-raised);
+}
+.avisos-linha { display: flex; align-items: flex-end; gap: 8px; flex-wrap: wrap; }
