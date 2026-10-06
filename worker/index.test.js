@@ -455,3 +455,31 @@ describe('assistente do projeto', () => {
     expect(d).toEqual({ acao: 'Listar campos', detalhes: 'z', mais: ['a', 'b', 'c', 'd', 'e'] })
   })
 })
+
+describe('assistente do projeto: documentos e perguntas', () => {
+  it('só aceita tipo de documento conhecido e corta a instrução', async () => {
+    const { sanitizarContextoDoProjeto } = await import('./index.js')
+    expect(sanitizarContextoDoProjeto({ documento: { tipo: 'ata', instrucao: 'y'.repeat(5000) } }).documento).toEqual({
+      tipo: 'ata',
+      instrucao: 'y'.repeat(3000),
+    })
+    expect(sanitizarContextoDoProjeto({ documento: { tipo: 'poema' } }).documento).toBeNull()
+    expect(sanitizarContextoDoProjeto({ pergunta: '  quem é o perito? ' }).pergunta).toBe('quem é o perito?')
+  })
+
+  it('normaliza o documento cortando tamanhos', async () => {
+    const { normalizeDocumento } = await import('./index.js')
+    expect(normalizeDocumento({ titulo: 'Ata', texto: 'z'.repeat(9000) })).toEqual({ titulo: 'Ata', texto: 'z'.repeat(8000) })
+    expect(normalizeDocumento(null)).toEqual({ titulo: '', texto: '' })
+  })
+
+  it('troca as fontes por títulos reais e descarta índices inventados', async () => {
+    const { normalizePergunta } = await import('./index.js')
+    const anotacoes = [{ titulo: 'Visita' }, { titulo: '' }]
+    expect(normalizePergunta({ resposta: 'Foi dia 3.', fontes: [1, 2, 2, 7, 'x', 0] }, anotacoes)).toEqual({
+      resposta: 'Foi dia 3.',
+      fontes: ['Visita', '(sem título)'],
+    })
+    expect(normalizePergunta({}, anotacoes)).toEqual({ resposta: '', fontes: [] })
+  })
+})

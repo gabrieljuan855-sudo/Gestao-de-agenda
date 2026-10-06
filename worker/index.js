@@ -7,7 +7,8 @@
 // /api/analyze-note (sugestões a partir de uma anotação) e POST
 // /api/search-notes (responde uma pergunta usando as anotações existentes) e
 // POST /api/projeto (o assistente de um projeto: planejar passos, definir o
-// resultado, dividir uma ideia em ações).
+// resultado, dividir uma ideia em ações, redigir documentos do projeto e
+// responder perguntas sobre ele).
 // A chave do Gemini fica como segredo do Cloudflare e nunca chega ao
 // navegador — é justamente por isso que essa parte roda no servidor.
 
@@ -718,6 +719,9 @@ export function sanitizarContextoDoProjeto(body) {
     .slice(0, MAX_ANOTACOES_PROJETO)
   const contextos = (Array.isArray(body?.contextos) ? body.contextos : []).map(slugDeContexto).filter(Boolean).slice(0, 20)
   const alvo = body?.alvo && texto(body.alvo.titulo, 600) ? { titulo: texto(body.alvo.titulo, 600), notas: texto(body.alvo.notas, 1500) } : null
+  const documento = body?.documento && DOCUMENTOS_DO_PROJETO[body.documento.tipo]
+    ? { tipo: body.documento.tipo, instrucao: texto(body.documento.instrucao, 3000) }
+    : null
   return {
     projeto: {
       nome: texto(projeto.nome, 120) || 'Projeto',
@@ -729,6 +733,8 @@ export function sanitizarContextoDoProjeto(body) {
     anotacoes,
     contextos,
     alvo,
+    documento,
+    pergunta: texto(body?.pergunta, 300),
   }
 }
 
@@ -798,7 +804,52 @@ ${ctx.alvo?.notas || ''}
 
 Responda SOMENTE com JSON: { "acao": "...", "detalhes": "...", "mais": ["...", "..."] }`
   }
+  if (modo === 'documento') {
+    const doc = DOCUMENTOS_DO_PROJETO[ctx.documento.tipo]
+    return `${cabeca}
+Redija ${doc.pedido}
+${ctx.documento.instrucao ? `\nORIENTAÇÕES E MATERIAL DE QUEM PEDIU (prevalecem sobre o resto):\n"""\n${ctx.documento.instrucao}\n"""\n` : ''}
+Responda SOMENTE com JSON: { "titulo": "título curto do documento, até 80 caracteres", "texto": "o documento completo, em texto simples com quebras de linha" }
+
+Regras:
+- Use apenas fatos que estão no projeto ou nas orientações; onde faltar um dado (nome, número, data), deixe um marcador entre colchetes, como [nome do destinatário]. Nunca invente.
+- Português formal e claro, sem markdown (nada de # ou **); listas com hífen.
+- ${doc.regra}`
+  }
+  if (modo === 'perguntar') {
+    return `${cabeca}
+Responda à pergunta abaixo usando SOMENTE o que está no projeto (ficha, tarefas e anotações). Se a resposta não estiver ali, diga isso com clareza em vez de supor.
+
+PERGUNTA: ${ctx.pergunta}
+
+Responda SOMENTE com JSON: { "resposta": "até 120 palavras", "fontes": [números das anotações usadas, contando a partir de 1 na ordem acima] }`
+  }
   return null
+}
+
+// O que cada documento pede ao modelo. Ficam aqui (e não no navegador) para
+// que o prompt não possa ser trocado por quem chama a rota.
+const DOCUMENTOS_DO_PROJETO = {
+  ata: { pedido: 'a ata da reunião deste projeto/rotina.', regra: 'Estrutura: data e participantes (com marcadores se não informados), pauta, o que foi discutido, encaminhamentos com responsável e prazo.' },
+  pauta: { pedido: 'a pauta da próxima reunião.', regra: 'Itens numerados, começando pelo que está pendente ou atrasado; no fim, "Encaminhamentos da reunião anterior" se houver.' },
+  relatorio: { pedido: 'um relatório de andamento do projeto.', regra: 'Seções: Situação geral, O que foi feito, Pendências e riscos, Próximos passos.' },
+  plano: { pedido: 'um plano de ação para chegar ao resultado do projeto.', regra: 'Tabela em texto: ação — responsável — prazo — situação, uma por linha, na ordem de execução.' },
+  oficio: { pedido: 'um ofício formal relacionado a este projeto.', regra: 'Formato de ofício da administração pública: número [nº], local e data, destinatário, assunto, corpo objetivo, fecho "Atenciosamente" e assinatura com marcadores.' },
+  email: { pedido: 'um e-mail cordial de cobrança ou acompanhamento sobre o que está pendente (especialmente o que está em "aguardando").', regra: 'Curto: saudação, o que se espera e desde quando, pedido claro de retorno com data, despedida. Comece o texto pela linha "Assunto: ...".' },
+}
+export const TIPOS_DE_DOCUMENTO = Object.keys(DOCUMENTOS_DO_PROJETO)
+
+export function normalizeDocumento(parsed) {
+  return { titulo: texto(parsed?.titulo, 120), texto: texto(parsed?.texto, 8000) }
+}
+
+// As fontes voltam como números; aqui viram os títulos das anotações reais,
+// descartando o que não existe — a resposta nunca cita uma nota inventada.
+export function normalizePergunta(parsed, anotacoes = []) {
+  const fontes = [...new Set((Array.isArray(parsed?.fontes) ? parsed.fontes : []).map(Number))]
+    .filter((n) => Number.isInteger(n) && n >= 1 && n <= anotacoes.length)
+    .map((n) => anotacoes[n - 1].titulo || '(sem título)')
+  return { resposta: texto(parsed?.resposta, 1500), fontes }
 }
 
 export function normalizePlanejar(parsed, { contextos = [], existentes = [], hoje = '' } = {}) {
@@ -832,7 +883,7 @@ export function normalizeDividir(parsed) {
   return { acao: texto(parsed?.acao, 120), detalhes: texto(parsed?.detalhes, 2000), mais }
 }
 
-const MODOS_DO_PROJETO = ['planejar', 'resultado', 'dividir']
+const MODOS_DO_PROJETO = ['planejar', 'resultado', 'dividir', 'documento', 'perguntar']
 
 async function handleProjeto(request, env) {
   const caller = await verifyCaller(request, env)
@@ -850,6 +901,8 @@ async function handleProjeto(request, env) {
   if (!MODOS_DO_PROJETO.includes(modo)) return json({ error: 'Modo desconhecido.' }, 400)
   const ctx = sanitizarContextoDoProjeto(body)
   if (modo === 'dividir' && !ctx.alvo) return json({ error: 'Envie a tarefa a dividir.' }, 400)
+  if (modo === 'documento' && !ctx.documento) return json({ error: 'Tipo de documento desconhecido.' }, 400)
+  if (modo === 'perguntar' && !ctx.pergunta) return json({ error: 'Envie a pergunta.' }, 400)
 
   try {
     const parsed = await callGemini(env, buildProjetoPrompt(modo, ctx, { today: body.today, weekday: body.weekday }))
@@ -857,6 +910,8 @@ async function handleProjeto(request, env) {
       return json(normalizePlanejar(parsed, { contextos: ctx.contextos, existentes: ctx.tarefas.map((t) => t.titulo), hoje: body.hojeIso }))
     }
     if (modo === 'resultado') return json(normalizeResultado(parsed))
+    if (modo === 'documento') return json(normalizeDocumento(parsed))
+    if (modo === 'perguntar') return json(normalizePergunta(parsed, ctx.anotacoes))
     return json(normalizeDividir(parsed))
   } catch (err) {
     return erroDeIA(err)

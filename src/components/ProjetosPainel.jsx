@@ -3,7 +3,7 @@ import Banner from './Banner.jsx'
 import AssistenteDoProjeto from './AssistenteDoProjeto.jsx'
 import { PRIORITY_LABEL } from '../lib/priority.js'
 import { isOverdueTask } from '../lib/tasks.js'
-import { dateOnlyFromISO, addDays } from '../lib/dates.js'
+import { dateOnlyFromISO, addDays, toDateInput } from '../lib/dates.js'
 import { eventStart, isAllDay } from '../lib/events.js'
 import { parseQuickAdd, descreverQuando } from '../lib/nlp.js'
 import { construirRecorrencia } from '../lib/recorrencia.js'
@@ -17,8 +17,7 @@ import {
   tarefasDoProjeto,
   eventoDoProjeto,
   tipoDeArquivo,
-  vincularArquivo,
-} from '../lib/projetos.js'
+  vincularArquivo, adicionarMarco, alternarMarco, removerMarco, proximoMarco } from '../lib/projetos.js'
 
 function dataCurta(valor) {
   return dateOnlyFromISO(valor).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })
@@ -40,6 +39,7 @@ function LinhaDoProjeto({ projeto, onAbrir, selecionado }) {
   const nArquivos = projeto.arquivos?.length || 0
   if (nArquivos) partes.push(`${nArquivos} ${nArquivos === 1 ? 'arquivo' : 'arquivos'}`)
   if (projeto.prazo) partes.push(`prazo ${dataCurta(projeto.prazo)}`)
+  const marco = proximoMarco(projeto.marcos, hojeIso())
   return (
     <button
       type="button"
@@ -57,6 +57,11 @@ function LinhaDoProjeto({ projeto, onAbrir, selecionado }) {
         )}
       </span>
       {projeto.proximaAcao && <span className="projeto-linha-acao">→ {projeto.proximaAcao.title}</span>}
+      {marco && (
+        <span className={`t-label projeto-linha-marco${marco.atrasado ? ' is-atrasado' : ''}`}>
+          ◆ {marco.titulo}{marco.data && ` · ${dataCurta(marco.data)}`}
+        </span>
+      )}
       {partes.length > 0 && <span className="muted t-label">{partes.join(' · ')}</span>}
     </button>
   )
@@ -299,6 +304,56 @@ function Arquivos({ projeto, onSalvar }) {
   )
 }
 
+function hojeIso() {
+  return toDateInput(new Date())
+}
+
+// Os marcos do projeto: onde ele precisa estar, e quando. Um clique marca
+// como alcançado; o que venceu sem ser alcançado fica em vermelho.
+function Marcos({ projeto, onSalvar }) {
+  const [titulo, setTitulo] = useState('')
+  const [data, setData] = useState('')
+  const marcos = projeto.marcos || []
+  const hoje = hojeIso()
+
+  function adicionar(e) {
+    e.preventDefault()
+    onSalvar({ id: projeto.id, marcos: adicionarMarco(marcos, { titulo, data: data || null }) })
+    setTitulo('')
+    setData('')
+  }
+
+  return (
+    <div className="projeto-marcos">
+      {marcos.length === 0 && (
+        <p className="muted" style={{ margin: 0 }}>
+          Nenhum marco. Marque as etapas que o projeto precisa cumprir até o fim (ex.: "Diagnóstico entregue" até 30/11).
+        </p>
+      )}
+      {marcos.map((m) => {
+        const atrasado = !m.feito && m.data && m.data < hoje
+        return (
+          <div key={m.id} className={`projeto-marco${m.feito ? ' is-feito' : ''}${atrasado ? ' is-atrasado' : ''}`}>
+            <label className="projeto-marco-check">
+              <input type="checkbox" checked={m.feito} onChange={() => onSalvar({ id: projeto.id, marcos: alternarMarco(marcos, m.id) })} />
+              <span className="projeto-marco-titulo">{m.titulo}</span>
+            </label>
+            {m.data && <span className="projeto-evento-quando">{atrasado ? 'venceu ' : ''}{dataCurta(m.data)}</span>}
+            <button type="button" className="icon-btn" aria-label={`Remover o marco ${m.titulo}`} title="Remover" onClick={() => onSalvar({ id: projeto.id, marcos: removerMarco(marcos, m.id) })}>
+              ×
+            </button>
+          </div>
+        )
+      })}
+      <form className="projeto-arquivo-novo" onSubmit={adicionar}>
+        <input type="text" value={titulo} onChange={(e) => setTitulo(e.target.value)} placeholder="Novo marco" />
+        <input type="date" value={data} onChange={(e) => setData(e.target.value)} aria-label="Data do marco" />
+        <button type="submit" disabled={!titulo.trim()}>Adicionar</button>
+      </form>
+    </div>
+  )
+}
+
 function LinhaDeTarefa({ task, onEditar, onConcluir }) {
   const atrasada = isOverdueTask(task)
   const concluida = task.status === 'completed'
@@ -493,6 +548,7 @@ function PaginaDoProjeto({
   onCreateEvent,
   onCreateTask,
   onAtualizarTarefa,
+  onSalvarAnotacao,
   buscarEventos,
   onEditarEvento,
 }) {
@@ -548,6 +604,8 @@ function PaginaDoProjeto({
         onCreateTask={onCreateTask}
         onSalvar={onSalvar}
         onAtualizarTarefa={onAtualizarTarefa}
+        onSalvarAnotacao={onSalvarAnotacao}
+        onAbrirNota={onAbrirNota}
       />
 
       <CapturaNoProjeto
@@ -615,6 +673,13 @@ function PaginaDoProjeto({
           </div>
         )}
       </section>
+
+      {projeto.tipo !== 'rotina' && (
+        <section>
+          <h3 className="projetos-secao">Marcos</h3>
+          <Marcos projeto={projeto} onSalvar={onSalvar} />
+        </section>
+      )}
 
       <section>
         <h3 className="projetos-secao">Arquivos</h3>

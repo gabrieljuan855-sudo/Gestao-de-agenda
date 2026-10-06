@@ -1032,6 +1032,7 @@ export default function App() {
           buscarEventos={listAllEvents}
           onEditarEvento={setEditingEvent}
           onAtualizarTarefa={atualizarTarefa}
+          onSalvarAnotacao={(projeto, { title, body }) => notesState.createNote({ title, body, projeto })}
         />
       ),
     },
