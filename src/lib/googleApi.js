@@ -395,12 +395,13 @@ export async function garantirLista(taskLists, titulo) {
   return criarListaDeTarefas(titulo)
 }
 
-export async function listTasks({ tasklistId = '@default', tasklistTitle = '', showCompleted = false } = {}) {
+export async function listTasks({ tasklistId = '@default', tasklistTitle = '', showCompleted = false, completedMin = null } = {}) {
   const params = new URLSearchParams({
     showCompleted: String(showCompleted),
     showHidden: String(showCompleted),
     maxResults: '200',
   })
+  if (completedMin) params.set('completedMin', completedMin.toISOString())
   const data = await request(`${TASKS_BASE}/lists/${encodeURIComponent(tasklistId)}/tasks?${params}`)
   // Ordem de decisão: a tag explícita manda; sem tag, vale o nome da lista
   // ("Prioridade Máxima (menos de uma semana)"); sem os dois, o padrão.
@@ -432,6 +433,22 @@ export async function listAllTasks({ showCompleted = false } = {}) {
           console.error(`Falha ao buscar tarefas da lista ${list.title}:`, err)
           return []
         })
+    )
+  )
+  return perList.flat()
+}
+
+// Só as concluídas desde uma data, de todas as listas. A página do projeto
+// precisa delas para mostrar o que já foi feito, mesmo com o "Mostrar
+// concluídas" desligado na tela principal — e buscar só a partir de uma data
+// evita trazer anos de histórico a cada abertura.
+export async function listCompletedTasks({ completedMin }) {
+  const lists = await listTaskLists()
+  const perList = await Promise.all(
+    lists.map((list) =>
+      listTasks({ tasklistId: list.id, tasklistTitle: list.title, showCompleted: true, completedMin })
+        .then((tasks) => tasks.filter((t) => t.status === 'completed').map((t) => ({ ...t, tasklistTitle: list.title })))
+        .catch(() => [])
     )
   )
   return perList.flat()

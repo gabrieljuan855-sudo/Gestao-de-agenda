@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { initGoogleAuth, signIn, signOut, retryAuth } from './lib/googleAuth.js'
 import {
   listAllEvents,
+  listCompletedTasks,
   createEvent,
   updateEvent,
   moveEvent,
@@ -1040,6 +1041,7 @@ export default function App() {
           onCreateEvent={handleCreateEvent}
           onCreateTask={handleCreateTask}
           buscarEventos={listAllEvents}
+          buscarConcluidas={listCompletedTasks}
           onEditarEvento={setEditingEvent}
           onAtualizarTarefa={atualizarTarefa}
           onSalvarAnotacao={(projeto, { title, body }) => notesState.createNote({ title, body, projeto })}
