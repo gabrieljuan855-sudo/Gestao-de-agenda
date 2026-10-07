@@ -342,3 +342,40 @@ export function panoramaDosProjetos(lista, tasks = [], now = new Date()) {
 export function projetosForaDaCobranca(lista) {
   return (lista || []).filter((p) => p.tipo === 'rotina' || p.situacao !== 'ativo').map((p) => p.id)
 }
+
+// ---------- página do projeto ----------
+
+// "O que já foi feito" num lugar só: tarefas concluídas e compromissos que
+// já aconteceram, do mais recente para o mais antigo. Antes os dois ficavam
+// em seções separadas e recolhidas, e as concluídas nem apareciam sem o
+// "Mostrar concluídas" ligado — abrir o projeto não respondia o que andou.
+export function historicoDoProjeto({ concluidas = [], eventosPassados = [] }, eventStart) {
+  const itens = [
+    ...concluidas
+      .filter((t) => t.completed)
+      .map((t) => ({ tipo: 'tarefa', id: `t-${t.id}`, titulo: t.title, data: new Date(t.completed), item: t })),
+    ...eventosPassados.map((e) => ({
+      tipo: 'compromisso',
+      id: `e-${e.calendarId}-${e.id}`,
+      titulo: e.summary || '(sem título)',
+      data: eventStart(e),
+      item: e,
+    })),
+  ]
+  return itens.filter((x) => x.data && Number.isFinite(x.data.getTime())).sort((a, b) => b.data - a.data)
+}
+
+// Junta as concluídas que vieram com a lista geral (quando "Mostrar
+// concluídas" está ligado) às buscadas só para o projeto, sem repetir.
+export function juntarConcluidas(...listas) {
+  const porId = new Map()
+  for (const t of listas.flat()) if (t?.status === 'completed' && !porId.has(t.id)) porId.set(t.id, t)
+  return [...porId.values()]
+}
+
+// O começo do conteúdo de uma anotação, numa linha corrida: o bastante para
+// lembrar o que tem nela sem abrir.
+export function trechoDaAnotacao(body, max = 220) {
+  const corrido = (body || '').replace(/\s+/g, ' ').trim()
+  return corrido.length > max ? `${corrido.slice(0, max).replace(/\s+\S*$/, '')}…` : corrido
+}

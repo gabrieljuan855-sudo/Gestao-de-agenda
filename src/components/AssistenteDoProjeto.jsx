@@ -52,9 +52,9 @@ export default function AssistenteDoProjeto({
   const [pergunta, setPergunta] = useState('')
 
   if (!PROJETOS_IA_LIGADA) return null
-  if (projeto.semIA) {
-    return <p className="muted assistente-desligado">IA desligada neste projeto (ver a ficha).</p>
-  }
+  // Projeto marcado "Não usar IA" (em Configurar) simplesmente não mostra o
+  // assistente: um aviso ali seria só mais uma linha para ler.
+  if (projeto.semIA) return null
 
   const alvo = pareceIdeia(projeto.proximaAcao?.title) ? projeto.proximaAcao : null
   const contexto = montarContextoDoProjeto({ projeto, grupos, anotacoes, contextos })
@@ -170,29 +170,30 @@ export default function AssistenteDoProjeto({
   const alternar = (i) => setEscolhidas((e) => ({ ...e, [i]: !e[i] }))
 
   return (
-    <section className="assistente">
-      <div className="assistente-cabeca">
-        <h3 className="projetos-secao">Assistente do projeto</h3>
-        <span className="muted t-label-sm">{descreverEnvio(contexto)}</span>
-      </div>
-      <div className="assistente-botoes">
-        <button type="button" onClick={() => pedir('planejar')} disabled={carregando}>
-          {rotina ? 'Sugerir itens de pauta' : 'Planejar próximos passos'}
-        </button>
-        <button type="button" onClick={() => pedir('resultado')} disabled={carregando}>
-          {rotina ? 'Definir propósito' : projeto.resultado ? 'Refinar o resultado' : 'Definir o resultado'}
+    // Assist chips do MD3: ações sugeridas, discretas, numa linha só. Antes
+    // era uma caixa tracejada com título e explicação no topo da página —
+    // ocupava o lugar do que a pessoa abre o projeto para ver.
+    <section className="assistente" title={descreverEnvio(contexto)}>
+      <div className="assistente-botoes" role="group" aria-label="Pedir à IA">
+        <button type="button" className="chip-ia" onClick={() => pedir('planejar')} disabled={carregando}>
+          {rotina ? 'Sugerir pauta' : 'Planejar passos'}
         </button>
         {alvo && (
-          <button type="button" onClick={() => pedir('dividir')} disabled={carregando}>
-            Transformar a ideia em ações
+          <button type="button" className="chip-ia" onClick={() => pedir('dividir')} disabled={carregando}>
+            Dividir a ideia
           </button>
         )}
-        <button type="button" className={modo === 'documento' ? 'is-ativo' : ''} onClick={() => abrir('documento')} disabled={carregando}>
+        <button type="button" className={`chip-ia${modo === 'documento' ? ' is-ativo' : ''}`} onClick={() => abrir('documento')} disabled={carregando}>
           Redigir documento
         </button>
-        <button type="button" className={modo === 'perguntar' ? 'is-ativo' : ''} onClick={() => abrir('perguntar')} disabled={carregando}>
-          Perguntar ao projeto
+        <button type="button" className={`chip-ia${modo === 'perguntar' ? ' is-ativo' : ''}`} onClick={() => abrir('perguntar')} disabled={carregando}>
+          Perguntar
         </button>
+        {!projeto.resultado && (
+          <button type="button" className="chip-ia" onClick={() => pedir('resultado')} disabled={carregando}>
+            {rotina ? 'Definir propósito' : 'Definir resultado'}
+          </button>
+        )}
       </div>
 
       {modo === 'documento' && !resposta && (

@@ -19,6 +19,9 @@ import {
   alternarMarco,
   removerMarco,
   proximoMarco,
+  historicoDoProjeto,
+  juntarConcluidas,
+  trechoDaAnotacao,
 } from './projetos.js'
 
 const PROXIMAS = 'l-proximas'
@@ -265,5 +268,37 @@ describe('marcos', () => {
     expect(proximoMarco(base, '2026-10-06')).toMatchObject({ id: 'd', atrasado: true })
     expect(proximoMarco(base, '2026-09-20')).toMatchObject({ id: 'd', atrasado: false })
     expect(proximoMarco([base[2]], '2026-10-06')).toBeNull()
+  })
+})
+
+describe('página do projeto', () => {
+  const inicio = (e) => new Date(e.start.dateTime)
+
+  it('junta concluídas e compromissos passados, do mais recente ao mais antigo', () => {
+    const h = historicoDoProjeto(
+      {
+        concluidas: [
+          { id: 'a', title: 'Ofício enviado', status: 'completed', completed: '2026-10-05T12:00:00Z' },
+          { id: 'b', title: 'Sem data', status: 'completed' },
+        ],
+        eventosPassados: [{ id: 'e', calendarId: 'c', summary: 'Reunião', start: { dateTime: '2026-10-06T13:00:00Z' } }],
+      },
+      inicio
+    )
+    expect(h.map((x) => [x.tipo, x.titulo])).toEqual([
+      ['compromisso', 'Reunião'],
+      ['tarefa', 'Ofício enviado'],
+    ])
+  })
+
+  it('não repete concluída que veio pelas duas buscas, e ignora pendente', () => {
+    const t = { id: 'x', status: 'completed' }
+    expect(juntarConcluidas([t, { id: 'p', status: 'needsAction' }], [{ ...t }]).map((x) => x.id)).toEqual(['x'])
+  })
+
+  it('resume a anotação numa linha, cortando na palavra', () => {
+    expect(trechoDaAnotacao('Visita   feita.\n\nFamília pediu  retorno.')).toBe('Visita feita. Família pediu retorno.')
+    expect(trechoDaAnotacao('palavra '.repeat(50), 20)).toBe('palavra palavra…')
+    expect(trechoDaAnotacao(undefined)).toBe('')
   })
 })
