@@ -444,6 +444,23 @@ export default function App() {
     setRailAberto((atual) => (atual === id ? null : id))
   }
 
+  // Anotação aberta de dentro de um projeto: fechar a anotação volta para o
+  // projeto, em vez de fechar tudo. Os dois são painéis do mesmo trilho (só
+  // um aberto por vez), então abrir a anotação tirava o projeto da tela — e o
+  // X da anotação deixava a pessoa sem caminho de volta.
+  const [voltarAoProjeto, setVoltarAoProjeto] = useState(null)
+
+  function mudarPainel(proximo) {
+    if (railAberto === 'notes' && proximo === null && voltarAoProjeto) {
+      setProjetoParaAbrir(voltarAoProjeto)
+      setVoltarAoProjeto(null)
+      setRailAberto('projetos')
+      return
+    }
+    if (proximo !== 'notes') setVoltarAoProjeto(null)
+    setRailAberto(proximo)
+  }
+
   useAtalhos({
     criar: () => abrirOuFechar('add'),
     // Entrada, Próximas, Aguardando e Revisão deixaram de ser painéis que
@@ -934,7 +951,13 @@ export default function App() {
 
   function novaNotaNoProjeto(projeto) {
     notesState.createNote({ projeto })
+    setVoltarAoProjeto(projeto)
     setRailAberto('notes')
+  }
+
+  function abrirNotaDoProjeto(id) {
+    setVoltarAoProjeto(notesState.notes.find((n) => n.id === id)?.projeto || null)
+    abrirNota(id)
   }
 
   const tools = [
@@ -1036,7 +1059,7 @@ export default function App() {
           ids={{ idProximas, idAguardando, idAlgumDia, idEntrada: entradaId }}
           onEditarTarefa={setEditingTask}
           onConcluirTarefa={handleCompleteTask}
-          onAbrirNota={abrirNota}
+          onAbrirNota={abrirNotaDoProjeto}
           onNovaNota={novaNotaNoProjeto}
           onCreateEvent={handleCreateEvent}
           onCreateTask={handleCreateTask}
@@ -1266,7 +1289,7 @@ export default function App() {
         </div>
         <Trabalho abas={abasDoTrabalho} abaAtiva={abaTrabalho} onAbaChange={setAbaTrabalho} />
 
-        <Rail tools={tools} openId={railAberto} onOpenChange={setRailAberto} />
+        <Rail tools={tools} openId={railAberto} onOpenChange={mudarPainel} />
       </div>
 
       <FocusOverlay focus={focus} onCompleteTask={handleCompleteTask} />
