@@ -1,13 +1,41 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Modal from './Modal.jsx'
 import { ANTECEDENCIAS } from '../lib/lembretes.js'
 import { avisosSuportados, mostrarAvisoDeTeste } from '../lib/useLembretes.js'
+import { pushSuportado, inscricaoAtual, inscreverNesteAparelho, cancelarNesteAparelho, ehIOS, abertoComoApp } from '../lib/pushAvisos.js'
 
 // Ligar os avisos pede a permissão do navegador na hora do clique — é a
 // única hora em que ele deixa pedir, e a pessoa sabe por que está sendo
 // perguntada.
 function Avisos({ config, onChange }) {
   const [permissao, setPermissao] = useState(() => (avisosSuportados() ? Notification.permission : 'indisponivel'))
+  // Estado da inscrição deste aparelho nos avisos com o app fechado.
+  const [fechado, setFechado] = useState('verificando')
+  const [erroFechado, setErroFechado] = useState(null)
+
+  useEffect(() => {
+    if (!pushSuportado()) {
+      setFechado('indisponivel')
+      return
+    }
+    inscricaoAtual()
+      .then((i) => setFechado(i ? 'ativo' : 'inativo'))
+      .catch(() => setFechado('inativo'))
+  }, [])
+
+  // Precisa vir de um toque (regra do iPhone): por isso é chamado direto
+  // dos cliques, nunca sozinho.
+  async function ligarComAppFechado() {
+    setErroFechado(null)
+    try {
+      await inscreverNesteAparelho()
+      setFechado('ativo')
+      // O hook dos avisos ouve isto e manda a lista da semana na hora.
+      window.dispatchEvent(new Event('avisos:inscrito'))
+    } catch (err) {
+      setErroFechado(`Não deu para ligar: ${err.message}`)
+    }
+  }
 
   async function alternar(ativo) {
     if (ativo && permissao !== 'granted') {
@@ -16,27 +44,44 @@ function Avisos({ config, onChange }) {
       if (r !== 'granted') return
     }
     onChange({ ...config, ativo })
-    // Um aviso de exemplo na hora: confirma que o sistema não está
-    // silenciando as notificações do navegador (modo foco, "Não perturbe").
-    if (ativo) mostrarAvisoDeTeste()
+    if (ativo) {
+      // Um aviso de exemplo na hora: confirma que o sistema não está
+      // silenciando as notificações (modo foco, "Não perturbe").
+      mostrarAvisoDeTeste()
+      if (pushSuportado()) ligarComAppFechado()
+    } else {
+      cancelarNesteAparelho().finally(() => setFechado(pushSuportado() ? 'inativo' : 'indisponivel'))
+    }
   }
 
+  // No iPhone, notificação de site só existe no app aberto pela Tela de
+  // Início — no Safari comum nem a permissão aparece.
   if (permissao === 'indisponivel') {
-    return <p className="muted" style={{ margin: 0 }}>Este navegador não mostra notificações. No computador, use Chrome, Edge, Firefox ou Safari.</p>
+    return (
+      <p className="muted" style={{ margin: 0 }}>
+        {ehIOS() && !abertoComoApp()
+          ? 'No iPhone, os avisos funcionam no app da Tela de Início: no Safari, toque em Compartilhar → "Adicionar à Tela de Início", abra o app por lá e ligue os avisos aqui.'
+          : 'Este navegador não mostra notificações. No computador, use Chrome, Edge, Firefox ou Safari.'}
+      </p>
+    )
   }
+
+  const ligado = config.ativo && permissao === 'granted'
 
   return (
     <div className="avisos-config">
       <label className="calendar-toggle">
-        <input type="checkbox" checked={config.ativo && permissao === 'granted'} onChange={(e) => alternar(e.target.checked)} />
-        <strong>Avisar no computador antes dos compromissos</strong>
+        <input type="checkbox" checked={ligado} onChange={(e) => alternar(e.target.checked)} />
+        <strong>Avisar antes dos compromissos</strong>
       </label>
       {permissao === 'denied' && (
         <p className="form-error" style={{ margin: 0 }}>
-          O navegador está bloqueando as notificações deste site. Libere no cadeado ao lado do endereço e marque de novo.
+          {ehIOS()
+            ? 'As notificações estão bloqueadas. Libere em Ajustes → Notificações → Segundo Cérebro e marque de novo.'
+            : 'O navegador está bloqueando as notificações deste site. Libere no cadeado ao lado do endereço e marque de novo.'}
         </p>
       )}
-      {config.ativo && permissao === 'granted' && (
+      {ligado && (
         <div className="avisos-linha">
           <label className="field" style={{ flex: 1 }}>
             <span>Quando</span>
@@ -53,9 +98,24 @@ function Avisos({ config, onChange }) {
           <button type="button" onClick={mostrarAvisoDeTeste}>Testar aviso</button>
         </div>
       )}
-      <p className="muted" style={{ margin: 0, fontSize: 'var(--label-md)' }}>
-        Funciona com o app aberto — numa aba, mesmo em segundo plano, ou instalado. Fechado, não avisa.
-      </p>
+      {ligado && fechado === 'ativo' && (
+        <p className="muted" style={{ margin: 0, fontSize: 'var(--label-md)' }}>
+          ✓ Avisa mesmo com o app fechado, com a agenda dos próximos 8 dias. Abra o app de vez em quando para a lista
+          andar para a frente.
+        </p>
+      )}
+      {ligado && fechado === 'inativo' && (
+        <div className="avisos-linha">
+          <span className="muted" style={{ flex: 1, fontSize: 'var(--label-md)' }}>Por enquanto, só avisa com o app aberto.</span>
+          <button type="button" onClick={ligarComAppFechado}>Avisar com o app fechado</button>
+        </div>
+      )}
+      {ligado && fechado === 'indisponivel' && (
+        <p className="muted" style={{ margin: 0, fontSize: 'var(--label-md)' }}>
+          Funciona com o app aberto — numa aba, mesmo em segundo plano, ou instalado.
+        </p>
+      )}
+      {erroFechado && <p className="form-error" style={{ margin: 0 }}>{erroFechado}</p>}
     </div>
   )
 }

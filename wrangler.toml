@@ -11,3 +11,15 @@ command = "npm run build"
 [assets]
 directory = "./dist"
 binding = "ASSETS"
+
+# Avisos com o app fechado (worker/avisos.js): um Durable Object por pessoa
+# guarda a lista de avisos da semana e acorda sozinho, por alarme, na hora de
+# cada um. A classe é criada no próprio deploy, pela migração abaixo — não há
+# nada para criar à mão no painel. SQLite é o tipo disponível no plano grátis.
+[[durable_objects.bindings]]
+name = "AVISOS"
+class_name = "AvisosDoUsuario"
+
+[[migrations]]
+tag = "v1-avisos"
+new_sqlite_classes = ["AvisosDoUsuario"]

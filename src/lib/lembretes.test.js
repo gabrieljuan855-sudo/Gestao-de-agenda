@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { normalizarConfigDeAvisos, minutosDeAviso, avisosDevidos, textoDoAviso, podarAvisados } from './lembretes.js'
+import { normalizarConfigDeAvisos, minutosDeAviso, avisosDevidos, textoDoAviso, podarAvisados, avisosParaOServidor } from './lembretes.js'
 
 const agora = new Date('2026-10-06T13:52:00-03:00')
 const ev = (id, inicio, extra = {}) => ({
@@ -69,5 +69,25 @@ describe('podarAvisados', () => {
   it('esquece avisos de compromissos com mais de um dia', () => {
     const s = new Set(['a|2026-10-04T10:00:00.000Z|10', 'b|2026-10-06T17:00:00.000Z|10', 'lixo'])
     expect([...podarAvisados(s, agora)]).toEqual(['b|2026-10-06T17:00:00.000Z|10'])
+  })
+})
+
+describe('avisosParaOServidor', () => {
+  it('monta os avisos futuros já com hora e texto prontos', () => {
+    const lista = [
+      { id: 'r', summary: 'Reunião', location: 'CREAS', start: { dateTime: '2026-10-06T15:00:00-03:00' }, end: { dateTime: '2026-10-06T16:00:00-03:00' } },
+      { id: 'passou', summary: 'Já passou o aviso', start: { dateTime: '2026-10-06T13:55:00-03:00' }, end: { dateTime: '2026-10-06T14:30:00-03:00' } },
+      { id: 'dia', start: { date: '2026-10-07' }, end: { date: '2026-10-08' } },
+    ]
+    const avisos = avisosParaOServidor(lista, agora, { antecedencia: 10 })
+    expect(avisos).toHaveLength(1)
+    expect(avisos[0]).toMatchObject({ titulo: 'Reunião', tag: 'compromisso-r', quando: new Date('2026-10-06T14:50:00-03:00').getTime() })
+    expect(avisos[0].corpo).toMatch(/^Em 10 min · /)
+    expect(avisos[0].corpo).toContain('CREAS')
+  })
+
+  it('respeita a agenda desligada', () => {
+    const e = { id: 'r', start: { dateTime: '2026-10-06T15:00:00-03:00' }, end: { dateTime: '2026-10-06T16:00:00-03:00' } }
+    expect(avisosParaOServidor([e], agora, { antecedencia: 10, deveAvisar: () => false })).toEqual([])
   })
 })

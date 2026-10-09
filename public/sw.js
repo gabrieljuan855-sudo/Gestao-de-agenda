@@ -3,7 +3,7 @@
 // sempre precisa da API do Google. "Rede primeiro, cache como reserva": toda
 // resposta boa atualiza o cache, e só quando a rede falha é que o que já foi
 // visto antes entra em cena, em vez de uma tela branca.
-const CACHE_NAME = 'gestao-agenda-v3'
+const CACHE_NAME = 'gestao-agenda-v4'
 
 // Só o essencial para a página conseguir montar sozinha: os arquivos com hash
 // do build (JS/CSS) entram no cache sozinhos, na primeira vez que passam por
@@ -38,6 +38,27 @@ self.addEventListener('activate', (event) => {
       .keys()
       .then((keys) => Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))))
       .then(() => self.clients.claim())
+  )
+})
+
+// Aviso que chega do servidor com o app fechado (worker/avisos.js). O
+// conteúdo já vem pronto; aqui só vira notificação. A tag é a mesma do aviso
+// feito pelo app aberto, então um substitui o outro em vez de duplicar.
+self.addEventListener('push', (event) => {
+  let dados = {}
+  try {
+    dados = event.data ? event.data.json() : {}
+  } catch {
+    dados = { corpo: event.data ? event.data.text() : '' }
+  }
+  event.waitUntil(
+    self.registration.showNotification(dados.titulo || 'Compromisso', {
+      body: dados.corpo || '',
+      icon: '/icon-192.png',
+      badge: '/icon-192.png',
+      tag: dados.tag || undefined,
+      data: { url: '/' },
+    })
   )
 })
 
