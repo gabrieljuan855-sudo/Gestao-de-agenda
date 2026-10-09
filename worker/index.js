@@ -13,6 +13,10 @@
 // navegador — é justamente por isso que essa parte roda no servidor.
 
 import { handleAuth } from './auth.js'
+import { handleAvisos, AvisosDoUsuario } from './avisos.js'
+
+// O Durable Object dos avisos precisa ser exportado pelo módulo principal.
+export { AvisosDoUsuario }
 
 const TOKENINFO_URL = 'https://www.googleapis.com/oauth2/v3/tokeninfo'
 // O Google aposenta modelo sem aviso: o gemini-2.0-flash passou a responder
@@ -996,6 +1000,12 @@ export default {
     if (url.pathname === '/api/projeto') {
       if (request.method !== 'POST') return json({ error: 'Use POST.' }, 405)
       return handleProjeto(request, env)
+    }
+
+    if (url.pathname === '/api/avisos' || url.pathname === '/api/avisos/chave') {
+      const caller = await verifyCaller(request, env)
+      if (!caller) return json({ error: 'Não autorizado.' }, 401)
+      return handleAvisos(request, env, caller, json)
     }
 
     if (url.pathname === '/api/search-notes') {

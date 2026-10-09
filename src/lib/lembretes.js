@@ -114,3 +114,25 @@ export function gravarAvisados(avisados) {
     // Pior caso: um aviso repetido depois de recarregar a página.
   }
 }
+
+// A lista que vai para o servidor avisar com o app fechado (iPhone): cada
+// aviso já pronto, com a hora exata e o texto, calculado aqui. O servidor só
+// guarda e dispara — não lê agenda nenhuma por conta própria.
+export const DIAS_DE_AVISOS_NO_SERVIDOR = 8
+
+export function avisosParaOServidor(events, agora, { antecedencia, deveAvisar = () => true }) {
+  const avisos = []
+  for (const event of events || []) {
+    if (!event?.id || event.status === 'cancelled' || isAllDay(event) || ehRegistroDeConclusao(event)) continue
+    if (!deveAvisar(event)) continue
+    const inicio = eventStart(event)
+    if (!inicio || inicio <= agora) continue
+    for (const m of minutosDeAviso(event, antecedencia)) {
+      const quando = new Date(inicio.getTime() - m * 60000)
+      if (quando <= agora) continue
+      const { titulo, corpo } = textoDoAviso(event, quando)
+      avisos.push({ id: chaveDoAviso(event, inicio, m), quando: quando.getTime(), titulo, corpo, tag: `compromisso-${event.id}` })
+    }
+  }
+  return avisos.sort((a, b) => a.quando - b.quando)
+}
