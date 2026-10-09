@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { parseQuickAdd, decidirDestino, descreverQuando } from '../lib/nlp.js'
 import { toDateInput } from '../lib/dates.js'
 import { findDefaultCalendar, acharAgendaNoTexto } from '../lib/defaults.js'
@@ -64,6 +64,14 @@ export default function QuickAdd({
   // a agenda citada no texto ("Imersão AEPETI") ou, sem nenhuma, a padrão.
   const [agendaEscolhida, setAgendaEscolhida] = useState(null)
   const inputRef = useRef(null)
+
+  // A altura acompanha o texto: zera e mede o conteúdo a cada mudança.
+  useLayoutEffect(() => {
+    const el = inputRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${el.scrollHeight + 2}px`
+  }, [text])
 
   function handleChange(value) {
     setText(value)
@@ -170,14 +178,25 @@ export default function QuickAdd({
 
   return (
     <form onSubmit={handleSubmit}>
-      <input
+      {/* Cresce para baixo conforme o texto, em vez de rolar de lado: um
+          item da Entrada às vezes é um parágrafo inteiro (o caso todo de uma
+          família), e numa linha só não dava para reler o que foi escrito.
+          Enter continua capturando; quebra de linha não existe aqui — cada
+          captura é um item. */}
+      <textarea
         ref={inputRef}
-        type="text"
+        className="quickadd-campo"
+        rows={1}
         autoFocus
         placeholder="O que está na sua cabeça?"
         value={text}
-        onChange={(e) => handleChange(e.target.value)}
-        style={{ width: '100%' }}
+        onChange={(e) => handleChange(e.target.value.replace(/\s*\n\s*/g, ' '))}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+            e.preventDefault()
+            e.currentTarget.form?.requestSubmit()
+          }
+        }}
       />
 
       {/* Em qual agenda o compromisso vai cair, à vista e trocável antes do

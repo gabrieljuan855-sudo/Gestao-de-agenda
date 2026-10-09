@@ -2799,3 +2799,18 @@ button.danger:hover { background: var(--urgent-bg); }
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+
+/* Campo do Criar: aparência de campo de texto de uma linha, mas cresce para
+   baixo com o texto (a altura vem do QuickAdd.jsx). Passando de um terço da
+   tela, rola por dentro em vez de empurrar o resto para fora. */
+textarea.quickadd-campo {
+  display: block;
+  resize: none;
+  overflow-y: auto;
+  max-height: 34vh;
+  min-height: 0;
+  border-color: var(--outline);
+  background: var(--surface-container);
+  color: var(--on-surface);
+  line-height: 1.4;
+}
