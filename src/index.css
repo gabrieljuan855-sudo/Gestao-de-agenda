@@ -1355,9 +1355,17 @@ button.danger:hover { background: var(--urgent-bg); }
 }
 
 @media (max-width: 700px) {
-  .tab { font-size: var(--label-md); padding: 0 4px; }
+  /* No celular também: ícone e nome empilhados. Só o ícone obrigava a
+     decorar o desenho de cada aba. */
+  .tab { flex-direction: column; gap: 2px; min-height: 60px; font-size: var(--label-sm); padding: 0 2px; }
+  .tab-label { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
   .tab.is-ativa::before { left: 8px; right: 8px; }
 }
+
+/* O contador fica no canto do ícone, como o selo do MD3, e não ao lado: ao
+   lado ele empurrava o ícone da Entrada para fora do eixo dos outros. */
+.tab-icone { position: relative; }
+.tab-badge { position: absolute; top: -7px; left: calc(100% - 6px); }
 
 /* ---------- trilho lateral ---------- */
 
@@ -1969,7 +1977,32 @@ button.danger:hover { background: var(--urgent-bg); }
   /* Espaço para a barra fixa não cobrir o fim da página. */
   .app-shell { padding-bottom: 96px; }
 
-  .period-label { flex-basis: 100%; order: 4; }
+  /* Celular: a troca de vista ocupa a largura toda em cima; embaixo, a data
+     entre as setas, com o "Hoje" junto quando o dia não é hoje. Antes o
+     "Hoje" caía sozinho numa linha inteira e a data em outra. */
+  .period-bar { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 8px; }
+  .period-views { grid-column: 1 / -1; grid-row: 1; }
+  .period-view { flex: 1; padding: 5px 4px; }
+  .period-arrow--anterior { grid-column: 1; grid-row: 2; }
+  .period-label {
+    grid-column: 2;
+    grid-row: 2;
+    font-size: var(--title-md);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .period-hoje { grid-column: 3; grid-row: 2; }
+  .period-arrow--proximo { grid-column: 4; grid-row: 2; }
+  .period-arrow, .period-hoje { min-height: 40px; padding: 6px 14px; }
+
+  /* O filtro de agenda acompanha a largura do cartão de baixo. */
+  .filtro-agendas .seletor-agenda { flex: 1; }
+  .filtro-agendas .seletor-agenda select { flex: 1; min-width: 0; }
+
+  /* Filtro de contexto é chip de filtro do MD3 (32dp), não botão: do
+     tamanho de botão, "@computador" ficava maior que a própria tarefa. */
+  .pill-filtro { min-height: 32px; padding: 4px 12px; font-size: var(--label-md); }
 
   /* Sete colunas a ~50px não comportam o título de nenhum evento, então a
      semana vira uma lista de dias. */
@@ -2814,3 +2847,16 @@ textarea.quickadd-campo {
   color: var(--on-surface);
   line-height: 1.4;
 }
+
+/* Linha de informações da tarefa: cada pedaço inteiro, quebrando entre eles. */
+.tarefa-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 8px;
+  row-gap: 2px;
+  margin-top: 2px;
+  font-size: var(--label-sm);
+  color: var(--text-muted);
+}
+.tarefa-meta > * { white-space: nowrap; }
