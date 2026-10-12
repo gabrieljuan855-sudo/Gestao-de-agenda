@@ -31,7 +31,7 @@ function label(view, reference) {
 export default function PeriodBar({ view, onChangeView, reference, onPrev, onNext, onToday }) {
   return (
     <div className="period-bar">
-      <button onClick={onPrev} aria-label="Período anterior" className="period-arrow">←</button>
+      <button onClick={onPrev} aria-label="Período anterior" className="period-arrow period-arrow--anterior">←</button>
 
       <div className="period-views">
         {VIEWS.map((v) => (
@@ -45,7 +45,7 @@ export default function PeriodBar({ view, onChangeView, reference, onPrev, onNex
         ))}
       </div>
 
-      <button onClick={onNext} aria-label="Próximo período" className="period-arrow">→</button>
+      <button onClick={onNext} aria-label="Próximo período" className="period-arrow period-arrow--proximo">→</button>
 
       <div className="period-label">{label(view, reference)}</div>
 

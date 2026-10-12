@@ -4,6 +4,7 @@ import { combinedFocusStats } from '../lib/focusStats.js'
 import { formatDuration, formatTime, dateOnlyFromISO } from '../lib/dates.js'
 import { daysSince, isOverdueTask } from '../lib/tasks.js'
 import { acoesParaAgora } from '../lib/agora.js'
+import { LISTA_PROXIMAS } from '../lib/gtd.js'
 import { findFreeGaps } from '../lib/events.js'
 import { workBlocksFor } from '../lib/schedule.js'
 
@@ -124,36 +125,31 @@ export default function Backlog({
           <div style={{ fontWeight: 500, fontSize: 'var(--body-md)', textDecoration: done ? 'line-through' : 'none' }}>
             {task.title}
           </div>
-          <span className={`pill ${task.priority}`}>{PRIORITY_LABEL[task.priority]}</span>
-          {task.contexto && (
-            <span className="muted" style={{ marginLeft: 8, fontSize: 'var(--label-sm)' }}>@{task.contexto}</span>
-          )}
-          {task.due && (
-            <span
-              className="muted"
-              style={{ marginLeft: 8, fontSize: 'var(--label-sm)', color: atrasada ? 'var(--urgent)' : undefined }}
-            >
-              {atrasada ? 'atrasada · ' : 'prazo '}
-              {prazoLabel(task.due)}
-            </span>
-          )}
-          {/* Listas como "Prioridade Máxima (menos de uma semana)" já estão
-              ditas pela pílula ao lado: repetir o nome inteiro só empurrava o
-              resto do cartão para baixo. Só listas com nome próprio aparecem. */}
-          {task.tasklistTitle && !priorityFromListTitle(task.tasklistTitle) && (
-            <span className="muted" style={{ marginLeft: 8, fontSize: 'var(--label-sm)' }}>{task.tasklistTitle}</span>
-          )}
-          {emFoco && <span className="muted" style={{ marginLeft: 8 }}>🍅 em foco agora</span>}
-          {/* Contador de blocos já feitos nesta tarefa, guardado neste
-              aparelho — é só um progresso visível, não um registro oficial. */}
-          {stats && stats.sessions > 0 && (
-            <span className="muted" style={{ marginLeft: 8, fontSize: 'var(--label-sm)' }}>
-              🍅×{stats.sessions} · {formatDuration(stats.minutes)}
-            </span>
-          )}
-          {!done && age !== null && age >= 3 && (
-            <span className="muted" style={{ marginLeft: 8 }}>parado há {age} dias</span>
-          )}
+          {/* Cada informação é um bloco que não se parte: a linha quebra entre
+              elas, nunca no meio ("09 de / out.", "Próximas / ações"). */}
+          <div className="tarefa-meta">
+            <span className={`pill ${task.priority}`}>{PRIORITY_LABEL[task.priority]}</span>
+            {task.contexto && <span>@{task.contexto}</span>}
+            {task.due && (
+              <span style={{ color: atrasada ? 'var(--urgent)' : undefined }}>
+                {atrasada ? 'atrasada · ' : 'prazo '}
+                {prazoLabel(task.due)}
+              </span>
+            )}
+            {/* Listas como "Prioridade Máxima (menos de uma semana)" já estão
+                ditas pela pílula; "Próximas ações" é a própria aba aberta.
+                Só listas com nome próprio aparecem. */}
+            {task.tasklistTitle && task.tasklistTitle !== LISTA_PROXIMAS && !priorityFromListTitle(task.tasklistTitle) && (
+              <span>{task.tasklistTitle}</span>
+            )}
+            {emFoco && <span>🍅 em foco agora</span>}
+            {/* Contador de blocos já feitos nesta tarefa, guardado neste
+                aparelho — é só um progresso visível, não um registro oficial. */}
+            {stats && stats.sessions > 0 && (
+              <span>🍅×{stats.sessions} · {formatDuration(stats.minutes)}</span>
+            )}
+            {!done && age !== null && age >= 3 && <span>parado há {age} dias</span>}
+          </div>
         </div>
         <div style={{ display: 'flex', gap: 4, flexShrink: 0, marginLeft: 8 }}>
           {!done && onFocus && (

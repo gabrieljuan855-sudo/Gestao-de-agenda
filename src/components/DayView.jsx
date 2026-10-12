@@ -154,10 +154,13 @@ export default function DayView({
 
   return (
     <div className="card">
-      <div className="muted" style={{ marginBottom: 10 }}>
-        {date.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' })}
-        {folga && ' · fora do expediente'}
-      </div>
+      {/* A data já está na barra de período, logo acima: repeti-la aqui
+          gastava uma linha inteira (e no celular, a tela toda é uma coluna). */}
+      {folga && (
+        <div className="muted" style={{ marginBottom: 10 }}>
+          Fora do expediente
+        </div>
+      )}
 
       {conflicts.length > 0 && (
         <Banner tone="warning">
