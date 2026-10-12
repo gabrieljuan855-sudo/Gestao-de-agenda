@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  jsonLimitado,
   normalizeAnalysis,
   normalizeEsclarecer,
   normalizePlano,
@@ -563,5 +564,13 @@ describe('erros do Gemini', () => {
     expect(dia.chamadas).toBe(1)
     expect(dia.err).toMatchObject({ motivo: 'dia', transiente: true })
     expect(dia.err.message).toMatch(/cota diária/)
+  })
+})
+
+describe('jsonLimitado', () => {
+  it('corta o que passa do teto e aceita valor ausente', () => {
+    expect(jsonLimitado({ a: 'x'.repeat(100) }, 20)).toHaveLength(20)
+    expect(jsonLimitado(undefined, 20)).toBe('{}')
+    expect(jsonLimitado({ a: 1 }, 20)).toBe('{"a":1}')
   })
 })

@@ -282,13 +282,19 @@ async function handleEsclarecer(request, env) {
 // atrasaram, quem está demorando, que projeto parou) e propõe UMA ação
 // concreta para cada um, que vira botão na tela. Contar continua sendo
 // trabalho do app (revisao.js), nunca da IA.
+// Os números vêm do navegador como um objeto qualquer; sem teto, uma lista
+// grande de projetos ou esperas engordaria o prompt (e a cota de tokens).
+export function jsonLimitado(valor, max) {
+  return JSON.stringify(valor ?? {}).slice(0, max)
+}
+
 function buildRevisaoPrompt({ today, weekday, numeros, itens, candidatas, vagas }) {
   return `Você está ajudando na revisão semanal (método GTD) de alguém que trabalha com atendimento social/administrativo, em português do Brasil.
 
 Hoje é ${weekday}, ${today}. Fuso: America/Sao_Paulo.
 
 Números da semana, já calculados sem você:
-${JSON.stringify(numeros ?? {})}
+${jsonLimitado(numeros, 4000)}
 
 Itens que pedem uma decisão (use o "id" exatamente como está):
 ${JSON.stringify(itens ?? [])}

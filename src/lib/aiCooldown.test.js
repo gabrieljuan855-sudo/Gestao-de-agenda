@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
-import { pausaAtiva, duracaoDaPausa } from './aiCooldown.js'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { pausaAtiva, duracaoDaPausa, pausarIA, cotaDoDiaPausadaAte, barrarSeCotaDoDiaAcabou, avisoDeCotaDoDia } from './aiCooldown.js'
 
 const MINUTO = 60 * 1000
 
@@ -44,5 +44,44 @@ describe('pausaAtiva', () => {
     // Se o localStorage tiver lixo, o certo é liberar — o app sem IA por
     // tempo indeterminado seria pior que uma chamada a mais.
     expect(pausaAtiva('isso não é uma data', agora)).toBe(false)
+  })
+})
+
+describe('cota do dia', () => {
+  const guardado = {}
+  beforeEach(() => {
+    for (const k of Object.keys(guardado)) delete guardado[k]
+    vi.stubGlobal('localStorage', {
+      getItem: (k) => guardado[k] ?? null,
+      setItem: (k, v) => { guardado[k] = String(v) },
+    })
+  })
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('cota diária esgotada barra o pedido sem sair do aparelho', () => {
+    pausarIA('dia')
+    expect(cotaDoDiaPausadaAte()).not.toBeNull()
+    expect(() => barrarSeCotaDoDiaAcabou()).toThrow(/cota diária/)
+    try {
+      barrarSeCotaDoDiaAcabou()
+    } catch (err) {
+      expect(err.transiente).toBe(true)
+    }
+  })
+
+  it('sobrecarga e limite por minuto não barram pedido feito à mão', () => {
+    pausarIA('sobrecarga')
+    pausarIA('minuto')
+    expect(cotaDoDiaPausadaAte()).toBeNull()
+    expect(() => barrarSeCotaDoDiaAcabou()).not.toThrow()
+  })
+
+  it('libera depois da pausa', () => {
+    pausarIA('dia')
+    expect(cotaDoDiaPausadaAte(Date.now() + 61 * MINUTO)).toBeNull()
+  })
+
+  it('o aviso diz até que horas', () => {
+    expect(avisoDeCotaDoDia(new Date().toISOString())).toMatch(/\d{2}:\d{2}/)
   })
 })

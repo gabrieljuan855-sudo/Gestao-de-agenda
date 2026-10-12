@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { PRIORITY_LABEL } from '../lib/priority.js'
 import { fromInputs } from '../lib/dates.js'
 import { PROJETOS_IA_LIGADA } from '../lib/aiCooldown.js'
@@ -50,6 +50,9 @@ export default function AssistenteDoProjeto({
   const [doc, setDoc] = useState({ titulo: '', texto: '' })
   const [notaSalva, setNotaSalva] = useState(null)
   const [pergunta, setPergunta] = useState('')
+  // Um pedido por vez: Enter duas vezes no campo de pergunta chega antes de o
+  // botão desabilitar, e cada envio a mais seria uma chamada ao Gemini.
+  const emAndamento = useRef(false)
 
   if (!PROJETOS_IA_LIGADA) return null
   // Projeto marcado "Não usar IA" (em Configurar) simplesmente não mostra o
@@ -70,6 +73,8 @@ export default function AssistenteDoProjeto({
   }
 
   async function pedir(qual) {
+    if (emAndamento.current) return
+    emAndamento.current = true
     setModo(qual)
     setCarregando(true)
     setErro(null)
@@ -96,6 +101,7 @@ export default function AssistenteDoProjeto({
           : `Não deu para falar com a IA: ${err.message}`
       )
     } finally {
+      emAndamento.current = false
       setCarregando(false)
     }
   }

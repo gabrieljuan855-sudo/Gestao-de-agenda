@@ -941,6 +941,7 @@ export default function App() {
     setUltimaRevisao(agora.toISOString())
     setDecisoesRevisao([])
     setEtapaRevisao('entrada')
+    revisao.limpar()
     setRevisaoAberta(false)
   }
 
