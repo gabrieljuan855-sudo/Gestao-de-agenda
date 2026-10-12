@@ -19,6 +19,8 @@ export const ETAPAS = [
   { id: 'fechar', titulo: 'Fechamento', pergunta: 'O que a semana teve, e o que ficou decidido.' },
 ]
 
+const UMA_HORA_MS = 60 * 60 * 1000
+
 const TIPOS_DA_ETAPA = {
   acoes: ['atrasada', 'parada'],
   aguardando: ['aguardando'],
@@ -69,8 +71,11 @@ export default function RevisaoGuiada({
 
   // Abrir a revisão é o pedido: os números (e, com a IA ligada, as sugestões)
   // começam a ser calculados na hora, enquanto a pessoa esvazia a Entrada.
+  // Números de mais de uma hora atrás (a revisão ficou aberta no fundo e a
+  // pessoa voltou) também são refeitos: as tarefas mudaram nesse meio-tempo.
   useEffect(() => {
-    if (!revisao.numeros && !revisao.carregando) revisao.gerar()
+    const velhos = revisao.geradoEm && Date.now() - revisao.geradoEm > UMA_HORA_MS
+    if ((!revisao.numeros || velhos) && !revisao.carregando) revisao.gerar()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 

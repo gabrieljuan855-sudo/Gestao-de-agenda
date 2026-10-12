@@ -13,6 +13,10 @@
 // passa por aqui: se falhar, ela vê a mensagem e decide se tenta de novo —
 // quem está esperando na frente da tela sabe o que quer.
 const CHAVE = 'gestao-agenda:ia-pausada-ate'
+// Só a cota do dia, separada da pausa geral: sobrecarga e limite por minuto
+// passam em segundos e não devem travar um pedido feito à mão, mas a cota
+// diária só volta na próxima janela — insistir nela é chamada perdida.
+const CHAVE_COTA_DO_DIA = 'gestao-agenda:ia-cota-do-dia-ate'
 
 // A chave geral da IA: com `true`, nada neste app chama o Gemini.
 //
@@ -74,6 +78,7 @@ export function pausarIA(motivo) {
     const ate = new Date(Date.now() + duracao).toISOString()
     // Não encurta uma pausa que já vale mais tempo: uma sobrecarga logo depois
     // de um limite não pode liberar as chamadas automáticas de novo.
+    if (motivo === 'dia' || motivo === 'limite') localStorage.setItem(CHAVE_COTA_DO_DIA, ate)
     const atual = localStorage.getItem(CHAVE)
     if (pausaAtiva(atual) && new Date(atual) > new Date(ate)) return
     localStorage.setItem(CHAVE, ate)
@@ -81,4 +86,31 @@ export function pausarIA(motivo) {
     // Sem localStorage o freio não existe — pior caso é o comportamento
     // antigo, nunca uma tela travada.
   }
+}
+
+// Mesmo o que a pessoa pede na hora respeita a cota do dia: com ela esgotada,
+// cada clique seria uma ida ao Worker e ao Gemini só para ouvir "acabou". A
+// tela avisa na hora, sem gastar chamada, e depois da pausa tenta uma vez.
+export function cotaDoDiaPausadaAte(agora = Date.now()) {
+  try {
+    const ate = localStorage.getItem(CHAVE_COTA_DO_DIA)
+    return pausaAtiva(ate, agora) ? ate : null
+  } catch {
+    return null
+  }
+}
+
+export function avisoDeCotaDoDia(ate) {
+  const hora = new Date(ate).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+  return `A cota diária gratuita do Gemini acabou. Deixei de tentar até ${hora} para não gastar chamada à toa.`
+}
+
+// Chamada no começo de cada pedido de IA: lança o mesmo erro "transitório"
+// que o Worker devolveria, só que sem sair do aparelho.
+export function barrarSeCotaDoDiaAcabou(agora = Date.now()) {
+  const ate = cotaDoDiaPausadaAte(agora)
+  if (!ate) return
+  const err = new Error(avisoDeCotaDoDia(ate))
+  err.transiente = true
+  throw err
 }

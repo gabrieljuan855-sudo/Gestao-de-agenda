@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { listAllTasks, listAllEvents, prefetchFocusEvents } from './googleApi.js'
 import { fetchSugestoesDaRevisao } from './aiRevisao.js'
 import { REVISAO_IA_LIGADA } from './aiCooldown.js'
@@ -34,8 +34,15 @@ export default function useRevisao({ idProximas, idAguardando, idAlgumDia, entra
   const [plano, setPlano] = useState([])
   const [carregando, setCarregando] = useState(false)
   const [error, setError] = useState(null)
+  const [geradoEm, setGeradoEm] = useState(null)
+  // Trava de verdade (o estado `carregando` só muda no render seguinte): o
+  // efeito de abertura roda duas vezes em desenvolvimento, e um segundo
+  // clique rápido em "Recalcular" não pode abrir uma segunda busca.
+  const emAndamento = useRef(false)
 
   const gerar = useCallback(async () => {
+    if (emAndamento.current) return
+    emAndamento.current = true
     setCarregando(true)
     setError(null)
     try {
@@ -64,6 +71,7 @@ export default function useRevisao({ idProximas, idAguardando, idAlgumDia, entra
       const vagas = vaosLivresDaSemana({ events: eventos, schedule, occupies }, hoje, DIAS_PLANO)
 
       setNumeros(numerosCalculados)
+      setGeradoEm(Date.now())
       setComentario(null)
       setSugestoes([])
       setPlano([])
@@ -95,9 +103,21 @@ export default function useRevisao({ idProximas, idAguardando, idAlgumDia, entra
       console.error('Não foi possível calcular a revisão da semana:', err)
       setError(`Não deu para calcular a revisão: ${err.message}`)
     } finally {
+      emAndamento.current = false
       setCarregando(false)
     }
   }, [idProximas, idAguardando, idAlgumDia, entradaVazia, occupies, schedule, foraDaCobranca])
 
-  return { numeros, comentario, sugestoes, plano, carregando, error, gerar, dismissError: () => setError(null) }
+  // Depois de concluir, a próxima revisão começa do zero: sem isto, abrir a
+  // tela de novo (o app fica aberto dias no iPhone) mostrava os números e as
+  // sugestões da semana anterior, e nada os recalculava.
+  const limpar = useCallback(() => {
+    setNumeros(null)
+    setComentario(null)
+    setSugestoes([])
+    setPlano([])
+    setGeradoEm(null)
+  }, [])
+
+  return { numeros, comentario, sugestoes, plano, carregando, error, geradoEm, gerar, limpar, dismissError: () => setError(null) }
 }

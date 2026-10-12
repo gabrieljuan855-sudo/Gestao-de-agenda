@@ -1,5 +1,6 @@
 import { ensureToken } from './googleAuth.js'
-import { pausarIA } from './aiCooldown.js'
+import { pausarIA, barrarSeCotaDoDiaAcabou } from './aiCooldown.js'
+import { criarMemoriaDeRespostas } from './memoriaDeRespostas.js'
 import { toDateInput, dateOnlyFromISO } from './dates.js'
 
 // Trecho máximo de cada anotação mandado para a IA: o bastante para ela
@@ -51,30 +52,40 @@ export function descreverEnvio(ctx) {
   return `Vai para a IA: ${partes.length ? `${partes.join(', ')} e ${ultimo}` : ultimo} deste projeto.`
 }
 
+// Pedido idêntico (mesmo projeto, mesmas tarefas e anotações, mesma pergunta)
+// reaproveita a resposta por alguns minutos: com temperatura 0 o Gemini
+// responderia o mesmo, e perguntar de novo só gastaria cota.
+const lembrar = criarMemoriaDeRespostas({ ttlMs: 10 * 60 * 1000 })
+
 // `extra` leva o que só um modo usa: { documento: {tipo, instrucao} } ou
 // { pergunta }.
-export async function pedirAoProjeto(modo, contexto, extra = {}) {
-  const token = await ensureToken()
-  if (!token) throw new Error('Faça login primeiro.')
+export function pedirAoProjeto(modo, contexto, extra = {}) {
   const agora = new Date()
-  const res = await fetch('/api/projeto', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({
-      modo,
-      ...contexto,
-      ...extra,
-      today: agora.toLocaleDateString('pt-BR'),
-      weekday: agora.toLocaleDateString('pt-BR', { weekday: 'long' }),
-      hojeIso: toDateInput(agora),
-    }),
+  const corpo = JSON.stringify({
+    modo,
+    ...contexto,
+    ...extra,
+    today: agora.toLocaleDateString('pt-BR'),
+    weekday: agora.toLocaleDateString('pt-BR', { weekday: 'long' }),
+    hojeIso: toDateInput(agora),
   })
-  const data = await res.json().catch(() => ({}))
-  if (!res.ok) {
-    const err = new Error(data.error || `A IA não respondeu (${res.status}).`)
-    err.transiente = data.transiente === true
-    pausarIA(data.motivo)
-    throw err
-  }
-  return data
+
+  return lembrar(corpo, async () => {
+    barrarSeCotaDoDiaAcabou()
+    const token = await ensureToken()
+    if (!token) throw new Error('Faça login primeiro.')
+    const res = await fetch('/api/projeto', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: corpo,
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      const err = new Error(data.error || `A IA não respondeu (${res.status}).`)
+      err.transiente = data.transiente === true
+      pausarIA(data.motivo)
+      throw err
+    }
+    return data
+  })
 }
