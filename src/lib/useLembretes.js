@@ -8,7 +8,9 @@ import {
   podarAvisados,
   avisosParaOServidor,
   DIAS_DE_AVISOS_NO_SERVIDOR,
+  avisoDeExemplo,
 } from './lembretes.js'
+import { lerCacheDeAgenda } from './agendaCache.js'
 import { pushSuportado, inscricaoAtual, enviarAvisos, ehIOS } from './pushAvisos.js'
 
 // Os compromissos que podem pedir aviso, buscados à parte: os eventos da
@@ -49,8 +51,9 @@ async function mostrar(titulo, opcoes) {
 }
 
 export function mostrarAvisoDeTeste() {
-  return mostrar('Avisos ligados', {
-    body: 'É assim que o Segundo Cérebro vai avisar antes de cada compromisso.',
+  const { titulo, corpo } = avisoDeExemplo(lerCacheDeAgenda().events, new Date())
+  return mostrar(titulo, {
+    body: corpo,
     icon: '/icon-192.png',
     tag: 'teste-de-aviso',
   })
