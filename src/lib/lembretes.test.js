@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { normalizarConfigDeAvisos, minutosDeAviso, avisosDevidos, textoDoAviso, podarAvisados, avisosParaOServidor } from './lembretes.js'
+import { normalizarConfigDeAvisos, minutosDeAviso, avisosDevidos, textoDoAviso, podarAvisados, avisosParaOServidor, avisoDeExemplo } from './lembretes.js'
 
 const agora = new Date('2026-10-06T13:52:00-03:00')
 const ev = (id, inicio, extra = {}) => ({
@@ -89,5 +89,26 @@ describe('avisosParaOServidor', () => {
   it('respeita a agenda desligada', () => {
     const e = { id: 'r', start: { dateTime: '2026-10-06T15:00:00-03:00' }, end: { dateTime: '2026-10-06T16:00:00-03:00' } }
     expect(avisosParaOServidor([e], agora, { antecedencia: 10, deveAvisar: () => false })).toEqual([])
+  })
+})
+
+describe('avisoDeExemplo', () => {
+  it('usa o próximo compromisso de verdade, avisando que é teste', () => {
+    const lista = [
+      ev('depois', '2026-10-06T18:00:00-03:00'),
+      ev('passado', '2026-10-06T10:00:00-03:00'),
+      { id: 'dia', start: { date: '2026-10-06' }, end: { date: '2026-10-07' } },
+      ev('proximo', '2026-10-06T15:00:00-03:00', { location: 'CREAS' }),
+    ]
+    const a = avisoDeExemplo(lista, agora)
+    expect(a.titulo).toBe('Evento proximo')
+    expect(a.corpo).toMatch(/^Em 1h08 · /)
+    expect(a.corpo).toContain('CREAS')
+    expect(a.corpo.split('\n').at(-1)).toMatch(/^Teste/)
+  })
+
+  it('sem compromisso pela frente, explica com texto próprio', () => {
+    expect(avisoDeExemplo([], agora).titulo).toBe('Avisos ligados')
+    expect(avisoDeExemplo(null, agora).corpo).toMatch(/quanto falta/)
   })
 })

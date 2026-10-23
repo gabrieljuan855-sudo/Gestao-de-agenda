@@ -86,6 +86,26 @@ export function textoDoAviso(event, agora) {
   return { titulo: event.summary?.trim() || '(sem título)', corpo: partes.join('\n') }
 }
 
+// O aviso de teste mostrava um texto genérico, que não dava ideia de como o
+// aviso de verdade fica na tela de bloqueio. Agora usa o próximo compromisso
+// de verdade, no mesmo formato — com a última linha dizendo que é teste, para
+// ninguém sair correndo achando que a reunião está chegando.
+export function avisoDeExemplo(events, agora) {
+  const proximo = (events || [])
+    .filter((e) => e?.id && e.status !== 'cancelled' && !isAllDay(e) && !ehRegistroDeConclusao(e))
+    .map((e) => ({ e, inicio: eventStart(e) }))
+    .filter((x) => x.inicio && x.inicio > agora)
+    .sort((a, b) => a.inicio - b.inicio)[0]
+  if (!proximo) {
+    return {
+      titulo: 'Avisos ligados',
+      corpo: 'Antes de cada compromisso chega um aviso como este, com o nome, quanto falta, o horário e o local.',
+    }
+  }
+  const { titulo, corpo } = textoDoAviso(proximo.e, agora)
+  return { titulo, corpo: `${corpo}\nTeste: os avisos vão chegar assim.` }
+}
+
 // Lembra o que já foi avisado entre um recarregamento e outro: sem isso,
 // reabrir o app 5 minutos antes da reunião repetiria o aviso dado aos 10.
 export function lerAvisados() {
