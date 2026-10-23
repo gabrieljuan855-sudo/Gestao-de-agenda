@@ -361,6 +361,11 @@ textarea:focus-visible,
 
 .modal-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 4px; }
 
+/* O espaço entre os campos vem do `gap` do cartão — mas um diálogo que
+   embrulha os campos num <form> vira um filho só, e o gap não chega lá
+   dentro: cada rótulo ficava colado no campo de cima (editar compromisso). */
+.modal-card > form { display: flex; flex-direction: column; gap: 14px; }
+
 .field { display: flex; flex-direction: column; gap: 4px; }
 .field > span { font-size: var(--label-md); color: var(--text-secondary); }
 .field-row { display: flex; gap: 10px; }
@@ -474,6 +479,14 @@ textarea:focus-visible,
 .field select,
 .field input[type="date"],
 .field input[type="time"] {
+  /* O Safari do iPhone desenha data e hora com largura própria e ignora o
+     width: o par "Primeiro dia / Último dia" vazava para fora do diálogo.
+     Sem a aparência nativa, o campo obedece à largura da coluna. */
+  -webkit-appearance: none;
+  appearance: none;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 42px;
   border: 1px solid var(--border-strong);
   border-radius: var(--shape-md);
   padding: 9px 10px;
@@ -548,6 +561,20 @@ textarea:focus-visible,
 .radio-linha { display: flex; align-items: center; gap: 8px; min-height: 40px; cursor: pointer; flex-wrap: wrap; }
 .radio-linha input[type="radio"] { accent-color: var(--primary); width: 18px; height: 18px; margin: 0; }
 .escopo-serie { display: flex; flex-direction: column; gap: 2px; }
+
+/* Sem a aparência nativa, o select perde a setinha: ela volta aqui, na cor
+   do texto, para continuar dizendo que é uma lista de escolha. */
+.field select {
+  padding-right: 32px;
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: calc(100% - 17px) 52%, calc(100% - 12px) 52%;
+  background-size: 5px 5px;
+  background-repeat: no-repeat;
+}
+/* O iPhone centraliza o texto da data dentro do campo; o resto do app é à
+   esquerda. */
+.field input[type="date"]::-webkit-date-and-time-value,
+.field input[type="time"]::-webkit-date-and-time-value { text-align: left; }
 
 button.danger { color: var(--urgent); border-color: var(--urgent); }
 button.danger:hover { background: var(--urgent-bg); }
@@ -785,8 +812,8 @@ button.danger:hover { background: var(--urgent-bg); }
 .app-head-title h2 { margin: 0; font-size: var(--headline-sm); line-height: 1.1; }
 .app-head-sub { font-size: var(--label-md); }
 
-/* Configuração e sair, discretos no rodapé — mesmo espírito do
-   .notes-print-btn: texto sem borda, cor apagada, só ganha destaque no
+/* Configuração e sair, discretos no rodapé — mesmo espírito de
+   um botão de texto: sem borda, cor apagada, só ganha destaque no
    hover. Fica sempre no fim do fluxo normal da página (depois de todo
    banner/aviso condicional), para não pular de lugar conforme o que está
    visível no momento. */
@@ -1009,18 +1036,6 @@ button.danger:hover { background: var(--urgent-bg); }
   .notes-status-sync.is-salvando svg { animation: none; opacity: 0.7; }
 }
 
-/* Botão de imprimir: texto simples, sem contorno, no mesmo tom discreto do
-   status ao lado — é uma saída secundária, não a ação da tela. */
-.notes-print-btn {
-  margin-left: auto;
-  padding: 2px 8px;
-  border: none;
-  background: transparent;
-  color: var(--on-surface-variant);
-  font-size: var(--label-sm);
-}
-.notes-print-btn:hover { color: var(--on-surface); }
-
 /* O que sai na impressão é este bloco, não o formulário: título e
    input/textarea têm placeholder, borda e uma altura fixa que corta texto
    comprido — nenhum dos dois é o que se quer no papel. Escondido na tela
@@ -1082,117 +1097,170 @@ button.danger:hover { background: var(--urgent-bg); }
   background: var(--surface-container);
 }
 
-/* Abas das anotações — *primary tabs* do MD3. Toda anotação é uma aba, sempre
-   (não há lista por trás): o "+" no fim da barra é o único outro jeito de
-   entrar aqui, no mesmo espírito do "nova aba" de um navegador.
-
-   O que faz isto parecer aba de navegador não é a forma do botão, é o
-   indicador: a barra de 3px colada embaixo da aba ativa, amarrando-a ao
-   conteúdo. A linha divisória por baixo de toda a barra é o outro metade do
-   efeito — ela "abre" só sob a aba ativa, e por isso mora no contêiner
-   inteiro (toolbar), não só na lista de abas: senão o "+" ficaria fora dela.*/
-.notes-toolbar {
-  display: flex;
-  align-items: center;
-  margin-bottom: 12px;
-  border-bottom: 1px solid var(--outline-variant);
+/* ---------- anotações ----------
+   O app Notas do iPhone como modelo, nas peças do MD3: lista agrupada por
+   data com busca e FAB; tocar abre a anotação na tela inteira, com "voltar".
+   Antes eram abas, que com meia dúzia de anotações encolhiam até o título
+   sumir. Texto longo pede linha de leitura confortável, daí o teto de largura
+   no computador. */
+.notas-lista,
+.nota-editor {
+  max-width: 760px;
+  margin: 0 auto;
 }
 
-.notes-tabs {
+.notas-busca {
   display: flex;
-  align-items: stretch;
-  gap: 2px;
-  overflow-x: auto;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 14px;
+  margin-bottom: 16px;
+  border-radius: var(--shape-full);
+  background: var(--surface-variant);
+  color: var(--on-surface-variant);
+}
+.notas-busca input {
   flex: 1;
   min-width: 0;
-  scrollbar-width: none;
-}
-.notes-tabs::-webkit-scrollbar { display: none; }
-
-.notes-tab-add {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  margin: 0 6px;
-  padding: 0;
   border: none;
-  border-radius: var(--shape-full);
   background: transparent;
-  color: var(--on-surface-variant);
+  color: var(--on-surface);
+  font: inherit;
+  font-size: var(--body-lg);
+  outline: none;
+}
+.notas-busca:focus-within { outline: 2px solid var(--primary); outline-offset: -2px; }
+
+.notas-secao { margin-bottom: 18px; }
+.notas-secao h3 {
+  margin: 0 0 6px 4px;
+  font-family: var(--font-heading);
   font-size: var(--title-md);
-  line-height: 1;
+  color: var(--on-surface);
 }
-.notes-tab-add:hover { background: var(--surface-variant); color: var(--on-surface); }
+.notas-secao ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-radius: var(--shape-lg);
+  background: var(--surface);
+  overflow: hidden;
+}
+.notas-secao li + li .notas-linha { border-top: 1px solid var(--outline-variant); }
 
-.notes-tab {
-  position: relative;
+/* Item de lista de duas linhas do MD3: título, e embaixo hora + começo do
+   texto. A linha divisória fica recuada, como no Notas. */
+.notas-linha {
   display: flex;
-  align-items: center;
-  flex: 0 1 auto;
-  min-width: 0;
-  max-width: 200px;
-  padding-right: 4px;
-  border-radius: var(--shape-sm) var(--shape-sm) 0 0;
-  color: var(--on-surface-variant);
-}
-.notes-tab:hover { background: var(--surface-variant); }
-.notes-tab.is-active { color: var(--primary); }
-
-.notes-tab-btn {
-  flex: 1 1 auto;
-  min-width: 0;
-  height: 48px;
-  padding: 0 4px 0 12px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  width: 100%;
+  min-height: 64px;
+  padding: 10px 16px;
   border: none;
+  border-radius: 0;
   background: transparent;
-  color: inherit;
-  font-size: var(--label-md);
-  font-weight: 500;
+  color: var(--on-surface);
   text-align: left;
-  cursor: pointer;
 }
-.notes-tab-label {
-  display: block;
+.notas-linha-titulo,
+.notas-linha-previa {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.notas-linha-titulo { font-size: var(--body-lg); font-weight: 600; }
+.notas-linha-sub { display: flex; gap: 8px; min-width: 0; font-size: var(--body-sm); color: var(--on-surface-variant); }
+.notas-linha-data { flex-shrink: 0; color: var(--on-surface); opacity: 0.75; }
+.notas-linha-previa { min-width: 0; }
 
-.notes-tab-close {
-  flex-shrink: 0;
-  display: inline-flex;
+.notas-vazio { padding: 24px 4px; text-align: center; }
+.notas-contagem {
+  padding: 4px 0 88px;
+  text-align: center;
+  font-size: var(--label-md);
+  color: var(--on-surface-variant);
+}
+
+/* FAB do MD3 (56dp, container de destaque): escrever uma anotação nova é a
+   ação principal desta tela. Grudado no pé do painel enquanto a lista rola. */
+.notas-fab {
+  position: sticky;
+  bottom: 8px;
+  display: flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: 56px;
+  height: 56px;
+  margin: -64px 0 0 auto;
   padding: 0;
   border: none;
-  border-radius: var(--shape-full);
-  background: transparent;
-  color: inherit;
-  font-size: var(--label-sm);
-  opacity: 0.6;
-  cursor: pointer;
-}
-.notes-tab-close:hover {
-  opacity: 1;
-  background: var(--surface-container);
+  border-radius: var(--shape-lg);
+  background: var(--primary-container);
+  color: var(--on-primary-container);
+  box-shadow: var(--elevation-3);
 }
 
-/* O indicador ativo do MD3: 3px, arredondado no topo, na largura da aba. */
-.notes-tab-indicador {
-  position: absolute;
-  left: 8px;
-  right: 8px;
-  bottom: -1px;
-  height: 3px;
-  border-radius: 3px 3px 0 0;
-  background: transparent;
+.nota-barra {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0 8px;
 }
-.notes-tab.is-active .notes-tab-indicador { background: var(--primary); }
+/* Botão de texto do MD3 com a seta: a saída de volta para a lista. */
+.nota-voltar {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 40px;
+  padding: 0 12px 0 4px;
+  border: none;
+  background: transparent;
+  color: var(--primary);
+  font-size: var(--body-lg);
+  font-weight: 500;
+}
+
+.nota-carimbo {
+  margin: 4px 0 10px;
+  text-align: center;
+  font-size: var(--label-md);
+  color: var(--on-surface-variant);
+}
+
+/* Título e texto sem caixa em volta, como numa folha: a borda dizia
+   "formulário", e anotação não é formulário. O foco continua visível pela
+   linha embaixo do título. */
+input[type="text"].nota-titulo {
+  width: 100%;
+  padding: 4px 0;
+  border: none;
+  border-bottom: 1px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  font-family: var(--font-heading);
+  font-size: var(--headline-sm);
+  font-weight: 600;
+}
+input[type="text"].nota-titulo:focus-visible { outline: none; border-bottom-color: var(--primary); }
+
+textarea.nota-corpo {
+  display: block;
+  width: 100%;
+  min-height: 50vh;
+  margin-top: 6px;
+  padding: 4px 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  font-size: var(--body-lg);
+  line-height: 1.55;
+  resize: none;
+  overflow: hidden;
+}
+textarea.nota-corpo:focus-visible { outline: none; }
 
 /* ---------- barra de período ---------- */
 
@@ -2186,7 +2254,19 @@ button.danger:hover { background: var(--urgent-bg); }
   font-size: var(--label-md);
   color: var(--on-surface-variant);
 }
-.note-projeto select { flex: 1; min-width: 0; }
+/* O mesmo campo de seleção do resto do app (antes ficava com o fundo e a
+   borda padrão do navegador, destoando no tema escuro). */
+.note-projeto select {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--shape-md);
+  padding: 7px 10px;
+  font-family: inherit;
+  font-size: var(--body-md);
+  background: var(--surface-1);
+  color: var(--text-primary);
+}
 
 /* A tela de Projetos é mestre-detalhe: no celular (e em janela estreita) uma
    coisa de cada vez — a lista, ou o projeto aberto. Com largura, as duas lado

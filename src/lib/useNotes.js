@@ -121,6 +121,8 @@ export function sanitizeNote(note) {
   // Etiqueta do projeto a que a anotação pertence (o mesmo id de
   // projetos.js). Sem projeto, o campo simplesmente não existe.
   if (typeof note.projeto === 'string' && note.projeto) limpa.projeto = note.projeto
+  // Fixada no topo da lista, como no Notas do iPhone. Só existe quando é true.
+  if (note.fixada === true) limpa.fixada = true
   if (note.relatedNote && typeof note.relatedNote.id === 'string') {
     limpa.relatedNote = { id: note.relatedNote.id, title: textoOuVazio(note.relatedNote.title) }
   }
@@ -154,9 +156,8 @@ export default function useNotes({ signedIn }) {
   // mesclagem saber o que sumiu de propósito. Um ref basta, e evita um
   // re-render por exclusão.
   const deletedRef = useRef(readCache().deleted)
-  // Toda anotação é uma aba, sempre — não há mais lista separada. `selectedId`
-  // é qual delas está em primeiro plano. Não persiste entre sessões: reabrir
-  // o app volta a escolher (ver o efeito abaixo).
+  // A anotação aberta no editor; null é a lista. Quem abre uma de fora (a
+  // página do projeto, a Entrada) só precisa apontar para ela aqui.
   const [selectedId, setSelectedId] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -186,14 +187,11 @@ export default function useNotes({ signedIn }) {
     notesRef.current = notes
   }, [notes])
 
-  // Sem lista para "voltar", sempre precisa haver uma aba em primeiro plano
-  // quando existe pelo menos uma anotação — inclusive assim que o Drive traz
-  // notas que ainda não existiam no cache local. Se a seleção atual não
-  // aponta para nada (começo de sessão, ou a nota selecionada sumiu por outro
-  // caminho), a primeira da lista assume.
+  // A anotação aberta pode sumir por outro caminho (apagada no outro
+  // aparelho e trazida pela sincronização): aí volta para a lista, em vez de
+  // um editor apontando para nada.
   useEffect(() => {
-    if (selectedId && notes.some((n) => n.id === selectedId)) return
-    if (notes.length > 0) setSelectedId(notes[0].id)
+    if (selectedId && !notes.some((n) => n.id === selectedId)) setSelectedId(null)
   }, [notes, selectedId])
 
   // Carrega do Drive uma vez por sessão, assim que loga. Enquanto isso não
@@ -323,23 +321,14 @@ export default function useNotes({ signedIn }) {
   // distingue "esta anotação foi apagada" de "esta anotação ainda não subiu"
   // — sem isso, a mesclagem devolveria para a tela tudo que foi apagado.
   //
-  // Fechar a aba É excluir agora (a confirmação mora no componente): se era a
-  // aba em primeiro plano, quem assume é a vizinha (a anterior, ou a próxima
-  // se era a primeira) — nunca aparece uma tela vazia por ter fechado a aba
-  // ativa enquanto sobram outras.
+  // Excluir a anotação aberta volta para a lista, como no Notas.
   function deleteNote(id) {
     deletedRef.current = mesclarApagadas(
       [...deletedRef.current.filter((d) => d.id !== id), { id, at: new Date().toISOString() }],
       []
     )
-    const i = notes.findIndex((n) => n.id === id)
-    const restante = notes.filter((n) => n.id !== id)
-    persist(restante)
-    setSelectedId((atual) => {
-      if (atual !== id) return atual
-      if (restante.length === 0) return null
-      return restante[Math.min(i, restante.length - 1)].id
-    })
+    persist(notesRef.current.filter((n) => n.id !== id))
+    setSelectedId((atual) => (atual === id ? null : atual))
   }
 
   // Chamada com o texto atual em mãos (não lido de volta do estado), porque
