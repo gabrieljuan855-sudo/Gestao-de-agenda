@@ -273,7 +273,17 @@ function adoptToken(data) {
 //   'instavel'        -> servidor ou Google com problema passageiro
 //   'nao_configurado' -> este Worker não tem o login pelo servidor
 //   'indefinido'      -> não deu para falar com o servidor
-async function askServerForToken() {
+// Na abertura, o initGoogleAuth e as primeiras buscas da agenda pedem token
+// ao mesmo tempo; uma pergunta só em voo serve a todos, em vez de várias
+// renovações iguais disputando o mesmo refresh token.
+let serverAsk = null
+
+function askServerForToken() {
+  if (!serverAsk) serverAsk = askServerOnce().finally(() => (serverAsk = null))
+  return serverAsk
+}
+
+async function askServerOnce() {
   let res
   try {
     res = await fetch('/api/auth/token', { method: 'POST' })
@@ -387,6 +397,13 @@ export async function initGoogleAuth(onSession, onStatus = () => {}) {
     currentToken = stored.token
     expiresAt = stored.expiresAt
     grantedScopes = stored.scope || ''
+    onSessionChange(true)
+  } else if (mode === SERVER && hadSession()) {
+    // O token dura uma hora, então quase toda abertura no celular chega com
+    // ele vencido — e esperar o Worker renovar para só então sair da tela de
+    // login era o que fazia o app parecer lento. Quem já entrou vê na hora a
+    // agenda guardada (agendaCache.js); as buscas esperam o token renovado
+    // por trás, e só um "deslogado" de verdade leva de volta ao login.
     onSessionChange(true)
   }
 
