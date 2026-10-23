@@ -1,10 +1,17 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Modal from './Modal.jsx'
 import ConfirmDialog from './ConfirmDialog.jsx'
 import { toDateInput, toTimeInput, fromInputs } from '../lib/dates.js'
 import { isAllDay, eventStart, eventEnd } from '../lib/events.js'
 import { PROJETO_PROP } from '../lib/projetos.js'
-import { REPETICOES, REPETICAO_PERSONALIZADA, construirRecorrencia, reconhecerRecorrencia } from '../lib/recorrencia.js'
+import {
+  lerRecorrencia,
+  montarRecorrencia,
+  regraDaOpcao,
+  acompanharData,
+} from '../lib/recorrencia.js'
+import Repeticao from './Repeticao.jsx'
+import EscopoDaSerie from './EscopoDaSerie.jsx'
 
 // O link de vídeo pode estar em dois lugares do evento, dependendo de como
 // ele nasceu: hangoutLink é o atalho que o próprio Google mantém por
@@ -15,15 +22,26 @@ function linkDaVideochamada(event) {
   return event.hangoutLink || event.conferenceData?.entryPoints?.find((e) => e.entryPointType === 'video')?.uri || null
 }
 
-export default function EventEditor({ event, calendars = [], projetos = [], onSave, onDelete, onClose }) {
+export default function EventEditor({ event, calendars = [], projetos = [], carregarSerie, onSave, onDelete, onClose }) {
   const allDay = isAllDay(event)
   const start = eventStart(event)
   const end = eventEnd(event)
-  // Uma regra que o seletor abaixo não sabe reproduzir (feita na Agenda do
-  // Google, ou com INTERVAL/COUNT/UNTIL) vira "personalizada" — guardada à
-  // parte para eu saber a diferença entre "não mexeu" e "escolheu de novo a
-  // mesma coisa que já tinha por acaso".
-  const repeticaoInicial = reconhecerRecorrencia(event.recurrence)
+  // Uma ocorrência de série não traz a regra de repetição — só a série tem.
+  // Ela é buscada ao abrir; até chegar, o seletor fica esperando em vez de
+  // mostrar "Não se repete", que era o que a tela dizia antes (errado).
+  const recorrente = Boolean(event.recurringEventId)
+  const [serie, setSerie] = useState(recorrente ? { status: 'carregando' } : { status: 'ok', evento: event })
+  useEffect(() => {
+    if (!recorrente || !carregarSerie) return
+    let vivo = true
+    carregarSerie(event)
+      .then((evento) => vivo && setSerie({ status: 'ok', evento }))
+      .catch(() => vivo && setSerie({ status: 'erro' }))
+    return () => {
+      vivo = false
+    }
+  }, [event, recorrente, carregarSerie])
+  const lida = serie.status === 'ok' ? lerRecorrencia(serie.evento.recurrence, start) : null
 
   const [title, setTitle] = useState(event.summary || '')
   const [date, setDate] = useState(toDateInput(start))
@@ -33,7 +51,10 @@ export default function EventEditor({ event, calendars = [], projetos = [], onSa
   const [calendarId, setCalendarId] = useState(event.calendarId || 'primary')
   const [description, setDescription] = useState(event.description || '')
   const [location, setLocation] = useState(event.location || '')
-  const [repeticao, setRepeticao] = useState(repeticaoInicial)
+  // `null` = ninguém mexeu na repetição; aí ela fica de fora do que é
+  // salvo (e só acompanha a data, se a data mudou). Senão, a escolha: uma
+  // opção rápida, 'nunca', ou { personalizada: regra }.
+  const [repeticao, setRepeticao] = useState(null)
   const projetoInicial = event.extendedProperties?.private?.[PROJETO_PROP] || ''
   const [projeto, setProjeto] = useState(projetoInicial)
   // Vídeo é uma intenção, não um valor editável direto: o link em si só
@@ -43,41 +64,71 @@ export default function EventEditor({ event, calendars = [], projetos = [], onSa
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
+  // Série: as escolhas "este / este e os seguintes / todos" aparecem na
+  // hora de salvar ou excluir, como no Google — não antes.
+  const [perguntaSerie, setPerguntaSerie] = useState(null)
 
   const linkVideo = linkDaVideochamada(event)
 
-  async function handleSave() {
+  // A regra que vale com as datas do formulário: a escolhida, se a pessoa
+  // mexeu; senão a que já existia, acompanhando a data se ela mudou.
+  function regraFinal(nextStart) {
+    if (repeticao === 'nunca') return { recurrence: [], escolhida: true }
+    if (repeticao?.personalizada) return { recurrence: montarRecorrencia(repeticao.personalizada, lida?.extras, allDay), escolhida: true }
+    if (repeticao) return { recurrence: montarRecorrencia(regraDaOpcao(repeticao, nextStart), lida?.extras, allDay), escolhida: true }
+    if (!lida?.regra) return { recurrence: undefined, escolhida: false }
+    const seguida = acompanharData(lida.regra, start, nextStart)
+    if (seguida === lida.regra) return { recurrence: undefined, escolhida: false }
+    return { recurrence: montarRecorrencia(seguida, lida.extras, allDay), escolhida: false }
+  }
+
+  function montarPatch() {
     const nextStart = allDay ? fromInputs(date) : fromInputs(date, startTime)
     const nextEnd = allDay ? fromInputs(endDate) : fromInputs(date, endTime)
-
     if (nextEnd <= nextStart) {
       setError(allDay ? 'O último dia não pode ser antes do primeiro.' : 'O fim precisa ser depois do início.')
+      return null
+    }
+    const { recurrence, escolhida } = regraFinal(nextStart)
+    return {
+      title: title.trim(),
+      start: nextStart,
+      end: nextEnd,
+      allDay,
+      calendarId,
+      description,
+      location,
+      // Sem mudança na repetição, `recurrence` fica de fora do patch —
+      // inclusive quando a regra é uma que o editor não sabe montar: salvar
+      // o título não pode apagar uma repetição que ninguém pediu para mudar.
+      ...(recurrence === undefined ? {} : { recurrence }),
+      recorrenciaEscolhida: escolhida,
+      // Mesmo cuidado da repetição: só entra no patch se a pessoa mexeu.
+      ...(projeto === projetoInicial ? {} : { projeto }),
+      ...(videoAcao === 'adicionar' ? { criarVideochamada: true } : {}),
+      ...(videoAcao === 'remover' ? { removerVideochamada: true } : {}),
+    }
+  }
+
+  function handleSave() {
+    setError(null)
+    const patch = montarPatch()
+    if (!patch) return
+    if (!recorrente) {
+      // Um evento simples que passa a se repetir não tem o que perguntar.
+      salvar(patch, 'este')
       return
     }
+    // Como no Google: mudar a regra ou a agenda não vale para uma ocorrência
+    // sozinha — aí "Este evento" nem aparece.
+    const semEste = patch.recorrenciaEscolhida || patch.calendarId !== (event.calendarId || 'primary')
+    setPerguntaSerie({ acao: 'salvar', patch, semEste })
+  }
 
+  async function salvar(patch, escopo) {
     setSaving(true)
-    setError(null)
     try {
-      await onSave({
-        title: title.trim(),
-        start: nextStart,
-        end: nextEnd,
-        allDay,
-        calendarId,
-        description,
-        location,
-        // Sem mudança nenhuma na repetição, `recurrence` fica de fora do
-        // patch — inclusive quando ela já era "personalizada": sem essa
-        // ressalva, salvar qualquer outro campo (título, local...) apagaria
-        // sem querer uma regra que o seletor não sabe reconstruir.
-        ...(repeticao === repeticaoInicial
-          ? {}
-          : { recurrence: repeticao === 'nunca' ? [] : construirRecorrencia(repeticao, nextStart) }),
-        // Mesmo cuidado da repetição: só entra no patch se a pessoa mexeu.
-        ...(projeto === projetoInicial ? {} : { projeto }),
-        ...(videoAcao === 'adicionar' ? { criarVideochamada: true } : {}),
-        ...(videoAcao === 'remover' ? { removerVideochamada: true } : {}),
-      })
+      await onSave(patch, escopo)
       onClose()
     } catch (err) {
       setError(`Não deu para salvar: ${err.message}`)
@@ -85,10 +136,10 @@ export default function EventEditor({ event, calendars = [], projetos = [], onSa
     }
   }
 
-  async function handleDelete() {
+  async function handleDelete(escopo = 'este') {
     setSaving(true)
     try {
-      await onDelete()
+      await onDelete(escopo)
       onClose()
     } catch (err) {
       setError(`Não deu para excluir: ${err.message}`)
@@ -140,20 +191,13 @@ export default function EventEditor({ event, calendars = [], projetos = [], onSa
           </>
         )}
 
-        <label className="field">
-          <span>Repetir</span>
-          <select value={repeticao} onChange={(e) => setRepeticao(e.target.value)}>
-            {/* Só aparece enquanto for a regra que já veio no evento — trocar
-                para outra opção substitui e a "personalizada" não volta mais
-                ao seletor, mesmo que se escolha "Não repete" e depois volte. */}
-            {repeticaoInicial === 'personalizada' && (
-              <option value="personalizada">{REPETICAO_PERSONALIZADA.label}</option>
-            )}
-            {REPETICOES.map((r) => (
-              <option key={r.id} value={r.id}>{r.label}</option>
-            ))}
-          </select>
-        </label>
+        <Repeticao
+          data={fromInputs(date)}
+          status={recorrente ? serie.status : 'ok'}
+          lida={lida}
+          escolha={repeticao}
+          onEscolha={setRepeticao}
+        />
 
         <label className="field">
           <span>Local</span>
@@ -226,7 +270,14 @@ export default function EventEditor({ event, calendars = [], projetos = [], onSa
         {error && <div className="form-error">{error}</div>}
 
         <div className="modal-actions">
-          <button type="button" onClick={() => setConfirmingDelete(true)} disabled={saving} className="danger">Excluir</button>
+          <button
+            type="button"
+            onClick={() => (recorrente ? setPerguntaSerie({ acao: 'excluir' }) : setConfirmingDelete(true))}
+            disabled={saving}
+            className="danger"
+          >
+            Excluir
+          </button>
           <div style={{ flex: 1 }} />
           <button type="button" onClick={onClose} disabled={saving}>Cancelar</button>
           <button type="submit" className="primary" disabled={saving || !title.trim()}>
@@ -247,6 +298,20 @@ export default function EventEditor({ event, calendars = [], projetos = [], onSa
             handleDelete()
           }}
           onCancel={() => setConfirmingDelete(false)}
+        />
+      )}
+
+      {perguntaSerie && (
+        <EscopoDaSerie
+          acao={perguntaSerie.acao}
+          semEste={perguntaSerie.semEste}
+          onConfirm={(escopo) => {
+            const pergunta = perguntaSerie
+            setPerguntaSerie(null)
+            if (pergunta.acao === 'excluir') handleDelete(escopo)
+            else salvar(pergunta.patch, escopo)
+          }}
+          onCancel={() => setPerguntaSerie(null)}
         />
       )}
     </>

@@ -484,6 +484,71 @@ textarea:focus-visible,
   width: 100%;
 }
 
+/* ---------- repetição de compromisso ----------
+   O "Personalizar" do Google, aberto dentro do próprio formulário. */
+.repeticao-painel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 4px;
+  padding: 12px;
+  border-radius: var(--shape-md);
+  background: var(--surface-variant);
+}
+.repeticao-linha { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.repeticao-bloco { display: flex; flex-direction: column; gap: 6px; }
+.repeticao-bloco > span { font-size: var(--label-md); color: var(--text-secondary); }
+.repeticao-painel input[type="number"],
+.repeticao-painel input[type="date"],
+.repeticao-painel select {
+  border: 1px solid var(--border-strong);
+  border-radius: var(--shape-md);
+  padding: 7px 10px;
+  font-family: inherit;
+  font-size: var(--body-md);
+  background: var(--surface-1);
+  color: var(--text-primary);
+}
+.repeticao-painel input[type="number"] { width: 72px; }
+/* O .field estica todo select a 100%; aqui eles fazem parte de uma frase
+   ("Repetir a cada 2 semanas") e precisam caber na mesma linha. */
+.repeticao-linha select,
+.radio-linha input[type="date"] { width: auto; }
+.repeticao-painel input:disabled { opacity: 0.5; }
+.repeticao-ajustar {
+  align-self: flex-start;
+  border-color: transparent;
+  background: transparent;
+  color: var(--primary);
+  padding: 6px 8px;
+}
+
+/* Dias da semana: chips de filtro do MD3 em formato redondo, como no
+   Google — a letra só não basta para saber qual "S" é qual, por isso o
+   nome inteiro vai no aria-label e no title. */
+.dias-semana { display: flex; gap: 6px; flex-wrap: wrap; }
+.dia-chip {
+  width: 36px;
+  height: 36px;
+  min-height: 36px;
+  padding: 0;
+  border-radius: var(--shape-full);
+  border: 1px solid var(--outline-variant);
+  background: transparent;
+  color: var(--on-surface-variant);
+  font-size: var(--label-md);
+  font-weight: 600;
+}
+.dia-chip.is-escolhido {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--on-primary);
+}
+
+.radio-linha { display: flex; align-items: center; gap: 8px; min-height: 40px; cursor: pointer; flex-wrap: wrap; }
+.radio-linha input[type="radio"] { accent-color: var(--primary); width: 18px; height: 18px; margin: 0; }
+.escopo-serie { display: flex; flex-direction: column; gap: 2px; }
+
 button.danger { color: var(--urgent); border-color: var(--urgent); }
 button.danger:hover { background: var(--urgent-bg); }
 
