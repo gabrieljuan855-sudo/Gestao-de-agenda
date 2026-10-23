@@ -4,8 +4,6 @@ import {
   listAllEvents,
   listCompletedTasks,
   createEvent,
-  updateEvent,
-  moveEvent,
   deleteEvent,
   setEventPresence,
   listAllTasks,
@@ -19,6 +17,9 @@ import {
   prefetchFocusEvents,
   garantirLista,
   moverTarefa,
+  salvarEvento,
+  excluirEvento,
+  carregarSerie,
 } from './lib/googleApi.js'
 import {
   LISTA_ENTRADA,
@@ -753,21 +754,16 @@ export default function App() {
     setWorkSchedule(next)
   }
 
-  async function handleSaveEvent(patch) {
-    // Mudar de agenda é uma chamada própria do Calendar (moveEvent), separada
-    // do PATCH normal — e precisa vir primeiro: depois de mover, o evento só
-    // existe na agenda de destino, então o PATCH dos outros campos já precisa
-    // mirar lá, não na origem.
-    const destino = patch.calendarId && patch.calendarId !== editingEvent.calendarId
-      ? patch.calendarId
-      : null
-    if (destino) await moveEvent(editingEvent, destino)
-    await updateEvent({ ...editingEvent, calendarId: destino || editingEvent.calendarId }, patch)
+  // Mudar de agenda, as três escolhas de série ("este", "este e os
+  // seguintes", "todos") e a ordem certa das chamadas moram em salvarEvento —
+  // aqui é só gravar e recarregar.
+  async function handleSaveEvent(patch, escopo) {
+    await salvarEvento(editingEvent, patch, escopo)
     await reload()
   }
 
-  async function handleDeleteEvent() {
-    await deleteEvent(editingEvent)
+  async function handleDeleteEvent(escopo) {
+    await excluirEvento(editingEvent, escopo)
     await reload()
   }
 
@@ -1422,6 +1418,7 @@ export default function App() {
           event={editingEvent}
           calendars={calendars}
           projetos={projetosEmAberto}
+          carregarSerie={carregarSerie}
           onSave={handleSaveEvent}
           onDelete={handleDeleteEvent}
           onClose={() => setEditingEvent(null)}

@@ -6,6 +6,9 @@ import { PRESENCE_PROP, TO_RSVP } from './calendarPrefs.js'
 import { semAcento } from './texto.js'
 import { FOCUS_TASK_PROP } from './focusStats.js'
 import { acharLista, parseMeta, encodeMeta } from './gtd.js'
+import { isAllDay } from './events.js'
+import { encerrarAntes } from './recorrencia.js'
+import { inicioOriginal, ehPrimeiraDaSerie, horarioDaSerie, restanteDaContagem, corpoDaContinuacao } from './serieRecorrente.js'
 
 const CAL_BASE = 'https://www.googleapis.com/calendar/v3'
 const TASKS_BASE = 'https://www.googleapis.com/tasks/v1'
@@ -365,6 +368,105 @@ export async function deleteEvent(event) {
     `${CAL_BASE}/calendars/${encodeURIComponent(event.calendarId || 'primary')}/events/${event.id}`,
     { method: 'DELETE' }
   )
+}
+
+// ---------- Séries (eventos que se repetem) ----------
+//
+// As três escolhas do Google ao editar ou excluir uma ocorrência: só esta,
+// esta e as seguintes, ou todas. A agenda vem desdobrada em ocorrências, então
+// "todas" e "as seguintes" precisam primeiro buscar a série que as gerou.
+
+function urlDoEvento(calendarId, id) {
+  return `${CAL_BASE}/calendars/${encodeURIComponent(calendarId || 'primary')}/events/${encodeURIComponent(id)}`
+}
+
+export async function getEvent(calendarId, id) {
+  const evento = await request(urlDoEvento(calendarId, id))
+  return { ...evento, calendarId: calendarId || 'primary' }
+}
+
+// A série de uma ocorrência (para o editor mostrar a regra de repetição,
+// que a ocorrência em si não carrega).
+export function carregarSerie(instancia) {
+  return getEvent(instancia.calendarId, instancia.recurringEventId)
+}
+
+// Quantas ocorrências a série já teve antes deste ponto — para a
+// continuação de uma série de "N vezes" seguir só com as que faltam.
+async function ocorrenciasAntes(serie, ate) {
+  let total = 0
+  let pageToken = null
+  for (let pagina = 0; pagina < MAX_PAGINAS; pagina += 1) {
+    const params = new URLSearchParams({ timeMax: ate.toISOString(), maxResults: '2500' })
+    if (pageToken) params.set('pageToken', pageToken)
+    const data = await request(`${urlDoEvento(serie.calendarId, serie.id)}/instances?${params}`)
+    total += (data.items || []).filter((i) => i.status !== 'cancelled').length
+    pageToken = data.nextPageToken
+    if (!pageToken) break
+  }
+  return total
+}
+
+async function criarEventoBruto(calendarId, body, conferencia) {
+  const query = conferencia ? '?conferenceDataVersion=1' : ''
+  const criado = await request(`${CAL_BASE}/calendars/${encodeURIComponent(calendarId)}/events${query}`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+  return { ...criado, calendarId }
+}
+
+// `patch` é o mesmo do editor (title, start, end, recurrence...), mais
+// `recorrenciaEscolhida`: se a pessoa mexeu na repetição. `escopo` é 'este',
+// 'seguintes' ou 'todos'.
+export async function salvarEvento(evento, patch, escopo = 'este') {
+  const origem = evento.calendarId || 'primary'
+  const destino = patch.calendarId && patch.calendarId !== origem ? patch.calendarId : null
+
+  if (!evento.recurringEventId || escopo === 'este') {
+    // Uma ocorrência sozinha não muda de agenda no Google (o editor já não
+    // oferece essa combinação); um evento simples, sim.
+    if (destino && !evento.recurringEventId) await moveEvent(evento, destino)
+    const alvo = { ...evento, calendarId: destino && !evento.recurringEventId ? destino : origem }
+    const { recurrence, ...semRegra } = patch
+    return updateEvent(alvo, evento.recurringEventId ? semRegra : patch)
+  }
+
+  const serie = await getEvent(origem, evento.recurringEventId)
+  const allDay = isAllDay(serie)
+  if (escopo === 'seguintes' && ehPrimeiraDaSerie(serie, evento)) escopo = 'todos'
+
+  if (escopo === 'todos') {
+    if (destino) await moveEvent(serie, destino)
+    const { start, end, ...resto } = patch
+    const horario = horarioDaSerie(serie, evento, start, end)
+    return updateEvent({ ...serie, calendarId: destino || origem }, { ...resto, allDay, ...(horario || {}) })
+  }
+
+  // Este e os seguintes: uma série nova a partir daqui, e a antiga termina
+  // logo antes. A nova é criada primeiro: se cortar a antiga falhar, a nova
+  // é desfeita — o pior caso vira "nada mudou", nunca "sumiram as próximas".
+  const corte = inicioOriginal(evento)
+  let recurrence = patch.recurrence !== undefined ? patch.recurrence : serie.recurrence
+  if (!patch.recorrenciaEscolhida && (recurrence || []).some((l) => /COUNT=/i.test(l))) {
+    recurrence = restanteDaContagem(recurrence, await ocorrenciasAntes(serie, corte))
+  }
+  const { body, conferencia } = corpoDaContinuacao(serie, patch, recurrence)
+  const nova = await criarEventoBruto(destino || origem, body, conferencia)
+  try {
+    await updateEvent(serie, { recurrence: encerrarAntes(serie.recurrence, corte, allDay) })
+  } catch (err) {
+    await deleteEvent(nova).catch(() => {})
+    throw err
+  }
+  return nova
+}
+
+export async function excluirEvento(evento, escopo = 'este') {
+  if (!evento.recurringEventId || escopo === 'este') return deleteEvent(evento)
+  const serie = await getEvent(evento.calendarId, evento.recurringEventId)
+  if (escopo === 'todos' || ehPrimeiraDaSerie(serie, evento)) return deleteEvent(serie)
+  return updateEvent(serie, { recurrence: encerrarAntes(serie.recurrence, inicioOriginal(evento), isAllDay(serie)) })
 }
 
 // ---------- Tasks ----------
