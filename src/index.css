@@ -377,6 +377,12 @@ textarea:focus-visible,
    nesse layout largo demais — o que parecia um bug de zoom era, na raiz,
    um overflow horizontal escondido dentro do modal. */
 .field-row .field { flex: 1; min-width: 0; }
+/* No iPhone a data vem escrita por extenso ("30 de out. de 2026") e não cabe
+   em meia largura: quebrava em duas linhas. Quando as duas não cabem lado a
+   lado, uma vai embaixo da outra, como no app do Google Agenda. */
+.field-row--datas { flex-wrap: wrap; }
+.field-row--datas .field { flex: 1 1 200px; }
+.field input[type="date"] { white-space: nowrap; }
 
 /* A tela de esclarecer. Cada decisão possível é um bloco com nome, para a
    escolha ser de olhar e não de lembrar — é o oposto do campo em branco. */

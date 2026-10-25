@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import Modal from './Modal.jsx'
 import ConfirmDialog from './ConfirmDialog.jsx'
 import { toDateInput, toTimeInput, fromInputs } from '../lib/dates.js'
-import { isAllDay, eventStart, eventEnd } from '../lib/events.js'
+import { isAllDay, eventStart, eventEnd, erroDoPeriodo } from '../lib/events.js'
 import { PROJETO_PROP } from '../lib/projetos.js'
 import {
   lerRecorrencia,
@@ -85,8 +85,9 @@ export default function EventEditor({ event, calendars = [], projetos = [], carr
   function montarPatch() {
     const nextStart = allDay ? fromInputs(date) : fromInputs(date, startTime)
     const nextEnd = allDay ? fromInputs(endDate) : fromInputs(date, endTime)
-    if (nextEnd <= nextStart) {
-      setError(allDay ? 'O último dia não pode ser antes do primeiro.' : 'O fim precisa ser depois do início.')
+    const erroDeData = erroDoPeriodo(nextStart, nextEnd, allDay)
+    if (erroDeData) {
+      setError(erroDeData)
       return null
     }
     const { recurrence, escolhida } = regraFinal(nextStart)
@@ -162,7 +163,7 @@ export default function EventEditor({ event, calendars = [], projetos = [], carr
         </label>
 
         {allDay ? (
-          <div className="field-row">
+          <div className="field-row field-row--datas">
             <label className="field">
               <span>Primeiro dia</span>
               <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
