@@ -112,3 +112,12 @@ export function findFreeGaps(events, day, blocks, { minMinutes = 30, occupies = 
 
   return gaps.filter((gap) => gap.end > gap.start && (gap.end - gap.start) / 60000 >= minMinutes)
 }
+
+// Em dia inteiro, início e fim são os dias marcados (o fim é o último dia,
+// inclusivo): um feriado começa e termina no mesmo dia, e isso é válido. A
+// regra antiga usava a de evento com hora ("o fim precisa ser depois") para
+// os dois casos, e todo evento de um dia só era recusado ao salvar.
+export function erroDoPeriodo(inicio, fim, allDay) {
+  if (allDay) return fim < inicio ? 'O último dia não pode ser antes do primeiro.' : null
+  return fim <= inicio ? 'O fim precisa ser depois do início.' : null
+}

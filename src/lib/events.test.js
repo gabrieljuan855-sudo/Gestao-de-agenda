@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { startOfWeek } from './dates.js'
 import { workBlocksFor } from './schedule.js'
-import { eventsOfDay, findFreeGaps, findConflicts, tasksDueOn, eventStart, eventEnd } from './events.js'
+import { eventsOfDay, findFreeGaps, findConflicts, tasksDueOn, eventStart, eventEnd, erroDoPeriodo } from './events.js'
 
 // Segunda-feira de verdade (via startOfWeek), para não depender de saber de
 // cabeça em que dia da semana cai uma data qualquer.
@@ -116,5 +116,24 @@ describe('eventStart / eventEnd em evento de dia inteiro', () => {
     // O end.date do Google é exclusivo: evento de um dia só termina no
     // seguinte, então eventEnd volta um dia.
     expect(eventEnd(event).toDateString()).toBe(new Date(2026, 8, 16).toDateString())
+  })
+})
+
+describe('erroDoPeriodo', () => {
+  const dia = new Date(2026, 9, 30)
+
+  it('dia inteiro de um dia só (feriado) é válido', () => {
+    expect(erroDoPeriodo(dia, new Date(2026, 9, 30), true)).toBeNull()
+    expect(erroDoPeriodo(dia, new Date(2026, 9, 31), true)).toBeNull()
+  })
+
+  it('dia inteiro terminando antes de começar é recusado', () => {
+    expect(erroDoPeriodo(dia, new Date(2026, 9, 29), true)).toMatch(/último dia/)
+  })
+
+  it('com hora, o fim precisa ser depois do início', () => {
+    const inicio = new Date(2026, 9, 30, 14)
+    expect(erroDoPeriodo(inicio, new Date(2026, 9, 30, 14), false)).toMatch(/fim precisa/)
+    expect(erroDoPeriodo(inicio, new Date(2026, 9, 30, 15), false)).toBeNull()
   })
 })
