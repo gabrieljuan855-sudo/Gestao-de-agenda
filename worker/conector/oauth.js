@@ -326,6 +326,12 @@ async function paginasDoConector(request, env) {
 // O /mcp em si: o handler sem estado do Agents SDK, com um servidor novo por
 // requisição. As props (e-mail e refresh token) chegam pelo ctx.props que o
 // provider preenche depois de validar o token.
+// O padrão da biblioteca do MCP só aceita Origin do próprio workers.dev e
+// recusa (403) o resto; se o Claude chamar com Origin de claude.ai, a conexão
+// morre logo depois do login, com um "Algo deu errado" sem explicação. A
+// conferência continua de pé para qualquer outro site.
+const ORIGENS_DO_CLAUDE = ['claude.ai', 'claude.com']
+
 async function servirMcp(request, env, ctx) {
   if (!conectorConfigurado(env) || !emailPermitidoNoConector(env, ctx.props?.email)) {
     return new Response(JSON.stringify({ error: 'Conector desativado ou conta não autorizada.' }), {
@@ -333,7 +339,10 @@ async function servirMcp(request, env, ctx) {
       headers: { 'Content-Type': 'application/json; charset=utf-8' },
     })
   }
-  const handler = createMcpHandler(() => criarServidor(env, ctx.props), { route: ROTA_MCP })
+  const handler = createMcpHandler(() => criarServidor(env, ctx.props), {
+    route: ROTA_MCP,
+    allowedOriginHostnames: [new URL(request.url).hostname, ...ORIGENS_DO_CLAUDE],
+  })
   return handler(request, env, ctx)
 }
 
