@@ -177,10 +177,13 @@ describe('login do conector', () => {
     // O refresh token do Google não vaza para o KV em texto puro.
     expect([...env.OAUTH_KV.dados.values()].some((v) => v.valor.includes('refresh-google'))).toBe(false)
 
-    const mcp = (method, params) =>
+    const mcp = (method, params, origem = 'https://claude.ai') =>
       chamar(env, '/mcp', {
         method: 'POST',
         headers: {
+          // O Claude pode chamar com Origin de claude.ai; o padrão da
+          // biblioteca recusaria com 403.
+          Origin: origem,
           Authorization: `Bearer ${access_token}`,
           'Content-Type': 'application/json',
           Accept: 'application/json, text/event-stream',
@@ -196,6 +199,8 @@ describe('login do conector', () => {
     const captura = await mcp('tools/call', { name: 'capturar', arguments: { texto: 'pagar o IPTU' } })
     expect(captura.result.content[0].text).toMatch(/Guardado na Entrada/)
     expect(g.estado.tarefas[0].title).toBe('pagar o IPTU')
+    // Qualquer outro site continua barrado.
+    expect((await mcp('tools/list', {}, 'https://site-qualquer.com')).error.message).toMatch(/Invalid Origin/)
   })
 
   it('a volta do Google funciona mesmo sem cookie (o navegador embutido do app do Claude no iPhone não o devolve)', async () => {

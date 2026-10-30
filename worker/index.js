@@ -18,6 +18,7 @@
 import { handleAuth } from './auth.js'
 import { handleAvisos, AvisosDoUsuario } from './avisos.js'
 import { ehRotaDoConector, provedorPara } from './conector/oauth.js'
+import { ROTA_DO_DIAGNOSTICO, lerDiagnostico, metodoDoMcp, registrar, resumoDaResposta } from './conector/diagnostico.js'
 
 // O Durable Object dos avisos precisa ser exportado pelo módulo principal.
 export { AvisosDoUsuario }
@@ -1034,8 +1035,9 @@ export const appHandler = {
 // /api/* seguem exatamente o caminho de antes, e um problema no conector (o
 // KV ainda não criado, por exemplo) não tem como derrubar o app.
 export default {
-  fetch(request, env, ctx) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url)
+    if (url.pathname === ROTA_DO_DIAGNOSTICO && env.OAUTH_KV) return lerDiagnostico(request, env.OAUTH_KV)
     if (!ehRotaDoConector(url.pathname)) return appHandler.fetch(request, env, ctx)
     if (!env.OAUTH_KV) {
       return json(
@@ -1043,6 +1045,14 @@ export default {
         503
       )
     }
-    return provedorPara(url.origin).fetch(request, env, ctx)
+    const metodo = url.pathname.startsWith('/mcp') ? await metodoDoMcp(request.clone()) : ''
+    const response = await provedorPara(url.origin).fetch(request, env, ctx)
+    // O registro não pode atrasar nem derrubar a resposta.
+    ctx.waitUntil(
+      resumoDaResposta({ request, response, metodo })
+        .then((resumo) => registrar(env.OAUTH_KV, resumo))
+        .catch((err) => console.warn('diagnóstico do conector', err?.message))
+    )
+    return response
   },
 }
