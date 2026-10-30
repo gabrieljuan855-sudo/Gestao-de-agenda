@@ -93,9 +93,10 @@ function erroLocal(titulo, mensagem, status = 400) {
 //
 // Entre o "Permitir" e a volta do Google, o pedido aprovado precisa ficar
 // guardado. A biblioteca oferece beginUpstream/finishUpstream para isso, que
-// amarram a volta a um cookie de uso único — e no navegador embutido do app do
-// Claude no iPhone a volta caía em "This authorization was not started in this
-// browser", enquanto no Chromium e no curl o mesmo fluxo passava.
+// amarram a volta a um cookie de uso único — e no iPhone a volta caía em "This
+// authorization was not started in this browser", enquanto no Chromium e no
+// curl o mesmo fluxo passava (a causa era o service worker do app, ver
+// paginasDoConector; o state no KV ficou por ser mais simples e robusto).
 //
 // Aqui o pedido aprovado fica no KV, achado pelo `state` que vai ao Google:
 // 32 bytes aleatórios, que valem 10 minutos, guardados só pelo hash. O que o
@@ -120,11 +121,10 @@ export async function guardarIdaAoGoogle(kv, pedido, verifier) {
   return state
 }
 
-// A volta do Google chega duas vezes no iPhone: o navegador embutido do Claude
-// repete o pedido (toque duplo no "Continuar" do Google, recarga ao voltar
-// para o app). Com o `state` apagado no primeiro uso, a repetição — que é a
-// que fica na tela — dizia "expirou ou já foi usada", mesmo quando a primeira
-// tinha dado certo. Por isso o desfecho de cada volta fica guardado pelo mesmo
+// A volta do Google pode chegar duas vezes (toque duplo no "Continuar" do
+// Google, recarga da página). Com o `state` apagado no primeiro uso, a
+// repetição — que é a que fica na tela — dizia "expirou ou já foi usada",
+// mesmo quando a primeira tinha dado certo. Por isso o desfecho de cada volta fica guardado pelo mesmo
 // tempo do `state`, e a repetição recebe exatamente a mesma resposta. Quem
 // repete é o próprio navegador da pessoa: o `state` só existe na barra de
 // endereço dela, e o código entregue ao Claude continua de uso único lá.
@@ -305,13 +305,14 @@ async function paginasDoConector(request, env) {
   }
   const { pathname } = new URL(request.url)
   // Só navegação de verdade gasta o que é de uso único (o handle da tela, o
-  // state da volta). O navegador embutido do app do Claude no iPhone dispara,
-  // junto de cada navegação, um pedido em segundo plano para o mesmo
-  // endereço — o registro do conector mostrou POSTs repetidos na tela e na
-  // volta do Google, e rajadas de pedidos a cada 170 ms. Quando esse pedido
-  // gastava o handle ou levava o código ao Claude antes da navegação, a
-  // navegação real caía em erro ("Algo deu errado", ou a tela que não ia ao
-  // Google). Navegador sem Sec-Fetch-Mode segue normalmente.
+  // state da volta). O service worker do app (public/sw.js), no mesmo
+  // domínio, atendia as navegações do login com a página do app guardada e
+  // buscava o endereço de verdade por trás — o registro do conector mostrou
+  // esses pedidos vindo de /sw.js. A busca por trás gastava o handle ou
+  // concluía a volta sem que o navegador saísse do lugar, e a pessoa via o
+  // app, um erro ou um "Algo deu errado" no Claude. O sw.js já não toca nessas
+  // rotas; isto protege enquanto um iPhone ainda roda a versão antiga dele.
+  // Navegador sem Sec-Fetch-Mode segue normalmente.
   const modo = request.headers.get('sec-fetch-mode')
   if (modo && modo !== 'navigate') return new Response(null, { status: 204, headers: { 'Cache-Control': 'no-store' } })
   try {
