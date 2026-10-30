@@ -34,7 +34,8 @@ export const ROTA_MCP = '/mcp'
 // Fora de /mcp de propósito: tudo abaixo de /mcp é rota protegida por token
 // para o provider, e a volta do Google chega sem token nenhum.
 export const ROTA_CALLBACK = '/conector/callback'
-const ROTAS_DE_PAGINA = new Set(['/authorize', ROTA_CALLBACK])
+export const ROTA_DECISAO = '/conector/decidir'
+const ROTAS_DE_PAGINA = new Set(['/authorize', ROTA_DECISAO, ROTA_CALLBACK])
 const ROTAS_DO_PROVEDOR = new Set(['/token', '/register'])
 
 // As rotas que são do conector. Todo o resto (o site, /api/*) não passa pelo
@@ -76,7 +77,7 @@ function pagina(titulo, corpo, status = 200, headers = new Headers()) {
   .suave { color: var(--suave); font-size: 14px; }
   .aviso { padding: 10px 12px; border-radius: 12px; border: 1px solid var(--borda); }
   .acoes { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
-  button { font: inherit; min-height: 40px; padding: 0 20px; border-radius: 999px; border: none; cursor: pointer; }
+  .acoes a { font: inherit; display: inline-flex; align-items: center; min-height: 40px; padding: 0 20px; border-radius: 999px; text-decoration: none; }
   .primario { background: var(--primary); color: var(--on-primary); }
   .texto { background: transparent; color: var(--primary); }
 </style></head>
@@ -174,7 +175,9 @@ async function esperarDesfecho(kv, hash) {
 
 function responderDesfecho(desfecho) {
   if (desfecho.erro) return erroLocal(desfecho.erro.titulo, desfecho.erro.mensagem, desfecho.erro.status)
-  return new Response(null, { status: 302, headers: { Location: desfecho.location, 'Cache-Control': 'no-store' } })
+  // 303, e não 302: mesmo que a volta chegue como POST, o navegador vai ao
+  // Claude com GET, o único método que o endereço de volta dele aceita.
+  return new Response(null, { status: 303, headers: { Location: desfecho.location, 'Cache-Control': 'no-store' } })
 }
 
 // GET /authorize: valida o pedido do cliente e pergunta se ele pode entrar.
@@ -200,24 +203,39 @@ async function autorizar(request, env) {
 <p class="suave">${origem} O acesso será enviado para <strong>${escapar(quem.redirectHost)}</strong>.</p>
 ${local}
 <p class="suave">Em seguida o Google vai pedir para você entrar com a conta autorizada neste app.</p>
-<form method="post">
-  <input type="hidden" name="handle" value="${escapar(consentimento.handle)}">
-  <div class="acoes">
-    <button class="texto" name="decisao" value="recusar">Recusar</button>
-    <button class="primario" name="decisao" value="permitir">Permitir</button>
-  </div>
-</form>`,
+<div class="acoes">
+  <a class="texto" href="${escapar(`${ROTA_DECISAO}?${new URLSearchParams({ handle: consentimento.handle, decisao: 'recusar' })}`)}">Recusar</a>
+  <a class="primario" href="${escapar(`${ROTA_DECISAO}?${new URLSearchParams({ handle: consentimento.handle, decisao: 'permitir' })}`)}">Permitir</a>
+</div>`,
       200,
       consentimento.headers
     )
   }
 
-  if (request.method !== 'POST') return erroLocal('Método não aceito', 'Use o botão da página de conexão.', 405)
-  const form = await request.formData()
-  const handle = String(form.get('handle') || '')
-  if (form.get('decisao') !== 'permitir') {
+  // Um POST aqui é o envio repetido pelo navegador embutido do Claude (ver
+  // decidir): volta para a mesma página, que começa uma tentativa limpa.
+  return new Response(null, { status: 303, headers: { Location: request.url, 'Cache-Control': 'no-store' } })
+}
+
+// A decisão da tela de consentimento, por link e não por formulário. O
+// navegador embutido do app do Claude no iPhone repete sozinho o último
+// envio de formulário contra os endereços seguintes: o registro do conector
+// mostrou um POST na volta do Google (com Origin deste site) logo antes do
+// GET verdadeiro, e o endereço de volta do Claude responde 405 a POST — a
+// conexão morria ali, sem o Claude nem pedir o token. Sem formulário no
+// caminho, não há o que repetir.
+//
+// O link não abre brecha: o `handle` é aleatório, de uso único, e só vale com
+// o cookie gravado quando esta mesma tela foi aberta; outro site não
+// consegue lê-lo, porque a tela não pode ser embutida (frame-ancestors).
+async function decidir(request, env) {
+  const oauth = env.OAUTH_PROVIDER
+  const url = new URL(request.url)
+  const handle = url.searchParams.get('handle') || ''
+  if (url.searchParams.get('decisao') !== 'permitir') {
     const negado = await oauth.denyConsent(request, handle)
-    return new Response(null, { status: 302, headers: negado.headers })
+    negado.headers.set('Location', negado.redirectTo)
+    return new Response(null, { status: 303, headers: negado.headers })
   }
   const aprovado = await oauth.approveConsent(request, handle)
   const verifier = randomText(48)
@@ -225,7 +243,7 @@ ${local}
   const headers = aprovado.headers
   headers.set('Cache-Control', 'no-store')
   headers.set('Location', await urlDoGoogle(env, { redirectUri: new URL(ROTA_CALLBACK, request.url).toString(), state, verifier }))
-  return new Response(null, { status: 302, headers })
+  return new Response(null, { status: 303, headers })
 }
 
 // A volta do Google: troca o código, confere a conta e conclui a autorização.
@@ -304,6 +322,7 @@ async function paginasDoConector(request, env) {
   const { pathname } = new URL(request.url)
   try {
     if (pathname === '/authorize') return await autorizar(request, env)
+    if (pathname === ROTA_DECISAO) return await decidir(request, env)
     if (pathname === ROTA_CALLBACK) return await voltaDoGoogle(request, env)
   } catch (err) {
     if (err instanceof AuthorizationError && err.redirectTo) return Response.redirect(err.redirectTo, 302)

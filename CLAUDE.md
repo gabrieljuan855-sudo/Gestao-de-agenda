@@ -56,7 +56,7 @@ uma pilha de branches que só atrapalha.
   (`createMcpHandler` do Agents SDK, sem estado) atrás do `OAuthProvider` da
   Cloudflare, com login pelo Google (mesmo client ID e escopos do app) e só
   para `ALLOWED_EMAIL`. As rotas dele (`/mcp`, `/authorize`, `/token`,
-  `/register`, `/conector/callback`, `/.well-known/oauth-*`) são as únicas que
+  `/register`, `/conector/decidir`, `/conector/callback`, `/.well-known/oauth-*`) são as únicas que
   passam pelo provider; o resto do Worker segue como antes.
   `ferramentas.js` faz o trabalho, `servidor.js` descreve as ferramentas para
   o modelo, `oauth.js` cuida do login e `google.js`, do token do Google.

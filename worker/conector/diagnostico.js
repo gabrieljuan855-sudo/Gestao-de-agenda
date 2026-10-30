@@ -55,6 +55,7 @@ export async function resumoDaResposta({ request, response, metodo = '' }) {
     ...(metodo ? { mcp: metodo } : {}),
     ...(request.headers.get('origin') ? { origem: request.headers.get('origin') } : {}),
     ...(request.headers.get('authorization') ? { comToken: true } : {}),
+    ...(request.headers.get('sec-fetch-site') ? { site: request.headers.get('sec-fetch-site') } : {}),
     agente: (request.headers.get('user-agent') || '').slice(0, 120),
   }
   const location = response.headers.get('location')
