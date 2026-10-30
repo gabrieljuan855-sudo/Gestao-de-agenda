@@ -31,6 +31,7 @@ import {
   trechoDaAnotacao,
   PROJETO_PROP,
   SITUACOES,
+  fichaParaEtiqueta,
 } from '../../src/lib/projetos.js'
 import { findFreeGaps, occursOnDay, isAllDay, eventStart, eventEnd } from '../../src/lib/events.js'
 import { workBlocksFor, horarioPadrao } from '../../src/lib/schedule.js'
@@ -323,6 +324,7 @@ function linhaDoProjeto(p) {
   if (p.proximaAcao) partes.push(`próxima ação: ${p.proximaAcao.title}`)
   if (p.semProximaAcao) partes.push('SEM PRÓXIMA AÇÃO')
   if (p.implicito) partes.push('sem ficha (só a etiqueta em tarefas/notas)')
+  if (p.concluidoComPendencias) partes.push(`ATENÇÃO: concluído, mas com ${p.pendentes} pendente${p.pendentes === 1 ? '' : 's'}`)
   return `- ${p.nome} [projeto: ${p.id}] · ${partes.join(' · ')}`
 }
 
@@ -371,6 +373,9 @@ export async function verProjeto(api, agora, { projeto }) {
     `Resultado esperado: ${p.resultado?.trim() || '(ainda não definido)'}`,
     p.implicito ? 'Ainda sem ficha: existe só como etiqueta em tarefas/anotações (atualizar_projeto cria a ficha).' : null,
     p.semProximaAcao ? 'ATENÇÃO: projeto ativo sem nenhuma próxima ação.' : null,
+    p.concluidoComPendencias
+      ? `ATENÇÃO: marcado como concluído, mas com ${p.pendentes} tarefa(s) pendente(s). Pergunte se é para reabrir (atualizar_projeto com situacao "ativo") ou concluir as tarefas.`
+      : null,
     p.marcos?.length ? `Marcos:\n${p.marcos.map((m) => `- ${m.feito ? '[feito] ' : ''}${m.titulo}${m.data ? ` (${dataComDia(m.data)})` : ''}`).join('\n')}` : null,
     p.arquivos?.length ? `Arquivos vinculados:\n${p.arquivos.map((a) => `- ${a.nome}: ${a.url}`).join('\n')}` : null,
   ]
@@ -449,6 +454,18 @@ export async function atualizarProjeto(api, agora, { projeto, nome, resultado, t
       lista: atual ? atuais.map((p) => (p.id === ficha.id ? ficha : p)) : [ficha, ...atuais],
       resultado: `${atual ? 'Ficha atualizada' : 'Ficha criada'}: ${fichaEmTexto(ficha)}.`,
     }
+  })
+}
+
+// Toda etiqueta usada precisa de ficha, também quando é o Claude quem
+// etiqueta: uma tarefa com projeto novo cria a ficha mínima na hora, como o
+// app faz ao abrir (ver garantirFichas). Ficha que já existe não é tocada.
+async function garantirFicha(api, agora, id) {
+  if (!id) return ''
+  return alterarProjetos(api, (atuais) => {
+    if (atuais.some((p) => p.id === id)) return { lista: atuais, resultado: '' }
+    const ficha = fichaParaEtiqueta(id, agora)
+    return { lista: [ficha, ...atuais], resultado: ` Projeto novo "${ficha.nome}" [projeto: ${ficha.id}] criado com ficha mínima (atualizar_projeto completa).` }
   })
 }
 
@@ -787,7 +804,8 @@ export async function criarTarefa(api, agora, { titulo, lista = 'proximas', cont
     duracao: duracao_min || null,
     tasklistId: destino.id,
   })
-  return `Tarefa criada em ${LISTAS[lista]}: "${titulo.trim()}" [id: ${criada?.id}].`
+  const fichaNova = projeto ? await garantirFicha(api, agora, etiqueta(projeto)) : ''
+  return `Tarefa criada em ${LISTAS[lista]}: "${titulo.trim()}" [id: ${criada?.id}].${fichaNova}`
 }
 
 export async function atualizarTarefa(api, agora, args) {
@@ -822,16 +840,17 @@ export async function atualizarTarefa(api, agora, args) {
   }
 
   if (!vaiPara && Object.keys(patch).length === 0) return 'Nada para mudar: informe pelo menos um campo.'
+  const fichaNova = patch.projeto ? await garantirFicha(api, agora, patch.projeto) : ''
   if (vaiPara) {
     const destino = await listaDestino(api, listas, vaiPara)
     // moverTarefa é o mesmo do app: usa o endpoint de mover quando a conta
     // aceita e, se não, cria no destino antes de apagar na origem (o id muda).
     const movida = await api.tarefas.moverTarefa(tarefa, destino.id, patch)
     const novoId = movida?.id && movida.id !== tarefa.id ? ` O id mudou para ${movida.id}.` : ''
-    return `Tarefa movida de ${rotuloDaLista(tarefa, listas)} para ${LISTAS[vaiPara]}: "${patch.title || tarefa.title}".${novoId}`
+    return `Tarefa movida de ${rotuloDaLista(tarefa, listas)} para ${LISTAS[vaiPara]}: "${patch.title || tarefa.title}".${novoId}${fichaNova}`
   }
   await api.tarefas.updateTask(tarefa, patch)
-  return `Tarefa atualizada: "${patch.title || tarefa.title}" [id: ${tarefa.id}].`
+  return `Tarefa atualizada: "${patch.title || tarefa.title}" [id: ${tarefa.id}].${fichaNova}`
 }
 
 export async function concluirTarefa(api, agora, { id }) {

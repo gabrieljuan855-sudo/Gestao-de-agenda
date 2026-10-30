@@ -282,6 +282,20 @@ export function novoProjeto(nome, agora = new Date()) {
   return { id, nome: nome.trim(), resultado: '', situacao: 'ativo', tipo: 'projeto', prazo: null, createdAt: iso, updatedAt: iso, arquivos: [] }
 }
 
+// A ficha de uma etiqueta que ainda não tem ficha: "pops" vira "Pops",
+// "caso-maria" vira "Caso maria". Toda etiqueta usada precisa de ficha —
+// sem ela o projeto não tem situação, resultado nem pasta, e foi assim que
+// um "casos" passou meses sem ninguém saber em que pé estava.
+export function fichaParaEtiqueta(id, agora = new Date()) {
+  if (typeof id !== 'string' || !id) return null
+  const nome = id.replace(/-+/g, ' ').trim()
+  const iso = agora.toISOString()
+  return normalizarProjeto(
+    { id, nome: nome.charAt(0).toUpperCase() + nome.slice(1), situacao: 'ativo', tipo: 'projeto', createdAt: iso, updatedAt: iso },
+    agora
+  )
+}
+
 function maisRecente(...datas) {
   let melhor = null
   for (const d of datas) {
@@ -321,6 +335,10 @@ export function listarProjetos({ registros = [], tasks = [], notes = [], idProxi
         // precisam de próxima ação — é justamente o que os distingue.
         // Rotina também não: ela não anda para uma chegada, só acumula pauta.
         semProximaAcao: p.situacao === 'ativo' && (p.tipo || 'projeto') === 'projeto' && !proximaAcao,
+        // "Concluído" com coisa por fazer é uma contradição: ou o projeto não
+        // terminou, ou as tarefas ficaram esquecidas. O app só avisa — quem
+        // decide qual dos dois é a pessoa.
+        concluidoComPendencias: p.situacao === 'concluido' && pendentes.length > 0,
         ultimaAtividade: maisRecente(
           p.updatedAt,
           ...tasks.filter((t) => t.projeto === p.id).map((t) => t.updated),
@@ -418,6 +436,11 @@ export function panoramaDosProjetos(lista, tasks = [], now = new Date()) {
     semResultado: projetos.filter((p) => !p.resultado?.trim()),
     esquecidos: projetos.filter((p) => !p.semProximaAcao && p.diasSemAtividade !== null && p.diasSemAtividade >= DIAS_ESQUECIDO),
     acaoVaga: projetos.filter((p) => pareceIdeia(p.proximaAcao?.title)),
+    // Estes dois olham a lista inteira, e não só os ativos: são justamente
+    // os projetos que saíram da vista por estarem marcados como concluídos
+    // ou por nunca terem ganhado ficha.
+    concluidosComPendencias: (lista || []).filter((p) => p.concluidoComPendencias),
+    semFicha: (lista || []).filter((p) => p.implicito),
   }
 }
 

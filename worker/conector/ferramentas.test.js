@@ -53,6 +53,25 @@ describe('bloco de metadados nas tarefas', () => {
     expect(t.due).toBe('2026-11-03T00:00:00.000Z')
   })
 
+  it('tarefa com etiqueta nova cria a ficha do projeto, sem mexer na que já existe', async () => {
+    const r = await f.criarTarefa(api, agora, { titulo: 'Revisar POP', projeto: 'POPs novos' })
+    expect(r).toContain('Projeto novo')
+    let fichas = await api.drive.loadProjetos()
+    expect(fichas.map((p) => p.id)).toEqual(['pops-novos'])
+    await f.atualizarProjeto(api, agora, { projeto: 'pops-novos', resultado: 'POPs revisados' })
+    const r2 = await f.criarTarefa(api, agora, { titulo: 'Outra', projeto: 'pops-novos' })
+    expect(r2).not.toContain('Projeto novo')
+    fichas = await api.drive.loadProjetos()
+    expect(fichas).toHaveLength(1)
+    expect(fichas[0].resultado).toBe('POPs revisados')
+  })
+
+  it('listar_projetos avisa projeto concluído com pendências', async () => {
+    await f.criarTarefa(api, agora, { titulo: 'Sobrou', projeto: 'pops' })
+    await f.atualizarProjeto(api, agora, { projeto: 'pops', situacao: 'concluido' })
+    expect(await f.listarProjetosTexto(api, agora, { situacao: 'todos' })).toMatch(/concluído, mas com 1 pendente/)
+  })
+
   it('aguardando sem "de quem" é recusado', async () => {
     await expect(f.criarTarefa(api, agora, { titulo: 'x', lista: 'aguardando' })).rejects.toThrow(/aguardando_quem/)
   })

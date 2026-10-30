@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import Banner from './Banner.jsx'
 import Modal from './Modal.jsx'
+import ConfirmDialog from './ConfirmDialog.jsx'
 import AssistenteDoProjeto from './AssistenteDoProjeto.jsx'
 import { PRIORITY_LABEL } from '../lib/priority.js'
 import { isOverdueTask } from '../lib/tasks.js'
@@ -66,6 +67,8 @@ function LinhaDoProjeto({ projeto, onAbrir, selecionado }) {
       <span className="projeto-linha-topo">
         <span className="projeto-linha-nome">{projeto.nome}</span>
         {projeto.semProximaAcao && <span className="pill projeto-pill-parado">sem próxima ação</span>}
+        {projeto.concluidoComPendencias && <span className="pill projeto-pill-parado">concluído com pendências</span>}
+        {projeto.implicito && <span className="pill projeto-pill-situacao">sem ficha</span>}
         {projeto.atrasadas > 0 && (
           <span className="pill projeto-pill-atraso">
             {projeto.atrasadas} {projeto.atrasadas === 1 ? 'atrasada' : 'atrasadas'}
@@ -135,7 +138,7 @@ function ListaDeProjetos({ lista, onAbrir, onCriar, abertoId }) {
       {/* Concluído não some — é o histórico dos casos —, mas também não
           disputa atenção com o que ainda está andando. */}
       {concluidos.length > 0 && (
-        <details className="projetos-concluidos">
+        <details className="projetos-concluidos" open={concluidos.some((p) => p.concluidoComPendencias) || undefined}>
           <summary className="projetos-secao">Concluídos ({concluidos.length})</summary>
           <div className="projetos-lista">
             {concluidos.map((p) => (
@@ -153,7 +156,7 @@ function ListaDeProjetos({ lista, onAbrir, onCriar, abertoId }) {
 // Nome, tipo, situação, prazo, IA: decide-se uma vez e quase nunca se mexe.
 // Por isso moram num diálogo atrás do botão "Configurar", e não na página —
 // lá eles disputavam a atenção com o que faz o projeto andar.
-function ConfigurarProjeto({ projeto, onSalvar, onFechar }) {
+function ConfigurarProjeto({ projeto, pendentes = 0, onSalvar, onFechar }) {
   const [nome, setNome] = useState(projeto.nome)
   const [resultado, setResultado] = useState(projeto.resultado || '')
   const [situacao, setSituacao] = useState(projeto.situacao)
@@ -192,6 +195,12 @@ function ConfigurarProjeto({ projeto, onSalvar, onFechar }) {
             <input type="date" value={prazo} onChange={(e) => setPrazo(e.target.value)} />
           </label>
         </div>
+        {situacao === 'concluido' && pendentes > 0 && (
+          <div className="form-error" role="status">
+            Ainda há {pendentes} {pendentes === 1 ? 'tarefa pendente' : 'tarefas pendentes'} neste projeto. Conclua ou mova
+            antes, ou elas ficam penduradas num projeto encerrado.
+          </div>
+        )}
         <label className="field">
           <span>Tipo</span>
           <select value={tipo} onChange={(e) => setTipo(e.target.value)}>
@@ -747,6 +756,7 @@ function PaginaDoProjeto({
     .sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0))
   const [versaoEventos, setVersaoEventos] = useState(0)
   const [configurando, setConfigurando] = useState(false)
+  const [concluindoPendencias, setConcluindoPendencias] = useState(false)
   const [historicoTodo, setHistoricoTodo] = useState(false)
   const eventos = useCompromissos(projeto.id, buscarEventos, versaoEventos)
   const [concluidasBuscadas, setConcluidasBuscadas] = useConcluidas(buscarConcluidas)
@@ -775,6 +785,13 @@ function PaginaDoProjeto({
     setConcluidasBuscadas((l) => [{ ...task, status: 'completed', completed: new Date().toISOString() }, ...l])
   }
 
+  // Uma de cada vez, na ordem: em paralelo, o Google Tasks recusa parte das
+  // gravações por excesso de pedidos e algumas ficariam para trás.
+  async function concluirPendencias() {
+    setConcluindoPendencias(false)
+    for (const { task } of aFazer) await concluir(task)
+  }
+
   return (
     <div className="projetos projeto-pagina">
       <header className="projeto-topo">
@@ -796,6 +813,23 @@ function PaginaDoProjeto({
           Configurar
         </button>
       </header>
+
+      {/* O que está incoerente vem antes de tudo: é o que faz a lista de
+          projetos mentir sobre o que está em andamento. */}
+      {projeto.implicito && (
+        <Banner tone="info" actionLabel="Criar a ficha" onAction={() => onSalvar({ id: projeto.id, nome: projeto.nome })}>
+          Este projeto existe só como etiqueta nas tarefas. A ficha dá a ele situação, resultado esperado e pasta de arquivos.
+        </Banner>
+      )}
+      {projeto.concluidoComPendencias && (
+        <Banner tone="warning" actionLabel="Reabrir o projeto" onAction={() => onSalvar({ id: projeto.id, situacao: 'ativo' })}>
+          Marcado como concluído, mas ainda tem {aFazer.length} {aFazer.length === 1 ? 'tarefa pendente' : 'tarefas pendentes'}.
+          Ou o projeto não terminou, ou elas ficaram esquecidas.{' '}
+          <button type="button" className="link-btn" onClick={() => setConcluindoPendencias(true)}>
+            Concluir as pendências
+          </button>
+        </Banner>
+      )}
 
       {projeto.proximaAcao ? (
         <div className="projeto-destaque">
@@ -946,7 +980,18 @@ function PaginaDoProjeto({
         </div>
       </div>
 
-      {configurando && <ConfigurarProjeto projeto={projeto} onSalvar={onSalvar} onFechar={() => setConfigurando(false)} />}
+      {configurando && (
+        <ConfigurarProjeto projeto={projeto} pendentes={aFazer.length} onSalvar={onSalvar} onFechar={() => setConfigurando(false)} />
+      )}
+      {concluindoPendencias && (
+        <ConfirmDialog
+          title="Concluir as pendências"
+          message={`Marcar como feitas as ${aFazer.length} tarefas pendentes de "${projeto.nome}"? Dá para reabrir cada uma depois, nas concluídas.`}
+          confirmLabel="Concluir todas"
+          onConfirm={concluirPendencias}
+          onCancel={() => setConcluindoPendencias(false)}
+        />
+      )}
     </div>
   )
 }
@@ -962,6 +1007,15 @@ function PainelGeral({ lista, tasks, onAbrir, onEditarTarefa }) {
     { id: 'vaga', titulo: 'Próxima ação vaga', dica: 'A ação escrita é uma ideia inteira; reescreva como primeiro passo.', itens: p.acaoVaga },
     { id: 'esquecidos', titulo: 'Esquecidos', dica: 'Sem nenhum movimento há duas semanas ou mais.', itens: p.esquecidos, extra: (x) => `há ${x.diasSemAtividade} dias` },
     { id: 'semResultado', titulo: 'Sem resultado definido', dica: 'Falta dizer como se sabe que terminou.', itens: p.semResultado },
+    {
+      id: 'concluidosPendentes',
+      titulo: 'Concluídos com tarefas pendentes',
+      dica: 'Reabra o projeto ou conclua as tarefas que sobraram.',
+      itens: p.concluidosComPendencias,
+      tom: 'aviso',
+      extra: (x) => `${x.pendentes} pendente(s)`,
+    },
+    { id: 'semFicha', titulo: 'Sem ficha', dica: 'Etiquetas usadas em tarefas que ainda não viraram projeto.', itens: p.semFicha },
   ]
   const ativos = lista.filter((x) => x.situacao === 'ativo')
   const tudoEmDia = blocos.every((b) => b.itens.length === 0) && p.prazos.length === 0

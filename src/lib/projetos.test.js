@@ -12,6 +12,7 @@ import {
   nomeSugerido,
   vincularArquivo,
   panoramaDosProjetos,
+  fichaParaEtiqueta,
   projetosForaDaCobranca,
   pareceIdeia,
   normalizarMarcos,
@@ -349,5 +350,36 @@ describe('arquivos no Drive do projeto', () => {
     expect(tamanhoLegivel(512)).toBe('512 B')
     expect(tamanhoLegivel(2516582)).toBe('2,4 MB')
     expect(tamanhoLegivel(undefined)).toBe('')
+  })
+})
+
+describe('coerência da situação', () => {
+  const agora = new Date('2026-10-30T12:00:00')
+  const tasks = [
+    { id: 't1', title: 'Revisar POP', projeto: 'pops', status: 'needsAction', tasklistId: 'prox' },
+    { id: 't2', title: 'Feita', projeto: 'feito', status: 'completed', tasklistId: 'prox' },
+    { id: 't3', title: 'Ligar', projeto: 'casos', status: 'needsAction', tasklistId: 'prox' },
+  ]
+  const registros = [
+    { id: 'pops', nome: 'POPs', situacao: 'concluido' },
+    { id: 'feito', nome: 'Feito', situacao: 'concluido' },
+  ]
+
+  it('aponta projeto concluído que ainda tem tarefa pendente', () => {
+    const lista = listarProjetos({ registros, tasks, notes: [], idProximas: 'prox' }, agora)
+    expect(lista.find((p) => p.id === 'pops').concluidoComPendencias).toBe(true)
+    expect(lista.find((p) => p.id === 'feito').concluidoComPendencias).toBe(false)
+  })
+
+  it('o panorama mostra concluídos com pendências e etiquetas sem ficha', () => {
+    const lista = listarProjetos({ registros, tasks, notes: [], idProximas: 'prox' }, agora)
+    const p = panoramaDosProjetos(lista, tasks, agora)
+    expect(p.concluidosComPendencias.map((x) => x.id)).toEqual(['pops'])
+    expect(p.semFicha.map((x) => x.id)).toEqual(['casos'])
+  })
+
+  it('dá uma ficha legível a uma etiqueta solta', () => {
+    expect(fichaParaEtiqueta('caso-maria', agora)).toMatchObject({ id: 'caso-maria', nome: 'Caso maria', situacao: 'ativo', tipo: 'projeto' })
+    expect(fichaParaEtiqueta('', agora)).toBeNull()
   })
 })

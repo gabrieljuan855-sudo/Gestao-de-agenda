@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { loadProjetos, saveProjetos } from './driveNotes.js'
 import { permissaoDoDriveConcedida } from './googleAuth.js'
 import { mesclarAnotacoes, precisaSubir } from './notesMerge.js'
-import { normalizarProjeto, normalizarProjetos } from './projetos.js'
+import { normalizarProjeto, normalizarProjetos, fichaParaEtiqueta } from './projetos.js'
 import { descreverFalha, MSG_SEM_PERMISSAO } from './useNotes.js'
 
 // As fichas dos projetos seguem o mesmo caminho das anotações — cache neste
@@ -33,6 +33,10 @@ export default function useProjetos({ signedIn }) {
   const [projetos, setProjetos] = useState(readCache)
   const [error, setError] = useState(null)
   const [syncStatus, setSyncStatus] = useState('ocioso')
+  // Já leu o projetos.json do Drive nesta sessão. Antes disso, o que está na
+  // tela é só o cache deste aparelho — e "esta etiqueta não tem ficha" pode
+  // ser só ficha que outro aparelho criou e ainda não chegou aqui.
+  const [carregado, setCarregado] = useState(false)
   const projetosRef = useRef(projetos)
   const loadedOnce = useRef(false)
   const saveTimer = useRef(null)
@@ -51,6 +55,7 @@ export default function useProjetos({ signedIn }) {
     loadProjetos()
       .then((doDrive) => {
         setError(null)
+        setCarregado(true)
         if (doDrive === null) {
           // Ainda não existe arquivo de projetos no Drive: o que há aqui é a
           // única cópia, então sobe (nunca é trocado por lista vazia).
@@ -125,9 +130,19 @@ export default function useProjetos({ signedIn }) {
     return ficha
   }
 
+  // Ficha para cada etiqueta que ainda não tem (ver fichaParaEtiqueta), numa
+  // gravação só. Nunca mexe numa ficha que já existe.
+  function garantirFichas(ids) {
+    const existentes = new Set(projetosRef.current.map((p) => p.id))
+    const novas = [...new Set(ids)].filter((id) => !existentes.has(id)).map((id) => fichaParaEtiqueta(id)).filter(Boolean)
+    if (novas.length) persist([...novas, ...projetosRef.current])
+  }
+
   return {
     projetos,
+    carregado,
     salvarProjeto,
+    garantirFichas,
     syncStatus,
     error,
     dismissError: () => setError(null),

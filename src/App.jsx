@@ -805,6 +805,20 @@ export default function App() {
     await reload()
   }
 
+  // Toda etiqueta usada vira projeto com ficha (situação, resultado, pasta).
+  // Só depois da leitura do Drive: antes, a ficha pode existir e só ainda
+  // não ter chegado a este aparelho. Fica antes dos retornos de login abaixo
+  // porque é um efeito (hooks não podem depender de condição).
+  const etiquetasSemFicha = (() => {
+    const comFicha = new Set(projetosState.projetos.map((p) => p.id))
+    const usadas = [...tasks.map((t) => t.projeto), ...notesState.notes.map((n) => n.projeto)].filter(Boolean)
+    return [...new Set(usadas)].filter((id) => !comFicha.has(id)).sort().join(',')
+  })()
+  useEffect(() => {
+    if (projetosState.carregado && etiquetasSemFicha) projetosState.garantirFichas(etiquetasSemFicha.split(','))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projetosState.carregado, etiquetasSemFicha])
+
   // Quem sabe se há login possível é o próprio módulo de autenticação: ele
   // pergunta ao Worker antes de olhar para a variável do build.
   if (authStatus === 'unconfigured') {
