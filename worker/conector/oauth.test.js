@@ -103,14 +103,13 @@ async function conectar(env, { comCookieNaVolta = true, semVolta = false } = {})
   const pagina = await chamar(env, `/authorize?${params}`)
   expect(pagina.status).toBe(200)
   const html = await pagina.text()
-  // Permitir é um formulário GET (sem corpo para o navegador repetir),
-  // amarrado ao cookie da tela.
-  expect(html).toMatch(/<form method="get" action="\/conector\/decidir">/)
   const handle = html.match(/name="handle" value="([^"]+)"/)[1]
-  const permitir = await chamar(env, `/conector/decidir?${new URLSearchParams({ handle, decisao: 'permitir' })}`, {
-    headers: { Cookie: cookiesDe(pagina) },
+  const permitir = await chamar(env, '/authorize', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: cookiesDe(pagina), 'Sec-Fetch-Mode': 'navigate' },
+    body: new URLSearchParams({ handle, decisao: 'permitir' }),
   })
-  expect(permitir.status).toBe(303)
+  expect(permitir.status).toBe(302)
   const google = new URL(permitir.headers.get('Location'))
   if (semVolta) return { html, google, client_id, verifier }
   const volta = await chamar(env, `/conector/callback?code=codigo-do-google&state=${encodeURIComponent(google.searchParams.get('state'))}`, {
@@ -240,25 +239,42 @@ describe('login do conector', () => {
     expect(await repetida.text()).toContain('outra@exemplo.com')
   })
 
-  it('o envio de formulário que o navegador do iPhone repete não faz estrago', async () => {
+  it('o pedido em segundo plano do navegador do iPhone não gasta o Permitir', async () => {
     const env = ambiente()
-    const { html } = await conectar(env, { semVolta: true })
-    expect(html).not.toContain('method="post"')
-    // POST no /authorize volta para a mesma página, que começa limpa.
-    const repetido = await chamar(env, '/authorize?client_id=x&state=y', { method: 'POST', body: 'handle=velho&decisao=permitir' })
-    expect(repetido.status).toBe(303)
-    expect(repetido.headers.get('Location')).toBe(`${ORIGEM}/authorize?client_id=x&state=y`)
+    const reg = await chamar(env, '/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ client_name: 'Claude', redirect_uris: [CALLBACK_DO_CLAUDE], token_endpoint_auth_method: 'none' }),
+    })
+    const { client_id } = await reg.json()
+    const { challenge } = await pkce()
+    const params = new URLSearchParams({ response_type: 'code', client_id, redirect_uri: CALLBACK_DO_CLAUDE, code_challenge: challenge, code_challenge_method: 'S256', state: 'e' })
+    const pagina = await chamar(env, `/authorize?${params}`)
+    const handle = (await pagina.text()).match(/name="handle" value="([^"]+)"/)[1]
+    const enviar = (modo) =>
+      chamar(env, '/authorize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: cookiesDe(pagina), 'Sec-Fetch-Mode': modo },
+        body: new URLSearchParams({ handle, decisao: 'permitir' }),
+      })
+    // O de segundo plano não faz nada; a navegação depois dele ainda vai ao Google.
+    expect((await enviar('cors')).status).toBe(204)
+    const real = await enviar('navigate')
+    expect(real.status).toBe(302)
+    expect(real.headers.get('Location')).toContain('accounts.google.com')
   })
 
-  it('a volta que chega como POST manda o navegador ao Claude com GET (303)', async () => {
+  it('a volta repetida em segundo plano não leva o código ao Claude nem gasta o state', async () => {
     const env = ambiente()
     const { google } = await conectar(env, { semVolta: true })
-    const volta = await chamar(env, `/conector/callback?code=codigo-do-google&state=${encodeURIComponent(google.searchParams.get('state'))}`, {
-      method: 'POST',
-      body: 'handle=velho',
-    })
-    expect(volta.status).toBe(303)
-    expect(volta.headers.get('Location')).toContain(CALLBACK_DO_CLAUDE)
+    const caminho = `/conector/callback?code=codigo-do-google&state=${encodeURIComponent(google.searchParams.get('state'))}`
+    const fundo = await chamar(env, caminho, { method: 'POST', headers: { 'Sec-Fetch-Mode': 'cors' } })
+    expect(fundo.status).toBe(204)
+    expect(fundo.headers.get('Location')).toBeNull()
+    expect(pedidosAoGoogle.filter((p) => p.grant_type === 'authorization_code')).toHaveLength(0)
+    const real = await chamar(env, caminho, { headers: { 'Sec-Fetch-Mode': 'navigate' } })
+    expect(real.status).toBe(303)
+    expect(real.headers.get('Location')).toContain(CALLBACK_DO_CLAUDE)
   })
 
   it('um state inventado ou vencido não conclui nada', async () => {

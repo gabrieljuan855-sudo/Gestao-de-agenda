@@ -30,6 +30,16 @@ function destinoSemSegredo(location) {
   }
 }
 
+// De onde o pedido veio, sem a query (que pode levar o code e o state).
+function origemDoReferer(referer) {
+  try {
+    const u = new URL(referer)
+    return `${u.origin}${u.pathname}`
+  } catch {
+    return ''
+  }
+}
+
 // O método JSON-RPC de um pedido ao /mcp ("initialize", "tools/list"...).
 export async function metodoDoMcp(request) {
   if (request.method !== 'POST') return ''
@@ -56,14 +66,25 @@ export async function resumoDaResposta({ request, response, metodo = '' }) {
     ...(request.headers.get('origin') ? { origem: request.headers.get('origin') } : {}),
     ...(request.headers.get('authorization') ? { comToken: true } : {}),
     ...(request.headers.get('sec-fetch-site') ? { site: request.headers.get('sec-fetch-site') } : {}),
+    // Navegação de verdade ou pedido em segundo plano (fetch), se foi toque
+    // da pessoa, e se o cookie da tela de consentimento veio junto: é o que
+    // separa o pedido real das repetições do navegador embutido do Claude.
+    ...(request.headers.get('sec-fetch-mode') ? { modo: request.headers.get('sec-fetch-mode') } : {}),
+    ...(request.headers.get('sec-fetch-dest') ? { alvo: request.headers.get('sec-fetch-dest') } : {}),
+    ...(request.headers.get('sec-fetch-user') ? { toque: request.headers.get('sec-fetch-user') } : {}),
+    cookieDaTela: /__Host-oauth-/.test(request.headers.get('cookie') || ''),
+    ...(origemDoReferer(request.headers.get('referer')) ? { vindoDe: origemDoReferer(request.headers.get('referer')) } : {}),
     agente: (request.headers.get('user-agent') || '').slice(0, 120),
   }
   const location = response.headers.get('location')
   if (location) Object.assign(resumo, destinoSemSegredo(location))
   if (response.status >= 400) {
     const texto = await response.clone().text().catch(() => '')
+    // Título e explicação da página de erro (o detalhe da biblioteca vem no
+    // parágrafo, entre parênteses).
     const titulo = texto.match(/<h1>([^<]*)<\/h1>/)?.[1]
-    resumo.resposta = (titulo || texto).slice(0, 300)
+    const explicacao = texto.match(/<\/h1><p>([^<]*)<\/p>/)?.[1]
+    resumo.resposta = (titulo ? `${titulo}${explicacao ? ` — ${explicacao}` : ''}` : texto).slice(0, 400)
   }
   return resumo
 }

@@ -34,8 +34,7 @@ export const ROTA_MCP = '/mcp'
 // Fora de /mcp de propósito: tudo abaixo de /mcp é rota protegida por token
 // para o provider, e a volta do Google chega sem token nenhum.
 export const ROTA_CALLBACK = '/conector/callback'
-export const ROTA_DECISAO = '/conector/decidir'
-const ROTAS_DE_PAGINA = new Set(['/authorize', ROTA_DECISAO, ROTA_CALLBACK])
+const ROTAS_DE_PAGINA = new Set(['/authorize', ROTA_CALLBACK])
 const ROTAS_DO_PROVEDOR = new Set(['/token', '/register'])
 
 // As rotas que são do conector. Todo o resto (o site, /api/*) não passa pelo
@@ -203,7 +202,7 @@ async function autorizar(request, env) {
 <p class="suave">${origem} O acesso será enviado para <strong>${escapar(quem.redirectHost)}</strong>.</p>
 ${local}
 <p class="suave">Em seguida o Google vai pedir para você entrar com a conta autorizada neste app.</p>
-<form method="get" action="${ROTA_DECISAO}">
+<form method="post">
   <input type="hidden" name="handle" value="${escapar(consentimento.handle)}">
   <div class="acoes">
     <button class="texto" name="decisao" value="recusar">Recusar</button>
@@ -215,30 +214,12 @@ ${local}
     )
   }
 
-  // Um POST aqui é o envio repetido pelo navegador embutido do Claude (ver
-  // decidir): volta para a mesma página, que começa uma tentativa limpa.
-  return new Response(null, { status: 303, headers: { Location: request.url, 'Cache-Control': 'no-store' } })
-}
-
-// A decisão da tela de consentimento, num formulário GET. O navegador
-// embutido do app do Claude no iPhone tem duas manias que o registro do
-// conector mostrou: repete por conta própria um POST para a página aberta
-// (um POST na volta do Google, logo antes do GET verdadeiro, e o endereço
-// de volta do Claude responde 405 a POST); e toque em link comum ele busca
-// mas não mostra, então o Permitir por link nunca chegava ao Google. Botão
-// de formulário navega de verdade, e com GET não há corpo para repetir.
-//
-// O GET não abre brecha: o `handle` é aleatório, de uso único, e só vale com
-// o cookie gravado quando esta mesma tela foi aberta; outro site não
-// consegue lê-lo, porque a tela não pode ser embutida (frame-ancestors).
-async function decidir(request, env) {
-  const oauth = env.OAUTH_PROVIDER
-  const url = new URL(request.url)
-  const handle = url.searchParams.get('handle') || ''
-  if (url.searchParams.get('decisao') !== 'permitir') {
+  if (request.method !== 'POST') return erroLocal('Método não aceito', 'Use o botão da página de conexão.', 405)
+  const form = await request.formData()
+  const handle = String(form.get('handle') || '')
+  if (form.get('decisao') !== 'permitir') {
     const negado = await oauth.denyConsent(request, handle)
-    negado.headers.set('Location', negado.redirectTo)
-    return new Response(null, { status: 303, headers: negado.headers })
+    return new Response(null, { status: 302, headers: negado.headers })
   }
   const aprovado = await oauth.approveConsent(request, handle)
   const verifier = randomText(48)
@@ -246,7 +227,7 @@ async function decidir(request, env) {
   const headers = aprovado.headers
   headers.set('Cache-Control', 'no-store')
   headers.set('Location', await urlDoGoogle(env, { redirectUri: new URL(ROTA_CALLBACK, request.url).toString(), state, verifier }))
-  return new Response(null, { status: 303, headers })
+  return new Response(null, { status: 302, headers })
 }
 
 // A volta do Google: troca o código, confere a conta e conclui a autorização.
@@ -323,9 +304,18 @@ async function paginasDoConector(request, env) {
     )
   }
   const { pathname } = new URL(request.url)
+  // Só navegação de verdade gasta o que é de uso único (o handle da tela, o
+  // state da volta). O navegador embutido do app do Claude no iPhone dispara,
+  // junto de cada navegação, um pedido em segundo plano para o mesmo
+  // endereço — o registro do conector mostrou POSTs repetidos na tela e na
+  // volta do Google, e rajadas de pedidos a cada 170 ms. Quando esse pedido
+  // gastava o handle ou levava o código ao Claude antes da navegação, a
+  // navegação real caía em erro ("Algo deu errado", ou a tela que não ia ao
+  // Google). Navegador sem Sec-Fetch-Mode segue normalmente.
+  const modo = request.headers.get('sec-fetch-mode')
+  if (modo && modo !== 'navigate') return new Response(null, { status: 204, headers: { 'Cache-Control': 'no-store' } })
   try {
     if (pathname === '/authorize') return await autorizar(request, env)
-    if (pathname === ROTA_DECISAO) return await decidir(request, env)
     if (pathname === ROTA_CALLBACK) return await voltaDoGoogle(request, env)
   } catch (err) {
     if (err instanceof AuthorizationError && err.redirectTo) return Response.redirect(err.redirectTo, 302)
