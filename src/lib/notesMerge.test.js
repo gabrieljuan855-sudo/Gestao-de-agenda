@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { mesclarAnotacoes, mesclarApagadas, precisaSubir } from './notesMerge.js'
+import { mesclarAnotacoes, mesclarApagadas, precisaSubir, mesclarParaGravar } from './notesMerge.js'
 
 const nota = (id, updatedAt, extra = {}) => ({ id, updatedAt, body: id, ...extra })
 const ids = (lista) => lista.map((n) => n.id).sort()
@@ -67,5 +67,36 @@ describe('precisaSubir', () => {
   it('grava quando apareceu anotação nova ou edição mais recente', () => {
     expect(precisaSubir([nota('a', '2026-09-17T10:00:00Z'), nota('b', '2026-09-17T10:00:00Z')], [nota('a', '2026-09-17T10:00:00Z')])).toBe(true)
     expect(precisaSubir([nota('a', '2026-09-17T12:00:00Z')], [nota('a', '2026-09-17T10:00:00Z')])).toBe(true)
+  })
+})
+
+describe('mesclarParaGravar', () => {
+  const nota = (id, updatedAt, extra = {}) => ({ id, title: id, body: '', updatedAt, ...extra })
+  const agora = Date.parse('2026-10-30T12:00:00Z')
+
+  it('mantém a nota que o outro lado gravou desde a última leitura', () => {
+    const remoto = { notes: [nota('do-claude', '2026-10-30T11:00:00Z')], deleted: [] }
+    const { notes } = mesclarParaGravar([nota('do-app', '2026-10-30T11:30:00Z')], remoto, [], agora)
+    expect(notes.map((n) => n.id).sort()).toEqual(['do-app', 'do-claude'])
+  })
+
+  it('uma nota apagada deste lado não volta só porque o Drive ainda a tem', () => {
+    const remoto = { notes: [nota('x', '2026-10-30T10:00:00Z'), nota('y', '2026-10-30T10:00:00Z')], deleted: [] }
+    const { notes, deleted } = mesclarParaGravar([nota('y', '2026-10-30T10:00:00Z')], remoto, [{ id: 'x', at: '2026-10-30T11:00:00Z' }], agora)
+    expect(notes.map((n) => n.id)).toEqual(['y'])
+    expect(deleted).toEqual([{ id: 'x', at: '2026-10-30T11:00:00Z' }])
+  })
+
+  it('editar depois de apagar traz a nota de volta (a edição é mais nova que o rastro)', () => {
+    const remoto = { notes: [nota('x', '2026-10-30T11:30:00Z')], deleted: [] }
+    const { notes } = mesclarParaGravar([], remoto, [{ id: 'x', at: '2026-10-30T11:00:00Z' }], agora)
+    expect(notes.map((n) => n.id)).toEqual(['x'])
+  })
+
+  it('soma os rastros dos dois lados e fica com a versão mais nova de cada nota', () => {
+    const remoto = { notes: [nota('a', '2026-10-30T09:00:00Z', { body: 'velho' })], deleted: [{ id: 'z', at: '2026-10-29T00:00:00Z' }] }
+    const { notes, deleted } = mesclarParaGravar([nota('a', '2026-10-30T10:00:00Z', { body: 'novo' })], remoto, [{ id: 'w', at: '2026-10-30T08:00:00Z' }], agora)
+    expect(notes[0].body).toBe('novo')
+    expect(deleted.map((d) => d.id).sort()).toEqual(['w', 'z'])
   })
 })

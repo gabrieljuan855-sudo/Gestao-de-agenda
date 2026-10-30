@@ -52,8 +52,26 @@ uma pilha de branches que só atrapalha.
   `/api/search-notes`). A chave do Gemini é
   segredo do Worker e **nunca** chega ao navegador — é por isso que essa parte
   roda no servidor.
+- `worker/conector/` — o conector do Claude: servidor MCP remoto em `/mcp`
+  (`createMcpHandler` do Agents SDK, sem estado) atrás do `OAuthProvider` da
+  Cloudflare, com login pelo Google (mesmo client ID e escopos do app) e só
+  para `ALLOWED_EMAIL`. As rotas dele (`/mcp`, `/authorize`, `/token`,
+  `/register`, `/conector/callback`, `/.well-known/oauth-*`) são as únicas que
+  passam pelo provider; o resto do Worker segue como antes.
+  `ferramentas.js` faz o trabalho, `servidor.js` descreve as ferramentas para
+  o modelo, `oauth.js` cuida do login e `google.js`, do token do Google.
+- **Regra do conector: mesma lógica do app, sem duplicar.** Ele importa as
+  funções de `src/lib/`; o acesso ao Google que os dois lados usam fica em
+  módulos que recebem o `request` de fora (`googleTarefas.js`,
+  `googleAgenda.js`, `driveArquivos.js`). Se algo de `src/lib/` precisar do
+  navegador, separe a parte pura em vez de copiar código para o Worker.
+- O app e o conector gravam nos mesmos arquivos do Drive: toda gravação é
+  ler → mesclar → gravar (`mesclarParaGravar` em `notesMerge.js`), nunca a
+  lista local por cima.
 - Testes ficam ao lado do que testam (`src/lib/x.test.js`), em vitest. A regra
-  na prática: lógica pura tem teste; componente React, não.
+  na prática: lógica pura tem teste; componente React, não. Os do conector
+  rodam contra um Google falso em memória (`worker/teste/googleFalso.js`) e um
+  KV em memória, passando pelas funções reais de `src/lib/`.
 
 ## Design: Material Design 3 é o ponto de partida
 

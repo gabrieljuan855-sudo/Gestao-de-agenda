@@ -1,9 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { loadNotes, saveNotes, faltaPermissaoDoDrive, driveApiDesativada, motivoDoGoogle } from './driveNotes.js'
 import { permissaoDoDriveConcedida } from './googleAuth.js'
-import { mesclarAnotacoes, mesclarApagadas, precisaSubir } from './notesMerge.js'
+import { mesclarAnotacoes, mesclarApagadas, mesclarParaGravar, precisaSubir } from './notesMerge.js'
 import { analyzeNoteWithAI } from './aiAnalyzeNote.js'
 import { searchNotes } from './aiSearchNotes.js'
+import { newNote, textoOuVazio, sanitizeNotes } from './notasFormato.js'
+
+// Continuam sendo importados daqui pelo resto do app e pelos testes.
+export { sanitizeNote, sanitizeNotes } from './notasFormato.js'
 
 // Falta de permissão não é falha de rede: insistir não resolve, e dizer
 // "não deu agora" manda a pessoa esperar por algo que nunca vai acontecer
@@ -77,60 +81,6 @@ function writeCache(notes, deleted) {
     // Sem espaço ou sem permissão: a nota continua na tela, só não persiste
     // aqui — o Drive ainda é tentado normalmente.
   }
-}
-
-function makeId() {
-  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID()
-  return `nota-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-}
-
-function newNote() {
-  const now = new Date().toISOString()
-  return { id: makeId(), title: '', body: '', createdAt: now, updatedAt: now }
-}
-
-function textoOuVazio(v) {
-  return typeof v === 'string' ? v : ''
-}
-
-// Reconstrói a nota só com os campos que ela pode ter, do jeito certo — nunca
-// espalha um objeto de fora por cima dela. Existe por causa de um bug real:
-// o botão "+" chamava `onCreate={createNote}` direto no onClick, então um
-// clique passava o próprio evento do React como `inicial`, e `{...inicial}`
-// copiava dali o alvo do clique (um <button> do DOM, com a referência que o
-// React deixa presa nele) para dentro da nota. Isso trava a sincronização
-// pra sempre: um JSON.stringify que esbarra num nó do DOM nunca chega a
-// tentar a rede, então nem aparece como erro do Google — só "não deu para
-// sincronizar", sem pista nenhuma de por quê.
-//
-// Rodar isto também na leitura do cache (abaixo) é o que limpa uma nota que
-// já ficou corrompida assim antes desta correção existir — sem isso, o
-// aparelho continuaria travado mesmo depois do código corrigido.
-export function sanitizeNote(note) {
-  if (!note || typeof note !== 'object') return null
-  if (typeof note.id !== 'string') return null
-  const limpa = {
-    id: note.id,
-    title: textoOuVazio(note.title),
-    body: textoOuVazio(note.body),
-    createdAt: typeof note.createdAt === 'string' ? note.createdAt : new Date().toISOString(),
-    updatedAt: typeof note.updatedAt === 'string' ? note.updatedAt : new Date().toISOString(),
-  }
-  if (Array.isArray(note.suggestions)) limpa.suggestions = note.suggestions
-  if (typeof note.lastAnalyzedAt === 'string') limpa.lastAnalyzedAt = note.lastAnalyzedAt
-  // Etiqueta do projeto a que a anotação pertence (o mesmo id de
-  // projetos.js). Sem projeto, o campo simplesmente não existe.
-  if (typeof note.projeto === 'string' && note.projeto) limpa.projeto = note.projeto
-  // Fixada no topo da lista, como no Notas do iPhone. Só existe quando é true.
-  if (note.fixada === true) limpa.fixada = true
-  if (note.relatedNote && typeof note.relatedNote.id === 'string') {
-    limpa.relatedNote = { id: note.relatedNote.id, title: textoOuVazio(note.relatedNote.title) }
-  }
-  return limpa
-}
-
-export function sanitizeNotes(notes) {
-  return (Array.isArray(notes) ? notes : []).map(sanitizeNote).filter(Boolean)
 }
 
 // Resolve a referência curta que o Worker devolveu ("n1", "n2"...) contra a
@@ -217,7 +167,7 @@ export default function useNotes({ signedIn }) {
         // anotações de quem escreveu antes de a sincronização funcionar.
         if (doDrive === null) {
           const locais = notesRef.current
-          if (locais.length > 0) subirParaODrive(locais)
+          if (locais.length > 0) subirParaODrive()
           else setSyncStatus('salvo')
           return
         }
@@ -230,9 +180,10 @@ export default function useNotes({ signedIn }) {
         const mescladas = mesclarAnotacoes(notesRef.current, doDrive.notes, doDrive.deleted)
         deletedRef.current = mesclarApagadas(deletedRef.current, doDrive.deleted)
         setNotes(mescladas)
+        notesRef.current = mescladas
         writeCache(mescladas, deletedRef.current)
         if (precisaSubir(mescladas, doDrive.notes)) {
-          subirParaODrive(mescladas)
+          subirParaODrive()
         } else {
           // Nada a subir: os dois lados já estão iguais, e isso é justamente
           // a informação que faltava na tela.
@@ -260,7 +211,7 @@ export default function useNotes({ signedIn }) {
     // toda letra digitada viraria uma chamada ao Drive.
     clearTimeout(saveTimer.current)
     saveTimer.current = setTimeout(() => {
-      subirParaODrive(next)
+      subirParaODrive()
     }, SAVE_DEBOUNCE_MS)
   }
 
@@ -268,13 +219,34 @@ export default function useNotes({ signedIn }) {
   // nunca discordar do que de fato aconteceu. Antes o sucesso não avisava
   // nada: só dava para saber que a sincronização funcionava quando ela
   // falhava, e o rodapé afirmava "Sincronizado com o Drive" de qualquer jeito.
-  async function subirParaODrive(lista) {
+  async function subirParaODrive() {
     setSyncStatus('salvando')
     try {
+      // O conector do Claude grava no mesmo arquivo. Subir a lista local por
+      // cima, sem reler, apagava a nota que ele tinha acabado de criar — então
+      // o Drive entra na conta antes de gravar (ver mesclarParaGravar).
+      const doDrive = await loadNotes()
+      // A lista local é lida aqui, depois da espera, e não antes: a pessoa pode
+      // ter continuado digitando enquanto o Drive respondia, e mesclar uma
+      // cópia de antes desfaria essas letras na tela.
+      const locais = notesRef.current
+      let paraGravar = locais
+      if (doDrive) {
+        const mescla = mesclarParaGravar(locais, doDrive, deletedRef.current)
+        deletedRef.current = mescla.deleted
+        paraGravar = mescla.notes
+        // O outro lado trouxe algo (uma nota nova, uma edição mais recente):
+        // aparece na tela já, em vez de só na próxima abertura.
+        if (precisaSubir(paraGravar, locais)) {
+          setNotes(paraGravar)
+          notesRef.current = paraGravar
+          writeCache(paraGravar, deletedRef.current)
+        }
+      }
       // Última barreira antes do JSON.stringify: mesmo que algo em memória
       // tenha corrompido uma nota (ver sanitizeNote), o que sai para o Drive
       // continua no formato certo.
-      await saveNotes(sanitizeNotes(lista), deletedRef.current)
+      await saveNotes(sanitizeNotes(paraGravar), deletedRef.current)
       setSyncStatus('salvo')
       // Uma gravação que deu certo desmente um aviso antigo de falha.
       setError(null)
