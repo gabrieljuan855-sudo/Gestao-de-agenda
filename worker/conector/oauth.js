@@ -93,20 +93,18 @@ function erroLocal(titulo, mensagem, status = 400) {
 //
 // Entre o "Permitir" e a volta do Google, o pedido aprovado precisa ficar
 // guardado. A biblioteca oferece beginUpstream/finishUpstream para isso, que
-// amarram a volta a um cookie gravado na ida — e no navegador embutido do app
-// do Claude no iPhone esse cookie não volta: o "Permitir" funcionava, o Google
-// também, e a volta caía em "This authorization was not started in this
-// browser". No Chromium e no curl o mesmo fluxo passava, então o problema é do
-// navegador, não do servidor.
+// amarram a volta a um cookie de uso único — e no navegador embutido do app do
+// Claude no iPhone a volta caía em "This authorization was not started in this
+// browser", enquanto no Chromium e no curl o mesmo fluxo passava.
 //
 // Aqui o pedido aprovado fica no KV, achado pelo `state` que vai ao Google:
-// 32 bytes aleatórios, de uso único, que valem 10 minutos, guardados só pelo
-// hash. O que o cookie protegia (alguém reaproveitar a volta de outra pessoa)
-// continua coberto: o `state` e o código do Google só existem na barra de
-// endereço de quem fez o login, o código só é trocado junto com o verificador
-// PKCE guardado aqui, e a autorização só vai para o endereço do cliente que a
-// pessoa aprovou na tela de consentimento — essa, sim, segue amarrada ao cookie,
-// que funciona porque é o mesmo site do começo ao fim.
+// 32 bytes aleatórios, que valem 10 minutos, guardados só pelo hash. O que o
+// cookie protegia (alguém reaproveitar a volta de outra pessoa) continua
+// coberto: o `state` e o código do Google só existem na barra de endereço de
+// quem fez o login, o código só é trocado junto com o verificador PKCE
+// guardado aqui, e a autorização só vai para o endereço do cliente que a
+// pessoa aprovou na tela de consentimento — essa, sim, segue amarrada ao
+// cookie, que funciona porque é o mesmo site do começo ao fim.
 const VALIDADE_DA_VOLTA_S = 10 * 60
 
 async function hashHex(texto) {
@@ -122,18 +120,61 @@ export async function guardarIdaAoGoogle(kv, pedido, verifier) {
   return state
 }
 
-// null quando o `state` não existe, já foi usado ou venceu.
-export async function recuperarVoltaDoGoogle(kv, state) {
-  if (!state) return null
-  const chave = `conector-volta:${await hashHex(state)}`
+// A volta do Google chega duas vezes no iPhone: o navegador embutido do Claude
+// repete o pedido (toque duplo no "Continuar" do Google, recarga ao voltar
+// para o app). Com o `state` apagado no primeiro uso, a repetição — que é a
+// que fica na tela — dizia "expirou ou já foi usada", mesmo quando a primeira
+// tinha dado certo. Por isso o desfecho de cada volta fica guardado pelo mesmo
+// tempo do `state`, e a repetição recebe exatamente a mesma resposta. Quem
+// repete é o próprio navegador da pessoa: o `state` só existe na barra de
+// endereço dela, e o código entregue ao Claude continua de uso único lá.
+const chaveDaVolta = (hash) => `conector-volta:${hash}`
+const chaveDoDesfecho = (hash) => `conector-desfecho:${hash}`
+
+async function lerJson(kv, chave) {
   const guardado = await kv.get(chave)
   if (!guardado) return null
-  await kv.delete(chave)
   try {
     return JSON.parse(guardado)
   } catch {
     return null
   }
+}
+
+// O que já se sabe sobre um `state`: o desfecho, se a volta já foi tratada;
+// senão, o pedido guardado na ida; null quando ele não existe ou venceu.
+export async function recuperarVoltaDoGoogle(kv, state) {
+  if (!state) return null
+  const hash = await hashHex(state)
+  const desfecho = await lerJson(kv, chaveDoDesfecho(hash))
+  if (desfecho) return { hash, desfecho }
+  const ida = await lerJson(kv, chaveDaVolta(hash))
+  return ida?.pedido ? { hash, ...ida } : null
+}
+
+async function guardarDesfecho(kv, hash, desfecho) {
+  // O desfecho primeiro e só depois o pedido sai: uma repetição que chegue no
+  // meio do caminho acha um dos dois, nunca nenhum.
+  await kv.put(chaveDoDesfecho(hash), JSON.stringify(desfecho), { expirationTtl: VALIDADE_DA_VOLTA_S })
+  await kv.delete(chaveDaVolta(hash))
+}
+
+// Duas voltas ao mesmo tempo com o mesmo código: o Google aceita só uma troca
+// e recusa a outra. A recusada espera um pouco pelo desfecho da que deu certo.
+export const ESPERA_PELO_DESFECHO = { tentativas: 16, intervaloMs: 500 }
+
+async function esperarDesfecho(kv, hash) {
+  for (let i = 0; i < ESPERA_PELO_DESFECHO.tentativas; i++) {
+    await new Promise((r) => setTimeout(r, ESPERA_PELO_DESFECHO.intervaloMs))
+    const desfecho = await lerJson(kv, chaveDoDesfecho(hash))
+    if (desfecho) return desfecho
+  }
+  return null
+}
+
+function responderDesfecho(desfecho) {
+  if (desfecho.erro) return erroLocal(desfecho.erro.titulo, desfecho.erro.mensagem, desfecho.erro.status)
+  return new Response(null, { status: 302, headers: { Location: desfecho.location, 'Cache-Control': 'no-store' } })
 }
 
 // GET /authorize: valida o pedido do cliente e pergunta se ele pode entrar.
@@ -189,47 +230,55 @@ ${local}
 
 // A volta do Google: troca o código, confere a conta e conclui a autorização.
 async function voltaDoGoogle(request, env) {
-  const oauth = env.OAUTH_PROVIDER
+  const kv = env.OAUTH_KV
   const url = new URL(request.url)
-  const volta = await recuperarVoltaDoGoogle(env.OAUTH_KV, url.searchParams.get('state'))
-  if (!volta?.pedido) {
+  const volta = await recuperarVoltaDoGoogle(kv, url.searchParams.get('state'))
+  if (!volta) {
     return erroLocal(
       'Não deu para conectar',
-      'Esta tentativa de conexão expirou ou já foi usada. Feche esta página e toque em Conectar de novo no Claude.'
+      'Esta tentativa de conexão expirou. Feche esta página e toque em Conectar de novo no Claude.'
     )
   }
-  const { pedido } = volta
-  const data = { verifier: volta.verifier }
-  const headers = new Headers({ 'Cache-Control': 'no-store' })
-  const negar = (descricao) => {
-    headers.set('Location', authorizationErrorRedirect(pedido, 'access_denied', descricao))
-    return new Response(null, { status: 302, headers })
+  if (volta.desfecho) return responderDesfecho(volta.desfecho)
+
+  const desfecho = await concluirVolta(env, url, volta)
+  if (desfecho.codigoJaUsado) {
+    const daOutra = await esperarDesfecho(kv, volta.hash)
+    if (daOutra) return responderDesfecho(daOutra)
   }
+  await guardarDesfecho(kv, volta.hash, desfecho)
+  return responderDesfecho(desfecho)
+}
+
+async function concluirVolta(env, url, { pedido, verifier }) {
+  const negar = (descricao) => ({ location: authorizationErrorRedirect(pedido, 'access_denied', descricao) })
   if (url.searchParams.get('error')) return negar('O acesso foi recusado na tela do Google.')
 
   let tokens
   try {
     tokens = await trocarCodigo(env, {
       code: url.searchParams.get('code') || '',
-      redirectUri: new URL(ROTA_CALLBACK, request.url).toString(),
-      verifier: data?.verifier,
+      redirectUri: new URL(ROTA_CALLBACK, url).toString(),
+      verifier,
     })
   } catch (err) {
-    return negar(`O Google não completou o login: ${err.message}`)
+    return { ...negar(`O Google não completou o login: ${err.message}`), codigoJaUsado: err.code === 'invalid_grant' }
   }
   if (!tokens.refresh_token) return negar('O Google não enviou o acesso permanente (refresh token).')
 
   // O app é pessoal: a conta precisa ser exatamente a de ALLOWED_EMAIL.
   const email = await emailDaConta(tokens.access_token)
   if (!emailPermitidoNoConector(env, email)) {
-    return erroLocal(
-      'Conta não autorizada',
-      `${email ? `A conta ${email}` : 'Esta conta'} não é a dona deste Segundo Cérebro. Volte ao Claude e conecte de novo, entrando com a conta autorizada.`,
-      403
-    )
+    return {
+      erro: {
+        titulo: 'Conta não autorizada',
+        mensagem: `${email ? `A conta ${email}` : 'Esta conta'} não é a dona deste Segundo Cérebro. Volte ao Claude e conecte de novo, entrando com a conta autorizada.`,
+        status: 403,
+      },
+    }
   }
 
-  const { redirectTo } = await oauth.completeAuthorization({
+  const { redirectTo } = await env.OAUTH_PROVIDER.completeAuthorization({
     request: pedido,
     // O id do usuário não pode ter ":" (o provider usa o caractere como
     // separador); e-mail não tem, mas codificar deixa isso garantido.
@@ -238,8 +287,7 @@ async function voltaDoGoogle(request, env) {
     scope: pedido.scope,
     props: { email, googleRefreshToken: tokens.refresh_token, escopos: tokens.scope || '' },
   })
-  headers.set('Location', redirectTo)
-  return new Response(null, { status: 302, headers })
+  return { location: redirectTo }
 }
 
 // As páginas do conector (o defaultHandler do provider). Os erros seguem o

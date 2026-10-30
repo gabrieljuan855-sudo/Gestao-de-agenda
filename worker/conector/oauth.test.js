@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import worker from '../index.js'
 import { emailPermitidoNoConector } from '../auth.js'
 import { _limparCacheDeTokens, MSG_RECONECTAR, tokenDeAcesso } from './google.js'
+import { ESPERA_PELO_DESFECHO } from './oauth.js'
 import { kvEmMemoria } from '../teste/kvMemoria.js'
 import { googleFalso } from '../teste/googleFalso.js'
 
@@ -44,6 +45,7 @@ async function pkce() {
 let g
 let emailDoGoogle
 let pedidosAoGoogle
+let codigosUsados
 
 beforeEach(() => {
   _limparCacheDeTokens()
@@ -51,11 +53,19 @@ beforeEach(() => {
   g.criarLista('Entrada')
   emailDoGoogle = 'eu@exemplo.com'
   pedidosAoGoogle = []
+  codigosUsados = new Set()
+  ESPERA_PELO_DESFECHO.intervaloMs = 1
   vi.stubGlobal('fetch', async (url, init = {}) => {
     const alvo = String(url)
     if (alvo.startsWith('https://oauth2.googleapis.com/token')) {
       const corpo = new URLSearchParams(init.body)
       pedidosAoGoogle.push(Object.fromEntries(corpo))
+      // Como o Google de verdade: cada código troca uma vez só.
+      const code = corpo.get('code')
+      if (code && codigosUsados.has(code)) {
+        return new Response(JSON.stringify({ error: 'invalid_grant', error_description: 'Bad Request' }), { status: 400 })
+      }
+      if (code) codigosUsados.add(code)
       if (corpo.get('refresh_token') === 'revogado') {
         return new Response(JSON.stringify({ error: 'invalid_grant', error_description: 'Token has been expired or revoked.' }), { status: 400 })
       }
@@ -72,7 +82,7 @@ afterEach(() => vi.unstubAllGlobals())
 
 // O caminho que o Claude percorre: registrar-se, mandar a pessoa ao
 // /authorize, ela permite, vai ao Google e volta.
-async function conectar(env, { comCookieNaVolta = true } = {}) {
+async function conectar(env, { comCookieNaVolta = true, semVolta = false } = {}) {
   const reg = await chamar(env, '/register', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -101,6 +111,7 @@ async function conectar(env, { comCookieNaVolta = true } = {}) {
   })
   expect(permitir.status).toBe(302)
   const google = new URL(permitir.headers.get('Location'))
+  if (semVolta) return { html, google, client_id, verifier }
   const volta = await chamar(env, `/conector/callback?code=codigo-do-google&state=${encodeURIComponent(google.searchParams.get('state'))}`, {
     headers: comCookieNaVolta ? { Cookie: cookiesDe(permitir) } : {},
   })
@@ -193,14 +204,40 @@ describe('login do conector', () => {
     expect(new URL(volta.headers.get('Location')).searchParams.get('code')).toBeTruthy()
   })
 
-  it('a mesma volta do Google não vale duas vezes', async () => {
+  it('a volta do Google repetida recebe a mesma resposta da primeira, em vez de erro', async () => {
     const env = ambiente()
-    const { google } = await conectar(env)
+    const { google, volta } = await conectar(env)
+    const caminho = `/conector/callback?code=codigo-do-google&state=${encodeURIComponent(google.searchParams.get('state'))}`
+    const repetida = await chamar(env, caminho)
+    expect(repetida.status).toBe(302)
+    expect(repetida.headers.get('Location')).toBe(volta.headers.get('Location'))
+    expect(pedidosAoGoogle.filter((p) => p.grant_type === 'authorization_code')).toHaveLength(1)
+  })
+
+  it('duas voltas ao mesmo tempo com o mesmo código terminam no mesmo lugar', async () => {
+    const env = ambiente()
+    const { google } = await conectar(env, { semVolta: true })
+    const caminho = `/conector/callback?code=codigo-do-google&state=${encodeURIComponent(google.searchParams.get('state'))}`
+    const [a, b] = await Promise.all([chamar(env, caminho), chamar(env, caminho)])
+    expect([a.status, b.status]).toEqual([302, 302])
+    expect(new URL(a.headers.get('Location')).searchParams.get('code')).toBeTruthy()
+    expect(b.headers.get('Location')).toBe(a.headers.get('Location'))
+  })
+
+  it('a repetição de uma conta recusada continua recusada', async () => {
+    emailDoGoogle = 'outra@exemplo.com'
+    const env = ambiente()
+    const { google, volta } = await conectar(env)
+    expect(volta.status).toBe(403)
     const repetida = await chamar(env, `/conector/callback?code=codigo-do-google&state=${encodeURIComponent(google.searchParams.get('state'))}`)
-    expect(repetida.status).toBe(400)
-    expect(await repetida.text()).toContain('expirou ou já foi usada')
-    const inventada = await chamar(env, '/conector/callback?code=x&state=inventado')
+    expect(repetida.status).toBe(403)
+    expect(await repetida.text()).toContain('outra@exemplo.com')
+  })
+
+  it('um state inventado ou vencido não conclui nada', async () => {
+    const inventada = await chamar(ambiente(), '/conector/callback?code=x&state=inventado')
     expect(inventada.status).toBe(400)
+    expect(await inventada.text()).toContain('expirou')
   })
 
   it('o /mcp sem token devolve o desafio OAuth que aponta para a descoberta', async () => {
