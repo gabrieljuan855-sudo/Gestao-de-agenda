@@ -54,7 +54,7 @@ export default function useProjetos({ signedIn }) {
         if (doDrive === null) {
           // Ainda não existe arquivo de projetos no Drive: o que há aqui é a
           // única cópia, então sobe (nunca é trocado por lista vazia).
-          if (projetosRef.current.length > 0) subir(projetosRef.current)
+          if (projetosRef.current.length > 0) subir()
           else setSyncStatus('salvo')
           return
         }
@@ -63,8 +63,9 @@ export default function useProjetos({ signedIn }) {
         const remotos = normalizarProjetos(doDrive)
         const mesclados = mesclarAnotacoes(projetosRef.current, remotos, [])
         setProjetos(mesclados)
+        projetosRef.current = mesclados
         writeCache(mesclados)
-        if (precisaSubir(mesclados, remotos)) subir(mesclados)
+        if (precisaSubir(mesclados, remotos)) subir()
         else setSyncStatus('salvo')
       })
       .catch((err) => {
@@ -73,10 +74,25 @@ export default function useProjetos({ signedIn }) {
       })
   }, [signedIn])
 
-  async function subir(lista) {
+  async function subir() {
     setSyncStatus('salvando')
     try {
-      await saveProjetos(normalizarProjetos(lista))
+      // O conector do Claude também cria e edita fichas neste arquivo: o que
+      // está no Drive agora entra na conta antes de gravar, para uma ficha
+      // criada por ele não sumir na próxima edição feita aqui. Fichas não se
+      // excluem (concluir é o fim de um projeto), então não há rastro a somar.
+      const doDrive = await loadProjetos()
+      const locais = projetosRef.current
+      let paraGravar = locais
+      if (doDrive !== null) {
+        paraGravar = mesclarAnotacoes(locais, normalizarProjetos(doDrive), [])
+        if (precisaSubir(paraGravar, locais)) {
+          setProjetos(paraGravar)
+          projetosRef.current = paraGravar
+          writeCache(paraGravar)
+        }
+      }
+      await saveProjetos(normalizarProjetos(paraGravar))
       setSyncStatus('salvo')
       setError(null)
     } catch (err) {
@@ -92,7 +108,7 @@ export default function useProjetos({ signedIn }) {
     writeCache(next)
     setSyncStatus('salvando')
     clearTimeout(saveTimer.current)
-    saveTimer.current = setTimeout(() => subir(next), SAVE_DEBOUNCE_MS)
+    saveTimer.current = setTimeout(() => subir(), SAVE_DEBOUNCE_MS)
   }
 
   // Cria ou atualiza a ficha (o id é a etiqueta, então "salvar" um projeto

@@ -175,6 +175,79 @@ desconecta tudo de uma vez, se precisar.
 Mantenha o `VITE_GOOGLE_CLIENT_ID` do passo 2 como está: ele é a rede de
 segurança para o caso de o login pelo servidor sair do ar.
 
+## Usar pelo Claude (conector MCP)
+
+O mesmo Worker é também um **servidor MCP remoto**: adicionado como conector
+personalizado no Claude (claude.ai, app de desktop e celular), ele deixa o
+Claude consultar e alimentar tudo o que o app organiza — Entrada, Próximas
+ações, Aguardando, Algum dia, projetos, agenda e anotações. O que o Claude grava
+aparece no app, e vice-versa: as ferramentas usam as mesmas funções de
+`src/lib/` (listas por nome, o bloco `[alta @contexto #projeto ~quem ...]`,
+o `anotacoes.json` mesclado com o rastro de exclusões, o `projetos.json`).
+
+### Configurar (uma vez)
+
+**1. No Google Cloud Console**, na mesma credencial OAuth do passo 4 acima, em
+**URIs de redirecionamento autorizados**, adicione:
+`https://SEU-WORKER.workers.dev/conector/callback`
+
+O conector usa **o mesmo client ID** do app de propósito: a pasta privada do
+Drive onde ficam as anotações (`appDataFolder`) é por cliente OAuth. Com outro
+client ID, o Claude veria uma pasta vazia.
+
+**2. No Cloudflare**, os segredos do passo 4 (`GOOGLE_CLIENT_ID`,
+`GOOGLE_CLIENT_SECRET`, `SESSION_SECRET`) e o **`ALLOWED_EMAIL`, que aqui é
+obrigatório**: sem ele o conector recusa qualquer conta.
+
+**3. O KV `OAUTH_KV`**, onde ficam as autorizações do conector, é criado
+sozinho no deploy (o `wrangler.toml` declara o binding sem id, e o wrangler 4
+provisiona um namespace chamado `gestaodeagenda-oauth-kv`). Se o log do build
+avisar que o provisionamento foi pulado por falta de permissão, crie à mão:
+**Storage & Databases > KV > Create**, com o nome `gestaodeagenda-oauth-kv`;
+depois, no Worker, **Settings > Bindings > Add > KV namespace**, com o nome de
+variável `OAUTH_KV` apontando para ele (ou cole o id no `wrangler.toml`, numa
+linha `id = "..."` abaixo de `binding = "OAUTH_KV"`). Enquanto o KV não
+existir, só o conector fica fora do ar; o site segue normal.
+
+**4. No Claude**, em **Configurações > Conectores > Adicionar conector
+personalizado**, cole `https://SEU-WORKER.workers.dev/mcp` (o mesmo endereço
+do app, terminando em `/mcp`). Ao conectar, aparece a tela "Permitir que
+Claude use o Segundo Cérebro?"; depois, o Google pede para entrar com a conta
+de `ALLOWED_EMAIL`. Conectores adicionados no claude.ai aparecem também no app
+do celular e no de desktop.
+
+### O que o Claude consegue fazer
+
+| Ferramenta | Para quê |
+| --- | --- |
+| `visao_geral` | O painel do momento: Entrada, próximas ações por prioridade, atrasadas, esperas de mais de 7 dias, projetos parados, hoje e amanhã |
+| `listar_tarefas` | Tarefas por lista, contexto, projeto, atrasadas ou "cabe em X minutos" |
+| `agenda` | Compromissos entre duas datas, com os vãos livres do expediente |
+| `listar_projetos` / `ver_projeto` | Projetos, e a ficha completa com tarefas, notas e compromissos |
+| `buscar_notas` / `ler_nota` | Busca nas anotações (sem acento, sem caixa) e o texto inteiro |
+| `capturar` | Texto cru na Entrada, sem decidir nada |
+| `criar_tarefa` / `atualizar_tarefa` / `concluir_tarefa` | Tarefas já esclarecidas, mover de lista, concluir (com o registro na agenda) |
+| `criar_evento` | Compromisso no Calendar, com ou sem projeto |
+| `criar_nota` / `atualizar_nota` | Anotações, com o modo "acrescentar ao fim" |
+| `criar_projeto` / `atualizar_projeto` | A ficha do projeto |
+
+Não há ferramenta de excluir. Os vãos livres usam o expediente padrão do app
+(seg. a qui. 8h–12h e 13h–17h30, sex. 7h30–13h30): o horário ajustado na tela
+mora só no aparelho, fora do alcance do servidor.
+
+Se o Google revogar o acesso (senha trocada, app "em teste" com o prazo de 7
+dias vencido), as ferramentas respondem pedindo para reconectar: em
+Configurações > Conectores, desconecte e conecte de novo.
+
+### Testar localmente
+
+Crie um `.dev.vars` (já está no `.gitignore`) com `GOOGLE_CLIENT_ID`,
+`GOOGLE_CLIENT_SECRET`, `SESSION_SECRET` e `ALLOWED_EMAIL`, rode
+`npx wrangler dev` e aponte o MCP Inspector
+(`npx @modelcontextprotocol/inspector`) para `http://localhost:8787/mcp`. Para
+o login do Google funcionar localmente, a credencial precisa também de
+`http://localhost:8787/conector/callback` nos URIs de redirecionamento.
+
 ## Capturar do celular sem abrir o app (iOS)
 
 O endereço `/?capturar=TEXTO` guarda o texto na Entrada e mostra a confirmação.

@@ -72,3 +72,21 @@ export function precisaSubir(mescladas, remotas) {
     return !remota || emMs(n.updatedAt) !== emMs(remota.updatedAt)
   })
 }
+
+// A gravação de quem não é o único a escrever no arquivo: o app e o conector
+// do Claude gravam no mesmo anotacoes.json. Gravar a lista local por cima,
+// sem reler, apagava o que o outro lado tinha escrito desde a última leitura
+// — a nota que o Claude acabou de criar sumia na próxima tecla digitada no
+// app. Aqui o que está no Drive agora entra na conta antes de gravar.
+//
+// A diferença para mesclarAnotacoes sozinha é o rastro de exclusão valer nos
+// dois sentidos: uma nota apagada *deste lado* e ainda presente no Drive não
+// pode voltar só porque o Drive ainda a tem.
+export function mesclarParaGravar(locais = [], remoto = { notes: [], deleted: [] }, apagadasLocais = [], agora = Date.now()) {
+  const deleted = mesclarApagadas(apagadasLocais, remoto?.deleted || [], agora)
+  const rastro = new Map(deleted.map((d) => [d.id, emMs(d.at)]))
+  const remotasVivas = (remoto?.notes || []).filter(
+    (n) => !(n?.id && rastro.has(n.id) && rastro.get(n.id) >= emMs(n.updatedAt))
+  )
+  return { notes: mesclarAnotacoes(locais, remotasVivas, deleted), deleted }
+}

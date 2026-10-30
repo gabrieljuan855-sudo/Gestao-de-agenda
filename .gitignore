@@ -5,3 +5,6 @@ dist
 
 # Estado local do wrangler dev
 .wrangler
+
+# Segredos locais do wrangler dev
+.dev.vars

@@ -11,9 +11,13 @@
 // responder perguntas sobre ele).
 // A chave do Gemini fica como segredo do Cloudflare e nunca chega ao
 // navegador — é justamente por isso que essa parte roda no servidor.
+//
+// O mesmo Worker hospeda o conector do Claude (worker/conector): /mcp e as
+// rotas de OAuth que o acompanham. Ver o export default, no fim.
 
 import { handleAuth } from './auth.js'
 import { handleAvisos, AvisosDoUsuario } from './avisos.js'
+import { ehRotaDoConector, provedorPara } from './conector/oauth.js'
 
 // O Durable Object dos avisos precisa ser exportado pelo módulo principal.
 export { AvisosDoUsuario }
@@ -980,7 +984,8 @@ async function handleProjeto(request, env) {
   }
 }
 
-export default {
+// O Worker de sempre: o site e as rotas /api/* do app.
+export const appHandler = {
   async fetch(request, env) {
     const url = new URL(request.url)
 
@@ -1020,5 +1025,24 @@ export default {
     }
 
     return env.ASSETS.fetch(request)
+  },
+}
+
+// O conector do Claude entra por cima do Worker de sempre, mas só nas rotas
+// dele (/mcp, /authorize, /token, /register, a volta do Google e a descoberta
+// em /.well-known/oauth-*). O resto não passa pelo OAuthProvider: o site e o
+// /api/* seguem exatamente o caminho de antes, e um problema no conector (o
+// KV ainda não criado, por exemplo) não tem como derrubar o app.
+export default {
+  fetch(request, env, ctx) {
+    const url = new URL(request.url)
+    if (!ehRotaDoConector(url.pathname)) return appHandler.fetch(request, env, ctx)
+    if (!env.OAUTH_KV) {
+      return json(
+        { error: 'O conector do Claude ainda não está pronto: falta o KV OAUTH_KV neste Worker (ver README, "Usar pelo Claude").' },
+        503
+      )
+    }
+    return provedorPara(url.origin).fetch(request, env, ctx)
   },
 }

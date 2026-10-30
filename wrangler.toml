@@ -1,6 +1,11 @@
 name = "gestaodeagenda"
 main = "worker/index.js"
-compatibility_date = "2024-09-23"
+compatibility_date = "2026-10-30"
+# nodejs_compat: o Agents SDK do conector do Claude usa node:async_hooks.
+# global_fetch_strictly_public: o conector busca o documento de identificação
+# do cliente (Client ID Metadata Document) numa URL que o próprio cliente
+# informa; esta flag impede que essa busca alcance endereços internos.
+compatibility_flags = ["nodejs_compat", "global_fetch_strictly_public"]
 
 [build]
 command = "npm run build"
@@ -23,3 +28,11 @@ class_name = "AvisosDoUsuario"
 [[migrations]]
 tag = "v1-avisos"
 new_sqlite_classes = ["AvisosDoUsuario"]
+
+# Conector do Claude (worker/conector): as concessões e os tokens OAuth ficam
+# neste KV. Sem "id" de propósito: o wrangler 4 cria o namespace sozinho no
+# primeiro deploy (inclusive pela integração Git) e, nos seguintes, reaproveita
+# o que já está ligado ao Worker publicado. O id do KV criado aparece no
+# painel, em Storage & Databases > KV.
+[[kv_namespaces]]
+binding = "OAUTH_KV"

@@ -18,7 +18,11 @@ const TOKEN_URL = 'https://oauth2.googleapis.com/token'
 const REVOKE_URL = 'https://oauth2.googleapis.com/revoke'
 const USERINFO_URL = 'https://www.googleapis.com/oauth2/v3/userinfo'
 
-const SCOPES = [
+// O conector do Claude (worker/conector) pede exatamente estes escopos, com o
+// mesmo client ID: a pasta appDataFolder do Drive, onde moram as anotações, é
+// por cliente OAuth — com outro client ID ou sem drive.appdata, o Claude
+// veria uma pasta vazia.
+export const SCOPES = [
   'https://www.googleapis.com/auth/calendar',
   'https://www.googleapis.com/auth/tasks',
   'https://www.googleapis.com/auth/userinfo.email',
@@ -114,11 +118,11 @@ function clearCookie(name) {
 
 // ---------- PKCE ----------
 
-function randomText(bytes = 32) {
+export function randomText(bytes = 32) {
   return b64urlEncode(crypto.getRandomValues(new Uint8Array(bytes)))
 }
 
-async function challengeFor(verifier) {
+export async function challengeFor(verifier) {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier))
   return b64urlEncode(new Uint8Array(digest))
 }
@@ -129,7 +133,7 @@ async function challengeFor(verifier) {
 // no fim, e o Google responde a isso com "The provided client secret is
 // invalid" — uma mensagem que não diz nada sobre espaço em branco, e que manda
 // a pessoa procurar um caractere que ela não consegue ver. Melhor tolerar.
-function limpo(valor) {
+export function limpo(valor) {
   return typeof valor === 'string' ? valor.trim() : ''
 }
 
@@ -147,14 +151,26 @@ function allowedEmail(env, email) {
   return String(email || '').trim().toLowerCase() === permitido.toLowerCase()
 }
 
+// O conector do Claude é mais estrito que o login do app: sem ALLOWED_EMAIL
+// configurado, ninguém entra. O app num navegador já exige estar com a conta
+// aberta na frente da tela; o conector entrega a agenda inteira a um cliente
+// que se registra sozinho pela internet, e "qualquer conta Google serve" não
+// pode ser o padrão para isso.
+export function emailPermitidoNoConector(env, email) {
+  const permitido = limpo(env.ALLOWED_EMAIL)
+  if (!permitido || !email) return false
+  return String(email).trim().toLowerCase() === permitido.toLowerCase()
+}
+
 // ---------- rotas ----------
 
-async function start(request, env) {
-  const state = randomText()
-  const verifier = randomText(48)
+// O endereço do Google para pedir a autorização, usado pelo login do app e
+// pelo do conector. Os dois precisam pedir o mesmo: mesmos escopos e o refresh
+// token garantido.
+export async function urlDoGoogle(env, { redirectUri, state, verifier }) {
   const params = new URLSearchParams({
     client_id: limpo(env.GOOGLE_CLIENT_ID),
-    redirect_uri: redirectUri(request),
+    redirect_uri: redirectUri,
     response_type: 'code',
     scope: SCOPES,
     // Sem access_type=offline não vem refresh token, e sem prompt=consent o
@@ -166,11 +182,47 @@ async function start(request, env) {
     code_challenge: await challengeFor(verifier),
     code_challenge_method: 'S256',
   })
+  return `${AUTH_URL}?${params}`
+}
 
+// Troca o código da volta do Google por tokens.
+export function trocarCodigo(env, { code, redirectUri, verifier }) {
+  return exchange(env, {
+    code,
+    client_id: limpo(env.GOOGLE_CLIENT_ID),
+    client_secret: limpo(env.GOOGLE_CLIENT_SECRET),
+    redirect_uri: redirectUri,
+    grant_type: 'authorization_code',
+    code_verifier: verifier,
+  })
+}
+
+// Um access token novo a partir do refresh token. O erro carrega `code`
+// (ver exchange): 'invalid_grant' é a autorização que morreu de vez.
+export function renovarAcesso(env, refreshToken) {
+  return exchange(env, {
+    client_id: limpo(env.GOOGLE_CLIENT_ID),
+    client_secret: limpo(env.GOOGLE_CLIENT_SECRET),
+    refresh_token: refreshToken,
+    grant_type: 'refresh_token',
+  })
+}
+
+// O e-mail da conta dona do token, ou null se o Google não disser.
+export async function emailDaConta(accessToken) {
+  const who = await fetch(USERINFO_URL, { headers: { Authorization: `Bearer ${accessToken}` } })
+    .then((r) => (r.ok ? r.json() : null))
+    .catch(() => null)
+  return who?.email || null
+}
+
+async function start(request, env) {
+  const state = randomText()
+  const verifier = randomText(48)
   return new Response(null, {
     status: 302,
     headers: {
-      Location: `${AUTH_URL}?${params}`,
+      Location: await urlDoGoogle(env, { redirectUri: redirectUri(request), state, verifier }),
       'Set-Cookie': setCookie(FLOW_COOKIE, await seal(limpo(env.SESSION_SECRET), { state, verifier }), FLOW_MAX_AGE),
     },
   })
@@ -188,7 +240,7 @@ function backHome(request, reason) {
   })
 }
 
-async function exchange(env, body) {
+export async function exchange(env, body) {
   const res = await fetch(TOKEN_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -220,14 +272,7 @@ async function callback(request, env) {
 
   let tokens
   try {
-    tokens = await exchange(env, {
-      code,
-      client_id: limpo(env.GOOGLE_CLIENT_ID),
-      client_secret: limpo(env.GOOGLE_CLIENT_SECRET),
-      redirect_uri: redirectUri(request),
-      grant_type: 'authorization_code',
-      code_verifier: flow.verifier,
-    })
+    tokens = await trocarCodigo(env, { code, redirectUri: redirectUri(request), verifier: flow.verifier })
   } catch (err) {
     return backHome(request, err.message)
   }
@@ -236,14 +281,12 @@ async function callback(request, env) {
 
   // Quem entrou precisa ser o dono: sem esta conferência, qualquer pessoa
   // abriria /api/auth/start e ganharia uma sessão neste Worker.
-  const who = await fetch(USERINFO_URL, { headers: { Authorization: `Bearer ${tokens.access_token}` } })
-    .then((r) => (r.ok ? r.json() : null))
-    .catch(() => null)
-  if (!allowedEmail(env, who?.email)) return backHome(request, 'conta_nao_autorizada')
+  const email = await emailDaConta(tokens.access_token)
+  if (!allowedEmail(env, email)) return backHome(request, 'conta_nao_autorizada')
 
   const cookie = await seal(limpo(env.SESSION_SECRET), {
     refresh_token: tokens.refresh_token,
-    email: who?.email || null,
+    email,
   })
 
   return new Response(null, {
@@ -267,12 +310,7 @@ async function token(request, env) {
 
   let tokens
   try {
-    tokens = await exchange(env, {
-      client_id: limpo(env.GOOGLE_CLIENT_ID),
-      client_secret: limpo(env.GOOGLE_CLIENT_SECRET),
-      refresh_token: session.refresh_token,
-      grant_type: 'refresh_token',
-    })
+    tokens = await renovarAcesso(env, session.refresh_token)
   } catch (err) {
     // invalid_grant é o Google dizendo que o refresh token morreu (revogado,
     // senha trocada, ou app ainda "em teste", onde ele expira em 7 dias).
