@@ -1,4 +1,5 @@
 import { combinaComABusca } from './notasBusca.js'
+import { textoSemMarcacao } from './notasLinks.js'
 
 // A lista de anotações no jeito do app Notas do iPhone: fixadas primeiro, o
 // resto agrupado pela data da última edição (Hoje, Ontem, 7 dias...), cada
@@ -21,7 +22,7 @@ export function tituloDaNota(note) {
 export function previaDaNota(note) {
   const linhas = linhasDoCorpo(note)
   const previa = note.title?.trim() ? linhas[0] : linhas[1]
-  return previa ? previa.slice(0, 120) : 'Nenhum texto adicional'
+  return previa ? textoSemMarcacao(previa).slice(0, 120) : 'Nenhum texto adicional'
 }
 
 function inicioDoDia(d) {

@@ -22,6 +22,10 @@ import {
   historicoDoProjeto,
   juntarConcluidas,
   trechoDaAnotacao,
+  arquivoDoDrive,
+  tipoDoArquivo,
+  juntarArquivos,
+  tamanhoLegivel,
 } from './projetos.js'
 
 const PROXIMAS = 'l-proximas'
@@ -300,5 +304,50 @@ describe('página do projeto', () => {
     expect(trechoDaAnotacao('Visita   feita.\n\nFamília pediu  retorno.')).toBe('Visita feita. Família pediu retorno.')
     expect(trechoDaAnotacao('palavra '.repeat(50), 20)).toBe('palavra palavra…')
     expect(trechoDaAnotacao(undefined)).toBe('')
+  })
+})
+
+describe('arquivos no Drive do projeto', () => {
+  const agora = new Date('2026-10-30T12:00:00Z')
+
+  it('arquivoDoDrive guarda link, id do Drive, formato e tamanho', () => {
+    const a = arquivoDoDrive(
+      { id: 'abc123', name: 'Relatório.pdf', mimeType: 'application/pdf', webViewLink: 'https://drive.google.com/file/d/abc123/view', size: '2516582' },
+      agora
+    )
+    expect(a).toMatchObject({ url: 'https://drive.google.com/file/d/abc123/view', nome: 'Relatório.pdf', driveId: 'abc123', mime: 'application/pdf', tamanho: 2516582 })
+    expect(tipoDoArquivo(a)).toEqual({ tipo: 'pdf', rotulo: 'PDF' })
+  })
+
+  it('o tipo vem do formato quando há, e do link quando não', () => {
+    expect(tipoDoArquivo({ mime: 'application/vnd.google-apps.spreadsheet', url: 'https://x.com' }).tipo).toBe('planilha')
+    expect(tipoDoArquivo({ mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }).rotulo).toBe('Documento do Word')
+    expect(tipoDoArquivo({ mime: 'image/jpeg' }).tipo).toBe('imagem')
+    expect(tipoDoArquivo({ url: 'https://docs.google.com/document/d/1/edit' }).tipo).toBe('doc')
+  })
+
+  it('o registro sobrevive à normalização da ficha, e lixo não passa', () => {
+    const ficha = normalizarProjeto({
+      id: 'caso',
+      arquivos: [{ id: 'a1', url: 'https://drive.google.com/file/d/x/view', nome: 'x', driveId: 'x', mime: 'image/png', tamanho: 10 }, { id: 'a2', url: 'https://ok.com', driveId: 5, tamanho: -1 }],
+      pasta: { id: 'pasta1' },
+    })
+    expect(ficha.arquivos[0]).toMatchObject({ driveId: 'x', mime: 'image/png', tamanho: 10 })
+    expect(ficha.arquivos[1]).not.toHaveProperty('driveId')
+    expect(ficha.arquivos[1]).not.toHaveProperty('tamanho')
+    expect(ficha.pasta).toEqual({ id: 'pasta1', url: 'https://drive.google.com/drive/folders/pasta1' })
+    expect(normalizarProjeto({ id: 'c', pasta: { url: 'https://x.com' } })).not.toHaveProperty('pasta')
+  })
+
+  it('juntarArquivos não repete o mesmo arquivo do Drive nem o mesmo link', () => {
+    const um = arquivoDoDrive({ id: 'd1', name: 'a', webViewLink: 'https://drive.google.com/file/d/d1/view' }, agora)
+    const lista = juntarArquivos([um], [um, arquivoDoDrive({ id: 'd2', name: 'b' }, agora)])
+    expect(lista.map((a) => a.driveId)).toEqual(['d1', 'd2'])
+  })
+
+  it('tamanhoLegivel em português', () => {
+    expect(tamanhoLegivel(512)).toBe('512 B')
+    expect(tamanhoLegivel(2516582)).toBe('2,4 MB')
+    expect(tamanhoLegivel(undefined)).toBe('')
   })
 })

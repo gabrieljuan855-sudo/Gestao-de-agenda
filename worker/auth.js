@@ -29,6 +29,11 @@ export const SCOPES = [
   // Pasta privada do Drive só deste app — onde as anotações passam a viver,
   // para sincronizar entre aparelhos.
   'https://www.googleapis.com/auth/drive.appdata',
+  // Os arquivos dos projetos (enviados ou criados no app), no Drive visível.
+  // Só os que o próprio app criou: o resto do Drive continua fora de alcance.
+  // Quem já tinha entrado antes continua com a sessão de antes; a permissão
+  // nova vem no próximo consentimento (ver pedirAcessoAosArquivos no app).
+  'https://www.googleapis.com/auth/drive.file',
 ].join(' ')
 
 const SESSION_COOKIE = 'ga_sessao'

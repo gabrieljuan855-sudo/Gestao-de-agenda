@@ -131,6 +131,7 @@ describe('login do conector', () => {
       'https://www.googleapis.com/auth/tasks',
       'https://www.googleapis.com/auth/userinfo.email',
       'https://www.googleapis.com/auth/drive.appdata',
+      'https://www.googleapis.com/auth/drive.file',
     ])
     expect(google.searchParams.get('access_type')).toBe('offline')
     expect(google.searchParams.get('prompt')).toBe('consent')

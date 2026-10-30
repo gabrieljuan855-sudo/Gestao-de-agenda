@@ -105,6 +105,32 @@ export function permissaoDoDriveConcedida() {
   return incluiEscopoDoDrive(grantedScopes)
 }
 
+// Os arquivos dos projetos no Drive visível (enviar do computador, criar
+// Documento/Planilha). Não entra no SCOPES de cima de propósito: a renovação
+// silenciosa do token pede os escopos do SCOPES, e um escopo ainda não
+// concedido ali faria o Google pedir consentimento no meio de uma renovação
+// sem ninguém olhando — e a sessão cairia. Ele é pedido só quando a pessoa
+// toca em "Permitir", e daí em diante vem junto (include_granted_scopes).
+const DRIVE_FILE = 'https://www.googleapis.com/auth/drive.file'
+
+// Mesma convenção de incluiEscopoDoDrive: null = não dá para saber.
+export function permissaoDosArquivos() {
+  if (!grantedScopes || typeof grantedScopes !== 'string') return null
+  return grantedScopes.trim().split(/\s+/).includes(DRIVE_FILE)
+}
+
+export async function pedirAcessoAosArquivos() {
+  if (mode === SERVER) {
+    // O login pelo servidor sempre pede consentimento com todos os escopos,
+    // o drive.file incluído (ver worker/auth.js).
+    window.location.assign('/api/auth/start')
+    return
+  }
+  if (!tokenClient && (await whenGisReady())) becomeReady()
+  if (!tokenClient) return
+  tokenClient.requestAccessToken({ scope: `${SCOPES} ${DRIVE_FILE}`, include_granted_scopes: true, prompt: 'consent' })
+}
+
 function hadSession() {
   try {
     // O STORAGE_KEY entra aqui só por causa de quem já usava o app antes de

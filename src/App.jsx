@@ -1031,6 +1031,7 @@ export default function App() {
           taskLists={taskLists}
           onCreateEvent={handleCreateEvent}
           onCreateTask={handleCreateTask}
+          onAbrirProjeto={abrirProjeto}
         />
       ),
     },

@@ -9,7 +9,9 @@ import {
   completarLink,
   sugerirTitulos,
   renomearLinks,
+  textoSemMarcacao,
 } from './notasLinks.js'
+import { previaDaNota } from './notasLista.js'
 import { sanitizeNote, sanitizeFonte, juntarFontes } from './notasFormato.js'
 
 const nota = (id, title, body = '', extra = {}) => ({ id, title, body, updatedAt: '2026-10-30T10:00:00Z', ...extra })
@@ -153,5 +155,12 @@ describe('renomearLinks', () => {
       n.id === 'a' ? { ...n, title: 'Família Silva' } : n
     )
     expect(renomearLinks(duplicada, 'a', 'Caso Silva').alteradas).toEqual([])
+  })
+})
+
+describe('textoSemMarcacao', () => {
+  it('mostra o nome (ou o apelido) no lugar da marcação, como o Obsidian fora da edição', () => {
+    expect(textoSemMarcacao('Ver [[Caso Silva]], [[Audiência|a audiência]] e [[Relatório#Fim]].')).toBe('Ver Caso Silva, a audiência e Relatório.')
+    expect(previaDaNota({ title: 'X', body: 'Ligado a [[Caso Silva]]' })).toBe('Ligado a Caso Silva')
   })
 })

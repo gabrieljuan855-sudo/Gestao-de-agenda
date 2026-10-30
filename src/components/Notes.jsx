@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import ConfirmDialog from './ConfirmDialog.jsx'
 import Banner from './Banner.jsx'
 import SuggestionCard from './SuggestionCard.jsx'
+import TeiaDasNotas from './TeiaDasNotas.jsx'
 import { AI_MIN_LENGTH, descreverSincronizacao } from '../lib/useNotes.js'
 import { IA_DESLIGADA } from '../lib/aiCooldown.js'
 import { organizarNotas, tituloDaNota, previaDaNota, dataCurta, dataPorExtenso, notaVazia } from '../lib/notasLista.js'
@@ -50,7 +51,7 @@ function tituloQueLiga(nota) {
 // sempre: gravar a cada tecla gastaria uma chamada ao Drive por letra. A IA
 // tem seu próprio timer, bem mais longo (ver AI_IDLE_MS): a ideia é analisar
 // quando a anotação estiver "pronta", não a cada pausa curta de digitação.
-function NoteEditor({ note, projetos = [], onProjetoChange, onChange, onAnalyze, analyzing, syncStatus, calendars, taskLists, onCreateEvent, onCreateTask, onSelectRelated, onVoltar, onAlternarFixada, onExcluir, todas = [], onAbrirNota, onCriarNota, onRenomear }) {
+function NoteEditor({ note, projetos = [], onProjetoChange, onChange, onAnalyze, analyzing, syncStatus, calendars, taskLists, onCreateEvent, onCreateTask, onSelectRelated, onVoltar, onAlternarFixada, onExcluir, todas = [], onAbrirNota, onCriarNota, onRenomear, onVerNaTeia }) {
   const [title, setTitle] = useState(note.title)
   const [body, setBody] = useState(note.body)
   const firstRender = useRef(true)
@@ -173,6 +174,11 @@ function NoteEditor({ note, projetos = [], onProjetoChange, onChange, onAnalyze,
     onVoltar({ title, body })
   }
 
+  function verNaTeia() {
+    confirmarTitulo()
+    onVerNaTeia({ title, body })
+  }
+
   // O mesmo cuidado para sair por um link: a gravação pendente vai junto antes
   // de trocar de nota (a troca cancela o debounce).
   function irPara(acao) {
@@ -241,6 +247,14 @@ function NoteEditor({ note, projetos = [], onProjetoChange, onChange, onAnalyze,
           Anotações
         </button>
         <div style={{ flex: 1 }} />
+        <button type="button" className="icon-btn" onClick={verNaTeia} aria-label="Ver na teia de ligações" title="Ver na teia de ligações">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <circle cx="6" cy="6" r="2.5" />
+            <circle cx="18" cy="8" r="2.5" />
+            <circle cx="10" cy="18" r="2.5" />
+            <path d="M8.3 7l7.3 0.8M7.2 8.2l1.8 7.5M16.6 10.2l-5 6" />
+          </svg>
+        </button>
         <button
           type="button"
           className={`icon-btn${note.fixada ? ' icon-btn--live' : ''}`}
@@ -579,7 +593,18 @@ function NoteSearch({ onSearch, searching, result, error, onDismiss, onOpenNote 
 // O estado de verdade (as anotações, qual está selecionada, a sincronização
 // com o Drive, a análise por IA) mora em useNotes — este componente só existe
 // enquanto o painel do trilho está aberto.
-export default function Notes({ notesState, projetos = [], calendars = [], taskLists = [], onCreateEvent, onCreateTask }) {
+// Lista ou teia: a escolha fica neste aparelho (é preferência de quem olha,
+// não dado da anotação), e some sem prejuízo se o armazenamento falhar.
+const MODO_KEY = 'gestao-agenda:anotacoes-modo'
+function lerModo() {
+  try {
+    return localStorage.getItem(MODO_KEY) === 'teia' ? 'teia' : 'lista'
+  } catch {
+    return 'lista'
+  }
+}
+
+export default function Notes({ notesState, projetos = [], calendars = [], taskLists = [], onCreateEvent, onCreateTask, onAbrirProjeto }) {
   const {
     notes,
     selectedId,
@@ -607,6 +632,18 @@ export default function Notes({ notesState, projetos = [], calendars = [], taskL
   // prestes a sumir e mostrar o título dela na pergunta.
   const [pendingDeleteId, setPendingDeleteId] = useState(null)
   const pendingDelete = notes.find((n) => n.id === pendingDeleteId)
+  const [modo, setModoNoEstado] = useState(lerModo)
+  // A nota de onde se veio ("Ver na teia"), para a teia abrir com ela acesa.
+  const [focoDaTeia, setFocoDaTeia] = useState(null)
+
+  function setModo(novo) {
+    setModoNoEstado(novo)
+    try {
+      localStorage.setItem(MODO_KEY, novo)
+    } catch {
+      // Sem armazenamento: vale só até fechar.
+    }
+  }
 
   // Voltar de uma anotação que ficou em branco a descarta, como no Notas —
   // tocar no "+" e desistir não pode deixar uma "Nova anotação" vazia na lista.
@@ -656,6 +693,11 @@ export default function Notes({ notesState, projetos = [], calendars = [], taskL
             onAbrirNota={setSelectedId}
             onCriarNota={(titulo) => createNote({ title: titulo })}
             onRenomear={(tituloAntigo) => renomearLinksDaNota(selected.id, tituloAntigo)}
+            onVerNaTeia={(atual) => {
+              setFocoDaTeia(selected.id)
+              setModo('teia')
+              voltar(selected.id, atual)
+            }}
           />
         </>
       ) : (
@@ -673,7 +715,44 @@ export default function Notes({ notesState, projetos = [], calendars = [], taskL
             />
           )}
           {banners}
-          <ListaDeNotas notes={notes} loading={loading} onAbrir={setSelectedId} onCriar={() => createNote()} />
+          {/* Botões segmentados do MD3: duas formas de ver a mesma coisa,
+              uma de cada vez. Não é aba (não há conteúdos diferentes), nem
+              chip (não filtra nada). */}
+          {notes.length > 0 && (
+            <div className="segmentado notas-modo" role="radiogroup" aria-label="Ver as anotações como">
+              {[
+                ['lista', 'Lista'],
+                ['teia', 'Teia'],
+              ].map(([id, rotulo]) => (
+                <button
+                  key={id}
+                  type="button"
+                  role="radio"
+                  aria-checked={modo === id}
+                  className={modo === id ? 'is-escolhido' : ''}
+                  onClick={() => setModo(id)}
+                >
+                  {modo === id && (
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <polyline points="5 12 10 17 19 7" />
+                    </svg>
+                  )}
+                  {rotulo}
+                </button>
+              ))}
+            </div>
+          )}
+          {modo === 'teia' && notes.length > 0 ? (
+            <TeiaDasNotas
+              notas={notes}
+              projetos={projetos}
+              focoInicial={focoDaTeia}
+              onAbrirNota={setSelectedId}
+              onAbrirProjeto={onAbrirProjeto}
+            />
+          ) : (
+            <ListaDeNotas notes={notes} loading={loading} onAbrir={setSelectedId} onCriar={() => createNote()} />
+          )}
         </>
       )}
 
