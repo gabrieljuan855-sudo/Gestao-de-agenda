@@ -227,6 +227,7 @@ describe('agenda e visão geral', () => {
 })
 
 describe('base de conhecimento', () => {
+  const chave = (t) => t.toLowerCase()
   const nota = (id, title, body, extra = {}) => ({ id, title, body, createdAt: '2026-10-01T10:00:00.000Z', updatedAt: '2026-10-29T10:00:00.000Z', ...extra })
 
   it('importar_fonte cria a nota da fonte e uma por ideia, ligadas e com a fonte, numa gravação só', async () => {
@@ -289,6 +290,53 @@ describe('base de conhecimento', () => {
     expect(criada.fontes).toEqual([{ titulo: 'LOAS', url: 'https://planalto.gov.br/' }])
     await f.atualizarNota(api, agora, { id: criada.id, fontes: [{ titulo: 'loas' }, { titulo: 'Decreto' }] })
     expect(g.lerArquivo('anotacoes.json').notes[0].fontes.map((x) => x.titulo)).toEqual(['LOAS', 'Decreto'])
+  })
+
+  it('buscar_notas acha por palavras soltas, em ordem de relevância, e aponta as notas vizinhas', async () => {
+    g.gravarArquivo('anotacoes.json', {
+      notes: [
+        nota('a', 'Recursos para PSR', 'O edital da prefeitura abre em março. Detalhes em [[Fundo estadual]].'),
+        nota('b', 'Reunião de equipe', 'Falamos do edital de compras, de passagem.'),
+        nota('f', 'Fundo estadual', 'Repasse anual, inscrição até abril.'),
+        nota('m', 'Mercado', 'arroz'),
+      ],
+      deleted: [],
+    })
+    const texto = await f.buscarNotas(api, agora, { texto: 'editais população rua PSR' })
+    expect(texto.indexOf('[nota: a]')).toBeLessThan(texto.indexOf('[nota: b]'))
+    expect(texto).toContain('liga a: [[Fundo estadual]]')
+    expect(texto).toMatch(/Ligadas a esses resultados[^]*Fundo estadual \[nota: f\]/)
+    expect(texto).not.toContain('[nota: m]')
+  })
+
+  it('atualizar_nota com título novo leva junto os links das outras notas', async () => {
+    g.gravarArquivo('anotacoes.json', {
+      notes: [nota('a', 'Caso Silva', 'texto'), nota('b', 'Audiência', 'Ver [[Caso Silva|o caso]].')],
+      deleted: [],
+    })
+    const r = await f.atualizarNota(api, agora, { id: 'a', titulo: 'Família Silva' })
+    const { notes } = g.lerArquivo('anotacoes.json')
+    expect(notes.find((n) => n.id === 'b').body).toBe('Ver [[Família Silva|o caso]].')
+    expect(r).toMatch(/Links atualizados para o título novo em 1 nota/)
+  })
+
+  it('guardar_resposta cria a nota ligada às notas de origem, e soma se o título já existir', async () => {
+    g.gravarArquivo('anotacoes.json', {
+      notes: [nota('a', 'Recursos para PSR', 'edital'), nota('f', 'Fundo estadual', 'repasse')],
+      deleted: [],
+    })
+    const r = await f.guardarResposta(api, agora, { titulo: 'Editais abertos', resposta: 'Dois: o da prefeitura e o estadual.', baseada_em: ['a', 'f', 'a'] })
+    let { notes } = g.lerArquivo('anotacoes.json')
+    const guardada = notes.find((n) => n.title === 'Editais abertos')
+    expect(guardada.body).toBe('Dois: o da prefeitura e o estadual.\n\nBaseada em: [[Recursos para PSR]], [[Fundo estadual]]')
+    expect(r).toMatch(/ligada a 2 notas/)
+
+    await f.guardarResposta(api, agora, { titulo: 'editais abertos', resposta: 'Abriu mais um.' })
+    ;({ notes } = g.lerArquivo('anotacoes.json'))
+    expect(notes.filter((n) => chave(n.title) === 'editais abertos')).toHaveLength(1)
+    expect(notes.find((n) => n.id === guardada.id).body).toMatch(/\n\nsex\. 30\/10\/2026:\nAbriu mais um\.$/)
+
+    await expect(f.guardarResposta(api, agora, { titulo: 'x', resposta: 'y', baseada_em: ['inventado'] })).rejects.toThrow(/Não existe anotação/)
   })
 
   it('saude_das_notas aponta link quebrado, nota solta e título repetido', async () => {

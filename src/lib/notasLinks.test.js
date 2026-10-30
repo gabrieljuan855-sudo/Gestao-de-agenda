@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { extrairLinks, ligacoesDaNota, saudeDasNotas, indiceDeTitulos, resolverLink } from './notasLinks.js'
+import {
+  extrairLinks,
+  ligacoesDaNota,
+  saudeDasNotas,
+  indiceDeTitulos,
+  resolverLink,
+  linkEmDigitacao,
+  completarLink,
+  sugerirTitulos,
+  renomearLinks,
+} from './notasLinks.js'
 import { sanitizeNote, sanitizeFonte, juntarFontes } from './notasFormato.js'
 
 const nota = (id, title, body = '', extra = {}) => ({ id, title, body, updatedAt: '2026-10-30T10:00:00Z', ...extra })
@@ -80,5 +90,68 @@ describe('fontes da nota', () => {
     expect(limpa.fontes).toEqual([{ titulo: 'Artigo' }])
     expect('fontes' in sanitizeNote({ id: 'n', fontes: [] })).toBe(false)
     expect(juntarFontes([{ titulo: 'A' }], [{ titulo: 'B' }, { titulo: 'a' }]).map((f) => f.titulo)).toEqual(['A', 'B'])
+  })
+})
+
+describe('sugestões ao digitar [[', () => {
+  it('percebe o link em digitação e o que já foi escrito', () => {
+    expect(linkEmDigitacao('Ver [[Cas', 9)).toEqual({ inicio: 6, parcial: 'Cas' })
+    expect(linkEmDigitacao('Ver [[', 6)).toEqual({ inicio: 6, parcial: '' })
+    expect(linkEmDigitacao('Ver [[Caso]] e', 14)).toBeNull()
+    expect(linkEmDigitacao('Ver [[Cas\nnova linha', 20)).toBeNull()
+  })
+
+  it('completa com o título e põe o cursor depois do ]], sem fechar duas vezes', () => {
+    expect(completarLink('Ver [[Cas e mais', 9, 'Caso Silva')).toEqual({ texto: 'Ver [[Caso Silva]] e mais', cursor: 18 })
+    expect(completarLink('Ver [[Cas]] e mais', 9, 'Caso Silva')).toEqual({ texto: 'Ver [[Caso Silva]] e mais', cursor: 18 })
+    expect(completarLink('sem link', 3, 'X')).toBeNull()
+  })
+
+  it('sugere primeiro quem começa com o digitado, depois palavra, depois o resto', () => {
+    const notas = [
+      nota('a', 'Audiência do caso', '', { updatedAt: '2026-10-01T00:00:00Z' }),
+      nota('b', 'Caso Silva', '', { updatedAt: '2026-10-02T00:00:00Z' }),
+      nota('c', 'Ocaso', '', { updatedAt: '2026-10-03T00:00:00Z' }),
+      nota('d', 'caso silva', '', { updatedAt: '2026-09-01T00:00:00Z' }),
+      nota('e', '', ''),
+      nota('f', 'Mercado'),
+    ]
+    expect(sugerirTitulos(notas, 'caso')).toEqual(['Caso Silva', 'Audiência do caso', 'Ocaso'])
+    // Sem nada digitado, as mais recentes ("Mercado" é a última editada).
+    expect(sugerirTitulos(notas, '', { excetoId: 'c', limite: 2 })).toEqual(['Mercado', 'Caso Silva'])
+  })
+})
+
+describe('renomearLinks', () => {
+  const base = () => [
+    nota('a', 'Caso Silva', 'texto'),
+    nota('b', 'Audiência', 'Ver [[Caso Silva]], [[caso silva|o caso]] e [[Caso Silva#Histórico]]. Também [[Outro]].'),
+    nota('c', 'Solta', 'nada aqui'),
+  ]
+
+  it('reescreve os links do título antigo, mantendo apelido e seção', () => {
+    const notas = base().map((n) => (n.id === 'a' ? { ...n, title: 'Família Silva' } : n))
+    const { notas: novas, alteradas } = renomearLinks(notas, 'a', 'Caso Silva', '2026-10-31T00:00:00Z')
+    expect(alteradas.map((n) => n.id)).toEqual(['b'])
+    expect(novas.find((n) => n.id === 'b').body).toBe(
+      'Ver [[Família Silva]], [[Família Silva|o caso]] e [[Família Silva#Histórico]]. Também [[Outro]].'
+    )
+    expect(novas.find((n) => n.id === 'b').updatedAt).toBe('2026-10-31T00:00:00.000Z')
+    expect(novas.find((n) => n.id === 'c')).toBe(notas.find((n) => n.id === 'c'))
+  })
+
+  it('a nota alterada fica mais nova que a versão lida, mesmo com o relógio de outro aparelho adiantado', () => {
+    const notas = base().map((n) => (n.id === 'a' ? { ...n, title: 'Família Silva' } : n.id === 'b' ? { ...n, updatedAt: '2026-12-01T00:00:00.000Z' } : n))
+    const { alteradas } = renomearLinks(notas, 'a', 'Caso Silva', '2026-10-31T00:00:00.000Z')
+    expect(alteradas[0].updatedAt).toBe('2026-12-01T00:00:00.001Z')
+  })
+
+  it('não mexe quando só mudou acento ou caixa, ou quando o título antigo era de outra nota também', () => {
+    const soCaixa = base().map((n) => (n.id === 'a' ? { ...n, title: 'caso silva' } : n))
+    expect(renomearLinks(soCaixa, 'a', 'Caso Silva').alteradas).toEqual([])
+    const duplicada = [...base(), nota('d', 'Caso Silva', 'outra com o mesmo título')].map((n) =>
+      n.id === 'a' ? { ...n, title: 'Família Silva' } : n
+    )
+    expect(renomearLinks(duplicada, 'a', 'Caso Silva').alteradas).toEqual([])
   })
 })

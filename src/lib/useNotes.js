@@ -5,6 +5,7 @@ import { mesclarAnotacoes, mesclarApagadas, mesclarParaGravar, precisaSubir } fr
 import { analyzeNoteWithAI } from './aiAnalyzeNote.js'
 import { searchNotes } from './aiSearchNotes.js'
 import { newNote, textoOuVazio, sanitizeNotes } from './notasFormato.js'
+import { renomearLinks } from './notasLinks.js'
 
 // Continuam sendo importados daqui pelo resto do app e pelos testes.
 export { sanitizeNote, sanitizeNotes } from './notasFormato.js'
@@ -289,6 +290,15 @@ export default function useNotes({ signedIn }) {
     )
   }
 
+  // Depois que o título de uma nota muda de vez (a pessoa saiu do campo ou
+  // da nota), os [[links]] das outras notas passam a usar o título novo. Não
+  // a cada tecla: um título no meio da digitação ("Caso S") poderia coincidir
+  // com o de outra nota e levar os links para o lugar errado.
+  function renomearLinksDaNota(id, tituloAntigo) {
+    const { notas, alteradas } = renomearLinks(notesRef.current, id, tituloAntigo)
+    if (alteradas.length) persist(notas)
+  }
+
   // A exclusão precisa deixar rastro: é só por ele que o outro aparelho
   // distingue "esta anotação foi apagada" de "esta anotação ainda não subiu"
   // — sem isso, a mesclagem devolveria para a tela tudo que foi apagado.
@@ -381,6 +391,7 @@ export default function useNotes({ signedIn }) {
     dismissAiError: () => setAiError(null),
     createNote,
     updateNote,
+    renomearLinksDaNota,
     deleteNote,
     analyzeNote,
     analyzingIds,

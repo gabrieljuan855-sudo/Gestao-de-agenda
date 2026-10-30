@@ -1,4 +1,4 @@
-import { semAcento } from './texto.js'
+import { combinaComABusca } from './notasBusca.js'
 
 // A lista de anotações no jeito do app Notas do iPhone: fixadas primeiro, o
 // resto agrupado pela data da última edição (Hoje, Ontem, 7 dias...), cada
@@ -67,12 +67,12 @@ export function notaVazia(note) {
   return !note.title?.trim() && !note.body?.trim()
 }
 
-// Seções prontas para a tela, já filtradas pela busca (sem acento e sem
-// diferença de maiúscula, no título e no texto).
+// Seções prontas para a tela, já filtradas pela busca: todas as palavras,
+// em qualquer ordem e sem acento (ver combinaComABusca, a mesma regra do
+// conector do Claude).
 export function organizarNotas(notes, agora, busca = '') {
-  const termo = semAcento(busca.trim().toLowerCase())
   const filtradas = (notes || [])
-    .filter((n) => !termo || semAcento(`${n.title || ''}\n${n.body || ''}`.toLowerCase()).includes(termo))
+    .filter((n) => combinaComABusca(n, busca))
     .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
 
   const secoes = []

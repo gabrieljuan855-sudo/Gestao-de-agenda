@@ -104,3 +104,94 @@ export function saudeDasNotas(notas) {
     vazias: lista.filter(vazia),
   }
 }
+
+// ---------- escrever ligado: sugestões ao digitar [[ ----------
+
+// O link que está sendo digitado agora: um "[[" antes do cursor, na mesma
+// linha, ainda sem fechar. Devolve onde começa o nome e o que já foi digitado.
+export function linkEmDigitacao(texto, cursor) {
+  const antes = (texto || '').slice(0, cursor)
+  const m = antes.match(/\[\[([^[\]\n|#]*)$/)
+  if (!m) return null
+  return { inicio: cursor - m[1].length, parcial: m[1] }
+}
+
+// Completa o link em digitação com o título escolhido e devolve o texto novo
+// e onde o cursor fica (logo depois do "]]"). Se o "]]" já estiver ali (a
+// pessoa voltou para corrigir o nome), não fecha de novo.
+export function completarLink(texto, cursor, titulo) {
+  const emDigitacao = linkEmDigitacao(texto, cursor)
+  if (!emDigitacao) return null
+  const depois = texto.slice(cursor)
+  const resto = depois.startsWith(']]') ? depois.slice(2) : depois
+  const novo = `${texto.slice(0, emDigitacao.inicio)}${titulo}]]`
+  return { texto: novo + resto, cursor: novo.length }
+}
+
+// Títulos para sugerir enquanto se digita o link: primeiro os que começam com
+// o que foi digitado, depois os que têm uma palavra começando assim, depois
+// os que só contêm; dentro de cada grupo, o mais recente primeiro. Sem nada
+// digitado, as notas mais recentes.
+export function sugerirTitulos(notas, parcial, { excetoId, limite = 5 } = {}) {
+  const busca = chaveDeTitulo(parcial)
+  const vistos = new Set()
+  const candidatos = []
+  for (const nota of [...(notas || [])].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))) {
+    if (nota.id === excetoId) continue
+    const titulo = tituloDaNota(nota)
+    const chave = chaveDeTitulo(titulo)
+    if (!chave || vistos.has(chave) || (!nota.title?.trim() && !nota.body?.trim())) continue
+    let grupo
+    if (!busca || chave.startsWith(busca)) grupo = 0
+    else if (chave.split(' ').some((p) => p.startsWith(busca))) grupo = 1
+    else if (chave.includes(busca)) grupo = 2
+    else continue
+    vistos.add(chave)
+    candidatos.push({ titulo, grupo })
+  }
+  return candidatos
+    .sort((a, b) => a.grupo - b.grupo)
+    .slice(0, limite)
+    .map((c) => c.titulo)
+}
+
+// ---------- renomear sem quebrar ----------
+
+// Trocar o título de uma nota quebraria todos os [[links]] que apontam para
+// ela, porque o link é pelo título. Isto reescreve esses links com o título
+// novo, mantendo o apelido e a seção ([[Velho|texto]] vira [[Novo|texto]]).
+//
+// Só mexe quando o título antigo era desta nota e de mais nenhuma: com duas
+// notas de mesmo título, não dá para saber para qual delas cada link
+// apontava, e reescrever levaria links da outra junto. Devolve a lista nova e
+// as notas alteradas (com updatedAt novo, para a mesclagem com o Drive
+// preferir esta versão).
+export function renomearLinks(notas, id, tituloAntigo, agoraIso = new Date().toISOString()) {
+  const lista = notas || []
+  const nota = lista.find((n) => n.id === id)
+  const chaveAntiga = chaveDeTitulo(tituloAntigo)
+  if (!nota || !chaveAntiga) return { notas: lista, alteradas: [] }
+  const tituloNovo = tituloDaNota(nota)
+  if (!chaveDeTitulo(tituloNovo) || chaveDeTitulo(tituloNovo) === chaveAntiga) return { notas: lista, alteradas: [] }
+  if (lista.some((n) => n.id !== id && chaveDeTitulo(tituloDaNota(n)) === chaveAntiga)) return { notas: lista, alteradas: [] }
+
+  const alteradas = []
+  const novas = lista.map((n) => {
+    if (!n.body) return n
+    const body = n.body.replace(LINK, (inteiro, bruto) => {
+      const corte = bruto.search(/[|#]/)
+      const alvo = corte < 0 ? bruto : bruto.slice(0, corte)
+      if (chaveDeTitulo(alvo) !== chaveAntiga) return inteiro
+      return `[[${tituloNovo}${corte < 0 ? '' : bruto.slice(corte)}]]`
+    })
+    if (body === n.body) return n
+    // Estritamente depois da versão que foi lida: com o relógio de outro
+    // aparelho adiantado, "agora" poderia ser mais velho que ela, e a
+    // mesclagem ficaria com o link quebrado.
+    const depois = new Date(Math.max(Date.parse(agoraIso), (Date.parse(n.updatedAt) || 0) + 1)).toISOString()
+    const alterada = { ...n, body, updatedAt: n.id === id ? n.updatedAt : depois }
+    alteradas.push(alterada)
+    return alterada
+  })
+  return { notas: novas, alteradas }
+}
