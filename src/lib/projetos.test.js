@@ -13,6 +13,7 @@ import {
   vincularArquivo,
   panoramaDosProjetos,
   fichaParaEtiqueta,
+  linhaDoTempoDoProjeto,
   projetosForaDaCobranca,
   pareceIdeia,
   normalizarMarcos,
@@ -381,5 +382,35 @@ describe('coerência da situação', () => {
   it('dá uma ficha legível a uma etiqueta solta', () => {
     expect(fichaParaEtiqueta('caso-maria', agora)).toMatchObject({ id: 'caso-maria', nome: 'Caso maria', situacao: 'ativo', tipo: 'projeto' })
     expect(fichaParaEtiqueta('', agora)).toBeNull()
+  })
+})
+
+describe('linhaDoTempoDoProjeto', () => {
+  const inicio = (e) => new Date(e.start.dateTime)
+  it('junta tarefa, compromisso, anotação, arquivo e a criação, do mais recente ao mais antigo', () => {
+    const itens = linhaDoTempoDoProjeto(
+      {
+        projeto: { id: 'p', nome: 'P', createdAt: '2026-10-01T10:00:00Z', arquivos: [{ id: 'a1', url: 'https://x.com/a.pdf', nome: 'a.pdf', adicionadoEm: '2026-10-05T10:00:00Z' }] },
+        concluidas: [{ id: 't1', title: 'Ligar', status: 'completed', completed: '2026-10-10T10:00:00Z' }],
+        eventosPassados: [{ id: 'e1', calendarId: 'c', summary: 'Reunião', start: { dateTime: '2026-10-08T10:00:00Z' } }],
+        notas: [
+          { id: 'n1', title: 'Ata', createdAt: '2026-10-02T10:00:00Z', updatedAt: '2026-10-09T10:00:00Z' },
+          { id: 'n2', title: 'Nova', createdAt: '2026-10-03T10:00:00Z', updatedAt: '2026-10-03T10:00:20Z' },
+        ],
+      },
+      inicio
+    )
+    expect(itens.map((i) => i.rotulo)).toEqual([
+      'Tarefa concluída',
+      'Anotação editada',
+      'Compromisso',
+      'Arquivo adicionado',
+      'Anotação criada',
+      'Projeto criado',
+    ])
+  })
+
+  it('projeto só de etiqueta não tem "Projeto criado"', () => {
+    expect(linhaDoTempoDoProjeto({ projeto: { id: 'x', nome: 'x', implicito: true, createdAt: '2026-10-01T10:00:00Z' } }, () => null)).toEqual([])
   })
 })

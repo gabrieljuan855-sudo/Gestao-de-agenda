@@ -3427,3 +3427,92 @@ a.link-btn { display: inline-flex; align-items: center; min-height: 36px; font-s
 .projeto-arquivo-tipos { display: flex; flex-wrap: wrap; gap: 6px; }
 .projeto-arquivos-rodape { align-items: center; }
 .projeto-arquivos-rodape > * { min-height: 36px; }
+
+/* ---------- página do projeto em abas ----------
+   Primary tabs do MD3, só com rótulo: 48dp, indicador de 3dp colado embaixo
+   da aba ativa. Seis abas não cabem num celular, então a barra rola na
+   horizontal em vez de espremer os rótulos. */
+.projeto-abas {
+  display: flex;
+  gap: 0;
+  margin: 12px 0 14px;
+  border-bottom: 1px solid var(--outline-variant);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.projeto-abas::-webkit-scrollbar { display: none; }
+.projeto-aba {
+  position: relative;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 48px;
+  padding: 0 14px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--on-surface-variant);
+  font-size: var(--body-md);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.projeto-aba.is-ativa { color: var(--primary); }
+.projeto-aba.is-ativa::before {
+  content: '';
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 0;
+  height: 3px;
+  border-radius: 3px 3px 0 0;
+  background: var(--primary);
+}
+.projeto-aba-contagem {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: var(--shape-full);
+  background: var(--surface-variant);
+  color: var(--on-surface-variant);
+  font-size: var(--label-sm);
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.projeto-aba.is-ativa .projeto-aba-contagem { background: var(--primary-container); color: var(--on-primary-container); }
+.projeto-painel { display: flex; flex-direction: column; gap: 16px; }
+
+/* A ficha em três linhas de rótulo e valor: o que é, em que pé está, quando. */
+.projeto-ficha-resumo {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 6px 16px;
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: var(--shape-md);
+  background: var(--surface-variant);
+}
+.projeto-ficha-resumo > div { display: contents; }
+.projeto-ficha-resumo dt { font-size: var(--label-md); color: var(--on-surface-variant); padding-top: 2px; }
+.projeto-ficha-resumo dd { margin: 0; font-size: var(--body-md); overflow-wrap: anywhere; }
+
+/* Os números do projeto, cada um a porta para a aba dele. */
+.projeto-numeros { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; }
+.projeto-numero {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 12px 14px;
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--shape-md);
+  background: var(--surface-raised);
+  color: var(--on-surface);
+  text-align: left;
+}
+.projeto-numero strong { font-family: var(--font-heading); font-size: var(--title-lg); }
+.projeto-numero span { font-size: var(--label-md); color: var(--on-surface-variant); }
+.projeto-numero .projeto-numero-alerta { color: var(--urgent); font-weight: 600; }
+.projeto-linha-rotulo { display: block; }

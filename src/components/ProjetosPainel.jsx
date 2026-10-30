@@ -31,7 +31,7 @@ import {
   alternarMarco,
   removerMarco,
   proximoMarco,
-  historicoDoProjeto,
+  linhaDoTempoDoProjeto,
   juntarConcluidas,
   trechoDaAnotacao,
 } from '../lib/projetos.js'
@@ -770,14 +770,74 @@ function PaginaDoProjeto({
 
   const agora = new Date()
   const proximos = (eventos || []).filter((ev) => eventStart(ev) >= agora)
-  const historico = historicoDoProjeto(
-    {
-      concluidas: juntarConcluidas(grupos.concluidas, concluidasBuscadas.filter((t) => t.projeto === projeto.id)),
-      eventosPassados: (eventos || []).filter((ev) => eventStart(ev) < agora),
-    },
+  const passados = (eventos || []).filter((ev) => eventStart(ev) < agora).reverse()
+  const concluidasDoProjeto = juntarConcluidas(grupos.concluidas, concluidasBuscadas.filter((t) => t.projeto === projeto.id)).sort(
+    (a, b) => new Date(b.completed || 0) - new Date(a.completed || 0)
+  )
+  const linhaDoTempo = linhaDoTempoDoProjeto(
+    { projeto, concluidas: concluidasDoProjeto, eventosPassados: passados, notas: anotacoes },
     eventStart
   )
-  const historicoVisivel = historicoTodo ? historico : historico.slice(0, HISTORICO_INICIAL)
+  const atrasadas = aFazer.filter(({ task }) => isOverdueTask(task)).length
+
+  // A aba aberta é a única coisa da página que não vem do projeto: começa
+  // sempre no Resumo, que é a resposta para "em que pé está".
+  const [aba, setAba] = useState('resumo')
+  const abas = [
+    { id: 'resumo', rotulo: 'Resumo' },
+    { id: 'tarefas', rotulo: 'Tarefas', contagem: aFazer.length },
+    { id: 'anotacoes', rotulo: 'Anotações', contagem: anotacoes.length },
+    { id: 'arquivos', rotulo: 'Arquivos', contagem: (projeto.arquivos || []).length },
+    { id: 'compromissos', rotulo: 'Compromissos', contagem: proximos.length },
+    { id: 'linha', rotulo: 'Linha do tempo' },
+  ]
+
+  function abrirDaLinha(h) {
+    if (h.tipo === 'tarefa') onEditarTarefa(h.item)
+    else if (h.tipo === 'compromisso') onEditarEvento(h.item)
+    else if (h.tipo === 'nota') onAbrirNota(h.item.id)
+    else if (h.tipo === 'arquivo') window.open(h.item.url, '_blank', 'noopener,noreferrer')
+  }
+
+  const linhaDoEvento = (ev) => (
+    <button key={`${ev.calendarId}-${ev.id}`} type="button" className="projeto-evento" onClick={() => onEditarEvento(ev)}>
+      <span className="projeto-evento-quando">{quandoDoEvento(ev)}</span>
+      <span className="projeto-evento-titulo">{semEtiqueta(ev.summary, projeto.id)}</span>
+    </button>
+  )
+
+  const destaque = projeto.proximaAcao ? (
+    <div className="projeto-destaque">
+      <span className="t-label-sm">{rotina ? 'Próximo item da pauta' : 'Próxima ação'}</span>
+      <strong className="projeto-destaque-texto">{projeto.proximaAcao.title}</strong>
+      {/* Uma "ação" do tamanho de um parágrafo é uma ideia inteira:
+          quem lê não sabe por onde começar. */}
+      {pareceIdeia(projeto.proximaAcao.title) && (
+        <div className="projeto-aviso-ideia">
+          <span>Parece uma ideia, não um passo.</span>
+          <button type="button" onClick={() => onEditarTarefa(projeto.proximaAcao)}>Reescrever</button>
+        </div>
+      )}
+    </div>
+  ) : projeto.semProximaAcao ? (
+    <div className="projeto-destaque is-vazio">
+      <span className="t-label-sm">Próxima ação</span>
+      <strong className="projeto-destaque-texto">Nenhuma. Qual é o próximo passo?</strong>
+    </div>
+  ) : null
+
+  const captura = (
+    <CapturaNoProjeto
+      projetoId={projeto.id}
+      idProximas={ids.idProximas}
+      onCreateEvent={async (preview) => {
+        const r = await onCreateEvent(preview)
+        setVersaoEventos((v) => v + 1)
+        return r
+      }}
+      onCreateTask={onCreateTask}
+    />
+  )
 
   async function concluir(task) {
     await onConcluirTarefa(task)
@@ -807,7 +867,6 @@ function PaginaDoProjeto({
               <span className="pill projeto-pill-situacao">{SITUACOES.find((x) => x.id === projeto.situacao)?.label}</span>
             )}
           </h2>
-          {projeto.resultado && <p className="muted projeto-resultado">{projeto.resultado}</p>}
         </div>
         <button type="button" className="projeto-configurar" onClick={() => setConfigurando(true)}>
           Configurar
@@ -831,122 +890,142 @@ function PaginaDoProjeto({
         </Banner>
       )}
 
-      {projeto.proximaAcao ? (
-        <div className="projeto-destaque">
-          <span className="t-label-sm">{rotina ? 'Próximo item da pauta' : 'Próxima ação'}</span>
-          <strong className="projeto-destaque-texto">{projeto.proximaAcao.title}</strong>
-          {/* Uma "ação" do tamanho de um parágrafo é uma ideia inteira:
-              quem lê não sabe por onde começar. */}
-          {pareceIdeia(projeto.proximaAcao.title) && (
-            <div className="projeto-aviso-ideia">
-              <span>Parece uma ideia, não um passo.</span>
-              <button type="button" onClick={() => onEditarTarefa(projeto.proximaAcao)}>Reescrever</button>
-            </div>
-          )}
-        </div>
-      ) : (
-        projeto.semProximaAcao && (
-          <div className="projeto-destaque is-vazio">
-            <span className="t-label-sm">Próxima ação</span>
-            <strong className="projeto-destaque-texto">Nenhuma. Qual é o próximo passo?</strong>
-          </div>
-        )
-      )}
+      {/* Primary tabs do MD3: seis visões do mesmo projeto, uma de cada vez.
+          Antes tudo vinha numa página só, em duas colunas, e um projeto com
+          histórico longo virava uma rolagem sem fim. */}
+      <div className="projeto-abas" role="tablist" aria-label="Partes do projeto">
+        {abas.map((a) => (
+          <button
+            key={a.id}
+            type="button"
+            role="tab"
+            id={`projeto-aba-${a.id}`}
+            aria-selected={aba === a.id}
+            aria-controls={`projeto-painel-${a.id}`}
+            className={`projeto-aba${aba === a.id ? ' is-ativa' : ''}`}
+            onClick={() => setAba(a.id)}
+          >
+            {a.rotulo}
+            {a.contagem > 0 && <span className="projeto-aba-contagem">{a.contagem}</span>}
+          </button>
+        ))}
+      </div>
 
-      <CapturaNoProjeto
-        projetoId={projeto.id}
-        idProximas={ids.idProximas}
-        onCreateEvent={async (preview) => {
-          const r = await onCreateEvent(preview)
-          setVersaoEventos((v) => v + 1)
-          return r
-        }}
-        onCreateTask={onCreateTask}
-      />
-
-      <AssistenteDoProjeto
-        projeto={projeto}
-        grupos={grupos}
-        anotacoes={anotacoes}
-        contextos={[...new Set(tasks.map((t) => t.contexto).filter(Boolean))]}
-        idProximas={ids.idProximas}
-        onCreateTask={onCreateTask}
-        onSalvar={onSalvar}
-        onAtualizarTarefa={onAtualizarTarefa}
-        onSalvarAnotacao={onSalvarAnotacao}
-        onAbrirNota={onAbrirNota}
-      />
-
-      {/* O que se faz à esquerda (a fazer, feito, agenda); o que se consulta
-          à direita (anotações, marcos, arquivos). No celular, empilham. */}
-      <div className="projeto-colunas">
-        <div className="projeto-coluna">
-          <section>
-            <h3 className="projetos-secao">{rotina ? 'Pauta' : 'A fazer'} · {aFazer.length}</h3>
-            {aFazer.length === 0 ? (
-              <p className="muted projeto-vazio">Nada pendente.</p>
-            ) : (
-              <div className="aguardando-lista">
-                {aFazer.map(({ task, origem }) => (
-                  <LinhaDeTarefa key={task.id} task={task} origem={origem} onEditar={onEditarTarefa} onConcluir={concluir} />
-                ))}
-              </div>
-            )}
-          </section>
-
-          <section>
-            <h3 className="projetos-secao">Feito · {historico.length}</h3>
-            {historico.length === 0 ? (
-              <p className="muted projeto-vazio">Nada concluído ainda.</p>
-            ) : (
-              <ol className="projeto-historico">
-                {historicoVisivel.map((h) => (
-                  <li key={h.id}>
-                    <button
-                      type="button"
-                      className="projeto-historico-item"
-                      onClick={() => (h.tipo === 'tarefa' ? onEditarTarefa(h.item) : onEditarEvento(h.item))}
-                    >
-                      <span className="projeto-historico-data">{dataDoHistorico(h.data)}</span>
-                      <span className="projeto-historico-titulo">
-                        {h.tipo === 'compromisso' && <span className="projeto-historico-tipo" aria-label="compromisso">◷</span>}
-                        {semEtiqueta(h.titulo, projeto.id)}
-                      </span>
+      <div role="tabpanel" id={`projeto-painel-${aba}`} aria-labelledby={`projeto-aba-${aba}`} className="projeto-painel">
+        {aba === 'resumo' && (
+          <>
+            {destaque}
+            {captura}
+            <dl className="projeto-ficha-resumo">
+              <div>
+                <dt>{rotina ? 'Para que serve' : 'Resultado esperado'}</dt>
+                <dd>
+                  {projeto.resultado?.trim() || (
+                    <button type="button" className="link-btn" onClick={() => setConfigurando(true)}>
+                      {rotina ? 'Dizer para que serve' : 'Definir como se sabe que terminou'}
                     </button>
-                  </li>
-                ))}
-              </ol>
-            )}
-            {historico.length > HISTORICO_INICIAL && (
-              <button type="button" className="link-btn projeto-mais" onClick={() => setHistoricoTodo((v) => !v)}>
-                {historicoTodo ? 'Mostrar menos' : `Ver tudo (${historico.length})`}
-              </button>
-            )}
-          </section>
-
-          {proximos.length > 0 && (
-            <section>
-              <h3 className="projetos-secao">Agenda</h3>
-              <div className="aguardando-lista">
-                {proximos.map((ev) => (
-                  <button key={`${ev.calendarId}-${ev.id}`} type="button" className="projeto-evento" onClick={() => onEditarEvento(ev)}>
-                    <span className="projeto-evento-quando">{quandoDoEvento(ev)}</span>
-                    <span className="projeto-evento-titulo">{semEtiqueta(ev.summary, projeto.id)}</span>
-                  </button>
-                ))}
+                  )}
+                </dd>
               </div>
-            </section>
-          )}
-        </div>
+              <div>
+                <dt>Situação</dt>
+                <dd>{SITUACOES.find((x) => x.id === projeto.situacao)?.label} · {rotina ? 'rotina' : 'projeto'}</dd>
+              </div>
+              <div>
+                <dt>Prazo</dt>
+                <dd>{projeto.prazo ? dataCurta(projeto.prazo) : <span className="muted">sem prazo</span>}</dd>
+              </div>
+            </dl>
 
-        <div className="projeto-coluna">
+            {/* Cada número leva à aba dele: o resumo responde "em que pé
+                está" e é a porta de entrada para o resto. */}
+            <div className="projeto-numeros">
+              <button type="button" className="projeto-numero" onClick={() => setAba('tarefas')}>
+                <strong>{aFazer.length}</strong>
+                <span>{rotina ? 'na pauta' : 'a fazer'}</span>
+                {atrasadas > 0 && <span className="projeto-numero-alerta">{atrasadas} atrasada(s)</span>}
+              </button>
+              <button type="button" className="projeto-numero" onClick={() => setAba('anotacoes')}>
+                <strong>{anotacoes.length}</strong>
+                <span>{anotacoes.length === 1 ? 'anotação' : 'anotações'}</span>
+              </button>
+              <button type="button" className="projeto-numero" onClick={() => setAba('arquivos')}>
+                <strong>{(projeto.arquivos || []).length}</strong>
+                <span>{(projeto.arquivos || []).length === 1 ? 'arquivo' : 'arquivos'}</span>
+              </button>
+              <button type="button" className="projeto-numero" onClick={() => setAba('compromissos')}>
+                <strong>{eventos === null ? '…' : proximos.length}</strong>
+                <span>{proximos[0] ? `próximo ${quandoDoEvento(proximos[0])}` : 'compromissos à frente'}</span>
+              </button>
+            </div>
+
+            {!rotina && (
+              <section>
+                <h3 className="projetos-secao">Marcos</h3>
+                <Marcos projeto={projeto} onSalvar={onSalvar} />
+              </section>
+            )}
+
+            <AssistenteDoProjeto
+              projeto={projeto}
+              grupos={grupos}
+              anotacoes={anotacoes}
+              contextos={[...new Set(tasks.map((t) => t.contexto).filter(Boolean))]}
+              idProximas={ids.idProximas}
+              onCreateTask={onCreateTask}
+              onSalvar={onSalvar}
+              onAtualizarTarefa={onAtualizarTarefa}
+              onSalvarAnotacao={onSalvarAnotacao}
+              onAbrirNota={onAbrirNota}
+            />
+          </>
+        )}
+
+        {aba === 'tarefas' && (
+          <>
+            {captura}
+            <section>
+              <h3 className="projetos-secao">{rotina ? 'Pauta' : 'A fazer'} · {aFazer.length}</h3>
+              {aFazer.length === 0 ? (
+                <p className="muted projeto-vazio">Nada pendente. Escreva acima a próxima ação.</p>
+              ) : (
+                <div className="aguardando-lista">
+                  {aFazer.map(({ task, origem }) => (
+                    <LinhaDeTarefa key={task.id} task={task} origem={origem} onEditar={onEditarTarefa} onConcluir={concluir} />
+                  ))}
+                </div>
+              )}
+            </section>
+            <section>
+              <h3 className="projetos-secao">Concluídas · {concluidasDoProjeto.length}</h3>
+              {concluidasDoProjeto.length === 0 ? (
+                <p className="muted projeto-vazio">Nada concluído ainda.</p>
+              ) : (
+                <div className="aguardando-lista">
+                  {concluidasDoProjeto.slice(0, historicoTodo ? undefined : HISTORICO_INICIAL).map((t) => (
+                    <LinhaDeTarefa key={t.id} task={t} onEditar={onEditarTarefa} onConcluir={concluir} />
+                  ))}
+                </div>
+              )}
+              {concluidasDoProjeto.length > HISTORICO_INICIAL && (
+                <button type="button" className="link-btn projeto-mais" onClick={() => setHistoricoTodo((v) => !v)}>
+                  {historicoTodo ? 'Mostrar menos' : `Ver todas (${concluidasDoProjeto.length})`}
+                </button>
+              )}
+            </section>
+          </>
+        )}
+
+        {aba === 'anotacoes' && (
           <section>
             <div className="projeto-secao-cabeca">
               <h3 className="projetos-secao">Anotações · {anotacoes.length}</h3>
-              <button type="button" className="link-btn" onClick={() => onNovaNota(projeto.id)}>+ Nova</button>
+              <button type="button" className="link-btn" onClick={() => onNovaNota(projeto.id)}>+ Nova anotação</button>
             </div>
             {anotacoes.length === 0 ? (
-              <p className="muted projeto-vazio">Nenhuma anotação.</p>
+              <p className="muted projeto-vazio">
+                Nenhuma anotação. Registros de atendimento, atas e combinados do projeto ficam aqui, ligados a ele.
+              </p>
             ) : (
               <div className="projeto-notas">
                 {anotacoes.map((n) => {
@@ -965,19 +1044,58 @@ function PaginaDoProjeto({
               </div>
             )}
           </section>
+        )}
 
-          {!rotina && (
+        {aba === 'arquivos' && <Arquivos projeto={projeto} onSalvar={onSalvar} />}
+
+        {aba === 'compromissos' && (
+          <>
+            {captura}
             <section>
-              <h3 className="projetos-secao">Marcos</h3>
-              <Marcos projeto={projeto} onSalvar={onSalvar} />
+              <h3 className="projetos-secao">À frente · {proximos.length}</h3>
+              {eventos === null ? (
+                <p className="muted projeto-vazio">Carregando a agenda…</p>
+              ) : proximos.length === 0 ? (
+                <p className="muted projeto-vazio">Nenhum compromisso marcado. Escreva acima com dia e hora ("reunião de rede quinta 14h").</p>
+              ) : (
+                <div className="aguardando-lista">{proximos.map(linhaDoEvento)}</div>
+              )}
             </section>
-          )}
+            {passados.length > 0 && (
+              <section>
+                <h3 className="projetos-secao">Já aconteceram · {passados.length}</h3>
+                <div className="aguardando-lista">{passados.map(linhaDoEvento)}</div>
+              </section>
+            )}
+          </>
+        )}
 
+        {aba === 'linha' && (
           <section>
-            <h3 className="projetos-secao">Arquivos</h3>
-            <Arquivos projeto={projeto} onSalvar={onSalvar} />
+            {linhaDoTempo.length === 0 ? (
+              <p className="muted projeto-vazio">Nada aconteceu neste projeto ainda.</p>
+            ) : (
+              <ol className="projeto-historico projeto-linha-do-tempo">
+                {linhaDoTempo.slice(0, historicoTodo ? undefined : 30).map((h) => (
+                  <li key={h.id}>
+                    <button type="button" className="projeto-historico-item" onClick={() => abrirDaLinha(h)}>
+                      <span className="projeto-historico-data">{dataDoHistorico(h.data)}</span>
+                      <span className="projeto-historico-titulo">
+                        <span className="t-label-sm muted projeto-linha-rotulo">{h.rotulo}</span>
+                        {semEtiqueta(h.titulo, projeto.id)}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ol>
+            )}
+            {linhaDoTempo.length > 30 && (
+              <button type="button" className="link-btn projeto-mais" onClick={() => setHistoricoTodo((v) => !v)}>
+                {historicoTodo ? 'Mostrar menos' : `Ver tudo (${linhaDoTempo.length})`}
+              </button>
+            )}
           </section>
-        </div>
+        )}
       </div>
 
       {configurando && (

@@ -473,6 +473,35 @@ export function historicoDoProjeto({ concluidas = [], eventosPassados = [] }, ev
   return itens.filter((x) => x.data && Number.isFinite(x.data.getTime())).sort((a, b) => b.data - a.data)
 }
 
+// A linha do tempo do projeto: tudo o que aconteceu nele, do mais recente
+// para o mais antigo — tarefa concluída, compromisso que passou, anotação
+// criada ou mexida, arquivo que entrou, o próprio projeto sendo aberto. É o
+// "o que andou neste caso?" respondido sem abrir nada.
+export function linhaDoTempoDoProjeto({ projeto, concluidas = [], eventosPassados = [], notas = [] }, eventStart) {
+  const data = (iso) => {
+    const d = iso ? new Date(iso) : null
+    return d && Number.isFinite(d.getTime()) ? d : null
+  }
+  const itens = [
+    ...historicoDoProjeto({ concluidas, eventosPassados }, eventStart).map((h) => ({
+      ...h,
+      rotulo: h.tipo === 'tarefa' ? 'Tarefa concluída' : 'Compromisso',
+    })),
+    ...notas.map((n) => {
+      const criada = data(n.createdAt)
+      const mexida = data(n.updatedAt)
+      // Mexida há menos de um minuto da criação é a mesma escrita, não uma edição.
+      const editada = mexida && criada && mexida - criada > 60000
+      return { tipo: 'nota', id: `n-${n.id}`, titulo: n.title?.trim() || (n.body || '').trim().split('\n')[0] || '(sem título)', data: editada ? mexida : criada || mexida, rotulo: editada ? 'Anotação editada' : 'Anotação criada', item: n }
+    }),
+    ...normalizarArquivos(projeto?.arquivos).map((a) => ({ tipo: 'arquivo', id: `a-${a.id}`, titulo: a.nome, data: data(a.adicionadoEm), rotulo: 'Arquivo adicionado', item: a })),
+    ...(projeto && !projeto.implicito && data(projeto.createdAt)
+      ? [{ tipo: 'projeto', id: `p-${projeto.id}`, titulo: projeto.nome, data: data(projeto.createdAt), rotulo: 'Projeto criado' }]
+      : []),
+  ]
+  return itens.filter((x) => x.data).sort((a, b) => b.data - a.data)
+}
+
 // Junta as concluídas que vieram com a lista geral (quando "Mostrar
 // concluídas" está ligado) às buscadas só para o projeto, sem repetir.
 export function juntarConcluidas(...listas) {
