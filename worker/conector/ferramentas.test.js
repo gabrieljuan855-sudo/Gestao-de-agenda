@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { criarApiDeTarefas } from '../../src/lib/googleTarefas.js'
 import { criarApiDaAgenda } from '../../src/lib/googleAgenda.js'
 import { criarArmazemNoDrive } from '../../src/lib/driveArquivos.js'
+import { criarDriveDosProjetos } from '../../src/lib/drivePastas.js'
+import { separarAnexos } from '../../src/lib/anexosNoTexto.js'
 import { parseMeta } from '../../src/lib/gtd.js'
 import { PROJETO_PROP } from '../../src/lib/projetos.js'
 import { googleFalso } from '../teste/googleFalso.js'
@@ -16,7 +18,7 @@ let listas
 
 beforeEach(() => {
   g = googleFalso({ agora: () => agora })
-  api = { tarefas: criarApiDeTarefas(g.request), agenda: criarApiDaAgenda(g.request), drive: criarArmazemNoDrive(g.request) }
+  api = { tarefas: criarApiDeTarefas(g.request), agenda: criarApiDaAgenda(g.request), drive: criarArmazemNoDrive(g.request), pastas: criarDriveDosProjetos(g.request) }
   listas = {
     entrada: g.criarLista('Entrada'),
     proximas: g.criarLista('Próximas ações'),
@@ -366,5 +368,57 @@ describe('base de conhecimento', () => {
     const texto = await f.saudeDasNotasTexto(api)
     expect(texto).toContain('## Links para notas que não existem: 1\n- em Audiência [nota: a]: [[Não existe]]')
     expect(texto).toMatch(/## Títulos repetidos .*: 1\n- "Solta": \[nota: b\], \[nota: c\]/)
+  })
+})
+
+describe('arquivos e modelos', () => {
+  it('criar_projeto_de_modelo cria ficha, ações, marcos, anotação e pasta', async () => {
+    const r = await f.criarProjetoDeModelo(api, agora, { modelo: 'reuniao-rede', nome: 'Rede Bairro Norte' })
+    const [ficha] = await api.drive.loadProjetos()
+    expect(ficha).toMatchObject({ id: 'rede-bairro-norte', tipo: 'projeto' })
+    expect(ficha.marcos.map((m) => m.titulo)[0]).toBe('Convites enviados')
+    expect(ficha.pasta.id).toBeTruthy()
+    expect(tarefasNa(listas.proximas).map((t) => t.title)).toEqual(['Definir a pauta e quem precisa participar', 'Marcar data e local e enviar o convite'])
+    expect(tarefasNa(listas.proximas).every((t) => t.notes.includes('#rede-bairro-norte'))).toBe(true)
+    const { notes } = await api.drive.loadNotes()
+    expect(notes[0]).toMatchObject({ title: 'Pauta e ata — Rede Bairro Norte', projeto: 'rede-bairro-norte' })
+    expect(r).toContain('Pasta no Drive')
+    // A pasta fica dentro de "Segundo Cérebro".
+    const raiz = g.estado.arquivos.find((a) => a.name === 'Segundo Cérebro')
+    expect(g.estado.arquivos.find((a) => a.id === ficha.pasta.id).parents).toEqual([raiz.id])
+    await expect(f.criarProjetoDeModelo(api, agora, { modelo: 'pop', nome: 'Rede Bairro Norte' })).rejects.toThrow(/Já existe/)
+  })
+
+  it('anexar_arquivo cria um Doc com texto na pasta do projeto e lista depois', async () => {
+    await f.criarProjeto(api, agora, { nome: 'POPs' })
+    const r = await f.anexarArquivo(api, agora, { projeto: 'pops', texto: 'Ata da reunião', nome: 'Ata 30-10' })
+    expect(r).toMatch(/Documento "Ata 30-10" criado/)
+    const doc = g.estado.arquivos.find((a) => a.name === 'Ata 30-10')
+    expect(doc.conteudo).toBe('Ata da reunião')
+    expect(doc.mimeType).toBe('application/vnd.google-apps.document')
+    const lista = await f.listarArquivosProjeto(api, agora, { projeto: 'pops' })
+    expect(lista).toContain('Ata 30-10')
+    expect(lista).toContain('Pasta no Drive')
+  })
+
+  it('anexar_arquivo põe o link no texto da tarefa e na nota, sem perder o que já havia', async () => {
+    const t = g.criarTarefa(listas.proximas.id, { title: 'Ofício', notes: '[media #pops] ligar antes' })
+    await f.anexarArquivo(api, agora, { tarefa_id: t.id, link: 'https://site.com/edital.pdf', nome: 'Edital' })
+    const salva = g.estado.tarefas.find((x) => x.id === t.id)
+    expect(salva.notes.startsWith('[media #pops] ligar antes')).toBe(true)
+    expect(separarAnexos(salva.notes).anexos.map((a) => a.nome)).toEqual(['Edital'])
+
+    await f.criarNota(api, agora, { titulo: 'Ata', texto: 'x', projeto: 'pops' })
+    const { notes } = await api.drive.loadNotes()
+    await f.anexarArquivo(api, agora, { nota_id: notes[0].id, link: 'https://site.com/foto.jpg', nome: 'Foto' })
+    expect((await f.lerNota(api, agora, { id: notes[0].id }))).toContain('Arquivos anexados')
+    expect(await f.listarArquivosProjeto(api, agora, { projeto: 'pops' })).toMatch(/Em tarefas do projeto[\s\S]*Edital/)
+  })
+
+  it('anexar_arquivo recusa destino duplo ou ausente, e link e texto juntos', async () => {
+    await expect(f.anexarArquivo(api, agora, { link: 'https://a.com' })).rejects.toThrow(/um destino só/)
+    await expect(f.anexarArquivo(api, agora, { projeto: 'x', nota_id: 'y', link: 'https://a.com' })).rejects.toThrow(/um destino só/)
+    await expect(f.anexarArquivo(api, agora, { projeto: 'x', link: 'https://a.com', texto: 't', nome: 'n' })).rejects.toThrow(/um dos dois/)
+    await expect(f.anexarArquivo(api, agora, { projeto: 'x', link: 'javascript:alert(1)' })).rejects.toThrow(/http/)
   })
 })

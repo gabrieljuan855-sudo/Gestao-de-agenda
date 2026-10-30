@@ -32,7 +32,13 @@ import {
   PROJETO_PROP,
   SITUACOES,
   fichaParaEtiqueta,
+  juntarArquivos,
+  arquivoDoDrive,
+  tipoDoArquivo,
+  tamanhoLegivel,
 } from '../../src/lib/projetos.js'
+import { aplicarModelo, MODELOS } from '../../src/lib/modelosDeProjeto.js'
+import { separarAnexos, juntarAnexos, anexoDoLink } from '../../src/lib/anexosNoTexto.js'
 import { findFreeGaps, occursOnDay, isAllDay, eventStart, eventEnd } from '../../src/lib/events.js'
 import { workBlocksFor, horarioPadrao } from '../../src/lib/schedule.js'
 import { loadCalendarPrefs, occupiesTime, isDeclined } from '../../src/lib/calendarPrefs.js'
@@ -565,6 +571,7 @@ export async function lerNota(api, agora, { id }) {
     nota.body || '(sem texto)',
     '',
     nota.fontes?.length ? `Fontes:\n${nota.fontes.map((f) => `- ${fonteEmTexto(f)}`).join('\n')}` : null,
+    nota.anexos?.length ? `Arquivos anexados:\n${nota.anexos.map((a) => linhaDoArquivo(a)).join('\n')}` : null,
     ligaA.length
       ? `Liga a:\n${ligaA.map((l) => (l.nota ? `- ${tituloDaNota(l.nota)} [nota: ${l.nota.id}]` : `- ${l.titulo} (ainda não existe)`)).join('\n')}`
       : null,
@@ -927,4 +934,159 @@ export async function criarEvento(api, agora, args) {
     ? `${dataComDia(data)}${data_fim && data_fim !== data ? ` a ${dataComDia(data_fim)}` : ''}, dia inteiro`
     : `${dataComDia(data)}, ${horaNoFuso(start)}–${horaNoFuso(end)}`
   return `Compromisso criado: "${titulo.trim()}" — ${quando} — na agenda ${calendario.summaryOverride || calendario.summary || 'principal'}${id ? `, ligado ao projeto #${id}` : ''}.${criado?.htmlLink ? ` Link: ${criado.htmlLink}` : ''}`
+}
+
+// ---------- arquivos ----------
+
+function linhaDoArquivo(a, onde = '') {
+  const { rotulo } = tipoDoArquivo(a)
+  const extra = [rotulo, Number.isFinite(a.tamanho) && tamanhoLegivel(a.tamanho), a.adicionadoEm && `adicionado ${dataComDia(dataNoFuso(new Date(a.adicionadoEm)), { ano: false })}`]
+    .filter(Boolean)
+    .join(' · ')
+  return `- ${a.nome}${onde} · ${extra} — ${a.url}`
+}
+
+// A pasta do projeto no Drive, a mesma regra do app (pastaDoProjeto): a que a
+// ficha já tem, se ainda existir; senão, uma nova, guardada na ficha.
+async function pastaPara(api, agora, projetoId, semProjeto) {
+  const fichas = normalizarProjetos((await api.drive.loadProjetos()) || [])
+  const ficha = projetoId ? fichas.find((p) => p.id === projetoId) : null
+  const alvo = ficha || (projetoId ? fichaParaEtiqueta(projetoId, agora) : { id: '_avulsos', nome: semProjeto })
+  const { pasta, nova } = await api.pastas.pastaDoProjeto(alvo)
+  if (projetoId && (nova || ficha?.pasta?.id !== pasta.id)) {
+    await alterarProjetos(api, (atuais) => {
+      const atual = atuais.find((p) => p.id === projetoId) || fichaParaEtiqueta(projetoId, agora)
+      const nova = normalizarProjeto({ ...atual, pasta, updatedAt: carimboDepois(agora, atual.updatedAt) }, agora)
+      return { lista: atuais.some((p) => p.id === projetoId) ? atuais.map((p) => (p.id === projetoId ? nova : p)) : [nova, ...atuais], resultado: null }
+    })
+  }
+  return pasta
+}
+
+export async function listarArquivosProjeto(api, agora, { projeto }) {
+  const [{ tarefas }, drive] = await Promise.all([carregarTarefas(api), lerDrive(api)])
+  if (drive.falha) throw drive.falha
+  const id = acharFicha(drive.registros, projeto)?.id || etiqueta(projeto)
+  const ficha = drive.registros.find((p) => p.id === id)
+  const nasNotas = drive.notas.filter((n) => n.projeto === id && n.anexos?.length)
+  const nasTarefas = tarefas.filter((t) => t.projeto === id).map((t) => ({ t, anexos: separarAnexos(t.notesClean).anexos })).filter((x) => x.anexos.length)
+  if (!ficha && !nasNotas.length && !nasTarefas.length) {
+    throw new ErroDeUso(`Não existe projeto "${projeto}". Use listar_projetos para ver os ids.`)
+  }
+  const doProjeto = ficha?.arquivos || []
+  const partes = [
+    `# Arquivos de ${ficha?.nome || id} [projeto: ${id}]`,
+    ficha?.pasta ? `Pasta no Drive: ${ficha.pasta.url}` : 'Ainda sem pasta no Drive (é criada no primeiro arquivo).',
+    doProjeto.length ? `## Do projeto (${doProjeto.length})\n${doProjeto.map((a) => linhaDoArquivo(a)).join('\n')}` : '## Do projeto\nNenhum arquivo.',
+    nasNotas.length
+      ? `## Em anotações do projeto\n${nasNotas.flatMap((n) => n.anexos.map((a) => linhaDoArquivo(a, ` (na nota "${tituloDaNota(n)}" [nota: ${n.id}])`))).join('\n')}`
+      : null,
+    nasTarefas.length
+      ? `## Em tarefas do projeto\n${nasTarefas.flatMap(({ t, anexos }) => anexos.map((a) => `- ${a.nome} (na tarefa "${t.title}" [id: ${t.id}]) — ${a.url}`)).join('\n')}`
+      : null,
+  ]
+  return partes.filter(Boolean).join('\n')
+}
+
+// Anexar pelo conector: um link (de qualquer lugar) ou um texto que vira
+// Documento do Google na pasta do projeto. Arquivo binário (um PDF que a
+// pessoa mandou no chat) não tem como chegar aqui — ferramenta recebe texto —,
+// e a descrição da ferramenta diz isso ao Claude.
+export async function anexarArquivo(api, agora, { projeto, tarefa_id: tarefaId, nota_id: notaId, link, nome, texto }) {
+  const alvos = [projeto, tarefaId, notaId].filter(Boolean)
+  if (alvos.length !== 1) throw new ErroDeUso('Informe um destino só: projeto, tarefa_id ou nota_id.')
+  if (Boolean(link) === Boolean(texto)) throw new ErroDeUso('Informe link (para vincular) ou texto (para criar um Documento do Google), um dos dois.')
+  if (texto && !nome) throw new ErroDeUso('Para criar o documento, informe o nome dele.')
+
+  // Onde o arquivo mora no Drive depende do projeto do destino.
+  let tarefa = null
+  let projetoId = projeto ? acharFicha(normalizarProjetos((await api.drive.loadProjetos()) || []), projeto)?.id || etiqueta(projeto) : null
+  if (tarefaId) {
+    tarefa = (await acharTarefa(api, tarefaId)).tarefa
+    projetoId = tarefa.projeto || null
+  }
+  if (notaId) {
+    const nota = sanitizeNotes((await api.drive.loadNotes())?.notes).find((n) => n.id === notaId)
+    if (!nota) throw new ErroDeUso(`Não existe anotação com id "${notaId}". Use buscar_notas para achar o id.`)
+    projetoId = nota.projeto || null
+  }
+
+  let arquivo
+  if (texto) {
+    const pasta = await pastaPara(api, agora, projetoId, notaId ? 'Anotações' : 'Sem projeto')
+    arquivo = arquivoDoDrive(await api.pastas.criarDocumentoComTexto(pasta.id, nome.trim(), texto), agora)
+  } else {
+    const doLink = anexoDoLink(nome, link)
+    if (!doLink) throw new ErroDeUso('O link precisa ser um endereço http(s).')
+    arquivo = { ...doLink, adicionadoEm: agora.toISOString() }
+  }
+  const comoFicou = texto ? `Documento "${arquivo.nome}" criado no Drive e anexado` : `Link "${arquivo.nome}" anexado`
+
+  if (projeto) {
+    await alterarProjetos(api, (atuais) => {
+      const atual = atuais.find((p) => p.id === projetoId) || fichaParaEtiqueta(projetoId, agora)
+      const ficha = normalizarProjeto({ ...atual, arquivos: juntarArquivos(atual.arquivos, [arquivo]), updatedAt: carimboDepois(agora, atual.updatedAt) }, agora)
+      return { lista: atuais.some((p) => p.id === projetoId) ? atuais.map((p) => (p.id === projetoId ? ficha : p)) : [ficha, ...atuais], resultado: null }
+    })
+    return `${comoFicou} ao projeto #${projetoId}: ${arquivo.url}`
+  }
+  if (tarefa) {
+    const { texto: corpo, anexos } = separarAnexos(tarefa.notesClean)
+    await api.tarefas.updateTask(tarefa, { notes: juntarAnexos(corpo, [...anexos, arquivo]) })
+    return `${comoFicou} à tarefa "${tarefa.title}": ${arquivo.url}`
+  }
+  return alterarNotas(api, agora, (atuais) => {
+    const nota = atuais.find((n) => n.id === notaId)
+    const nova = { ...nota, anexos: juntarArquivos(nota.anexos, [arquivo]), updatedAt: carimboDepois(agora, nota.updatedAt) }
+    return { notas: atuais.map((n) => (n.id === notaId ? nova : n)), resultado: `${comoFicou} à nota "${tituloDaNota(nota)}": ${arquivo.url}` }
+  })
+}
+
+// O mesmo que escolher um modelo ao criar o projeto no app (aplicarModelo):
+// ficha com resultado e marcos, as primeiras próximas ações, a anotação-base
+// e a pasta no Drive.
+export async function criarProjetoDeModelo(api, agora, { modelo, nome }) {
+  const pronto = aplicarModelo(modelo, nome, agora)
+  if (!pronto) {
+    throw new ErroDeUso(`Modelo ou nome inválido. Modelos: ${MODELOS.map((m) => `${m.id} (${m.rotulo})`).join(', ')}. O nome precisa ter letras ou números.`)
+  }
+  const { ficha, tarefas, nota } = pronto
+  await alterarProjetos(api, (atuais) => {
+    const existente = atuais.find((p) => p.id === ficha.id)
+    if (existente) throw new ErroDeUso(`Já existe o projeto "${existente.nome}" [projeto: ${existente.id}]. Escolha outro nome ou use atualizar_projeto.`)
+    return { lista: [ficha, ...atuais], resultado: null }
+  })
+
+  const listas = await api.tarefas.listTaskLists()
+  const proximas = await listaDestino(api, listas, 'proximas')
+  const criadas = []
+  for (const t of tarefas) {
+    const c = await api.tarefas.createTask({ title: t.title, priority: t.priority, projeto: ficha.id, tasklistId: proximas.id })
+    criadas.push(`- ${t.title} [id: ${c?.id}]`)
+  }
+  let notaCriada = null
+  if (nota) {
+    notaCriada = await alterarNotas(api, agora, (atuais) => {
+      const iso = agora.toISOString()
+      const n = { ...newNote(), title: nota.title, body: nota.body, projeto: ficha.id, createdAt: iso, updatedAt: iso }
+      return { notas: [n, ...atuais], resultado: `${n.title} [nota: ${n.id}]` }
+    })
+  }
+  let pasta = null
+  try {
+    pasta = await pastaPara(api, agora, ficha.id)
+  } catch {
+    // Sem a permissão dos arquivos do Drive, o resto do modelo vale igual:
+    // a pasta nasce no primeiro arquivo enviado pelo app.
+  }
+
+  return [
+    `Projeto criado pelo modelo "${MODELOS.find((m) => m.id === modelo).rotulo}": ${fichaEmTexto(ficha)}.`,
+    `Próximas ações:\n${criadas.join('\n')}`,
+    `Marcos: ${ficha.marcos.map((m) => m.titulo).join(' → ')}.`,
+    notaCriada ? `Anotação-base: ${notaCriada}.` : null,
+    pasta ? `Pasta no Drive: ${pasta.url}` : 'A pasta no Drive será criada no primeiro arquivo enviado pelo app.',
+  ]
+    .filter(Boolean)
+    .join('\n')
 }

@@ -77,5 +77,30 @@ export function criarDriveDosProjetos(request) {
     })
   }
 
-  return { pastaDoProjeto, criarArquivoGoogle, renomearArquivo, mandarParaLixeira }
+  // Um Documento do Google já com texto dentro, na pasta. É o jeito de o
+  // conector do Claude "anexar" um conteúdo que ele escreveu (uma ata, um
+  // rascunho de ofício): ferramenta recebe texto, não arquivo, então o que
+  // ele entrega vira um Doc de verdade, editável no Docs. O Drive converte o
+  // texto em documento pelo mimeType pedido nos metadados.
+  function criarDocumentoComTexto(pastaId, nome, texto) {
+    const fronteira = `segundo-cerebro-${Math.random().toString(36).slice(2)}`
+    const corpo = [
+      `--${fronteira}`,
+      'Content-Type: application/json; charset=UTF-8',
+      '',
+      JSON.stringify({ name: nome, mimeType: 'application/vnd.google-apps.document', parents: [pastaId] }),
+      `--${fronteira}`,
+      'Content-Type: text/plain; charset=UTF-8',
+      '',
+      texto,
+      `--${fronteira}--`,
+    ].join('\r\n')
+    return request(`https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=${CAMPOS_DO_ARQUIVO}`, {
+      method: 'POST',
+      headers: { 'Content-Type': `multipart/related; boundary=${fronteira}` },
+      body: corpo,
+    })
+  }
+
+  return { pastaDoProjeto, criarArquivoGoogle, renomearArquivo, mandarParaLixeira, criarDocumentoComTexto }
 }
