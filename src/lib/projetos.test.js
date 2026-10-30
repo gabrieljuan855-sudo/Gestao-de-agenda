@@ -12,6 +12,8 @@ import {
   nomeSugerido,
   vincularArquivo,
   panoramaDosProjetos,
+  fichaParaEtiqueta,
+  linhaDoTempoDoProjeto,
   projetosForaDaCobranca,
   pareceIdeia,
   normalizarMarcos,
@@ -349,5 +351,66 @@ describe('arquivos no Drive do projeto', () => {
     expect(tamanhoLegivel(512)).toBe('512 B')
     expect(tamanhoLegivel(2516582)).toBe('2,4 MB')
     expect(tamanhoLegivel(undefined)).toBe('')
+  })
+})
+
+describe('coerência da situação', () => {
+  const agora = new Date('2026-10-30T12:00:00')
+  const tasks = [
+    { id: 't1', title: 'Revisar POP', projeto: 'pops', status: 'needsAction', tasklistId: 'prox' },
+    { id: 't2', title: 'Feita', projeto: 'feito', status: 'completed', tasklistId: 'prox' },
+    { id: 't3', title: 'Ligar', projeto: 'casos', status: 'needsAction', tasklistId: 'prox' },
+  ]
+  const registros = [
+    { id: 'pops', nome: 'POPs', situacao: 'concluido' },
+    { id: 'feito', nome: 'Feito', situacao: 'concluido' },
+  ]
+
+  it('aponta projeto concluído que ainda tem tarefa pendente', () => {
+    const lista = listarProjetos({ registros, tasks, notes: [], idProximas: 'prox' }, agora)
+    expect(lista.find((p) => p.id === 'pops').concluidoComPendencias).toBe(true)
+    expect(lista.find((p) => p.id === 'feito').concluidoComPendencias).toBe(false)
+  })
+
+  it('o panorama mostra concluídos com pendências e etiquetas sem ficha', () => {
+    const lista = listarProjetos({ registros, tasks, notes: [], idProximas: 'prox' }, agora)
+    const p = panoramaDosProjetos(lista, tasks, agora)
+    expect(p.concluidosComPendencias.map((x) => x.id)).toEqual(['pops'])
+    expect(p.semFicha.map((x) => x.id)).toEqual(['casos'])
+  })
+
+  it('dá uma ficha legível a uma etiqueta solta', () => {
+    expect(fichaParaEtiqueta('caso-maria', agora)).toMatchObject({ id: 'caso-maria', nome: 'Caso maria', situacao: 'ativo', tipo: 'projeto' })
+    expect(fichaParaEtiqueta('', agora)).toBeNull()
+  })
+})
+
+describe('linhaDoTempoDoProjeto', () => {
+  const inicio = (e) => new Date(e.start.dateTime)
+  it('junta tarefa, compromisso, anotação, arquivo e a criação, do mais recente ao mais antigo', () => {
+    const itens = linhaDoTempoDoProjeto(
+      {
+        projeto: { id: 'p', nome: 'P', createdAt: '2026-10-01T10:00:00Z', arquivos: [{ id: 'a1', url: 'https://x.com/a.pdf', nome: 'a.pdf', adicionadoEm: '2026-10-05T10:00:00Z' }] },
+        concluidas: [{ id: 't1', title: 'Ligar', status: 'completed', completed: '2026-10-10T10:00:00Z' }],
+        eventosPassados: [{ id: 'e1', calendarId: 'c', summary: 'Reunião', start: { dateTime: '2026-10-08T10:00:00Z' } }],
+        notas: [
+          { id: 'n1', title: 'Ata', createdAt: '2026-10-02T10:00:00Z', updatedAt: '2026-10-09T10:00:00Z' },
+          { id: 'n2', title: 'Nova', createdAt: '2026-10-03T10:00:00Z', updatedAt: '2026-10-03T10:00:20Z' },
+        ],
+      },
+      inicio
+    )
+    expect(itens.map((i) => i.rotulo)).toEqual([
+      'Tarefa concluída',
+      'Anotação editada',
+      'Compromisso',
+      'Arquivo adicionado',
+      'Anotação criada',
+      'Projeto criado',
+    ])
+  })
+
+  it('projeto só de etiqueta não tem "Projeto criado"', () => {
+    expect(linhaDoTempoDoProjeto({ projeto: { id: 'x', nome: 'x', implicito: true, createdAt: '2026-10-01T10:00:00Z' } }, () => null)).toEqual([])
   })
 })

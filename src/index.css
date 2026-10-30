@@ -3427,3 +3427,169 @@ a.link-btn { display: inline-flex; align-items: center; min-height: 36px; font-s
 .projeto-arquivo-tipos { display: flex; flex-wrap: wrap; gap: 6px; }
 .projeto-arquivos-rodape { align-items: center; }
 .projeto-arquivos-rodape > * { min-height: 36px; }
+
+/* ---------- página do projeto em abas ----------
+   Primary tabs do MD3, só com rótulo: 48dp, indicador de 3dp colado embaixo
+   da aba ativa. Seis abas não cabem num celular, então a barra rola na
+   horizontal em vez de espremer os rótulos. */
+.projeto-abas {
+  display: flex;
+  gap: 0;
+  margin: 12px 0 14px;
+  border-bottom: 1px solid var(--outline-variant);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.projeto-abas::-webkit-scrollbar { display: none; }
+.projeto-aba {
+  position: relative;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 48px;
+  padding: 0 14px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--on-surface-variant);
+  font-size: var(--body-md);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.projeto-aba.is-ativa { color: var(--primary); }
+.projeto-aba.is-ativa::before {
+  content: '';
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 0;
+  height: 3px;
+  border-radius: 3px 3px 0 0;
+  background: var(--primary);
+}
+.projeto-aba-contagem {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: var(--shape-full);
+  background: var(--surface-variant);
+  color: var(--on-surface-variant);
+  font-size: var(--label-sm);
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.projeto-aba.is-ativa .projeto-aba-contagem { background: var(--primary-container); color: var(--on-primary-container); }
+.projeto-painel { display: flex; flex-direction: column; gap: 16px; }
+
+/* A ficha em três linhas de rótulo e valor: o que é, em que pé está, quando. */
+.projeto-ficha-resumo {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 6px 16px;
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: var(--shape-md);
+  background: var(--surface-variant);
+}
+.projeto-ficha-resumo > div { display: contents; }
+.projeto-ficha-resumo dt { font-size: var(--label-md); color: var(--on-surface-variant); padding-top: 2px; }
+.projeto-ficha-resumo dd { margin: 0; font-size: var(--body-md); overflow-wrap: anywhere; }
+
+/* Os números do projeto, cada um a porta para a aba dele. */
+.projeto-numeros { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; }
+.projeto-numero {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 12px 14px;
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--shape-md);
+  background: var(--surface-raised);
+  color: var(--on-surface);
+  text-align: left;
+}
+.projeto-numero strong { font-family: var(--font-heading); font-size: var(--title-lg); }
+.projeto-numero span { font-size: var(--label-md); color: var(--on-surface-variant); }
+.projeto-numero .projeto-numero-alerta { color: var(--urgent); font-weight: 600; }
+.projeto-linha-rotulo { display: block; }
+
+/* Linha de arquivo como botão: tocar abre o diálogo do arquivo. */
+button.projeto-arquivo {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--outline-variant);
+  text-align: left;
+  font: inherit;
+}
+
+/* Diálogo largo (o arquivo aberto): espaço de verdade para a prévia no
+   computador, e tela cheia no celular. */
+.modal-card.is-larga {
+  max-width: min(960px, calc(100vw - 32px));
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 32px);
+}
+.modal-card.is-larga .modal-head strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+@media (max-width: 700px) {
+  .modal-card.is-larga {
+    max-width: none;
+    width: 100vw;
+    height: 100dvh;
+    max-height: none;
+    border-radius: 0;
+    padding: calc(14px + env(safe-area-inset-top, 0px)) 16px calc(14px + env(safe-area-inset-bottom, 0px));
+  }
+}
+.arquivo-aberto { display: flex; flex-direction: column; gap: 12px; flex: 1; min-height: 0; }
+.arquivo-aberto-previa {
+  flex: 1;
+  min-height: 260px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--shape-md);
+  background: var(--surface-variant);
+  overflow: hidden;
+}
+.arquivo-aberto-previa img { max-width: 100%; max-height: 70vh; object-fit: contain; }
+.arquivo-aberto-previa iframe { width: 100%; height: 70vh; border: none; background: #fff; }
+.arquivo-aberto-sem-previa { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 24px; text-align: center; color: var(--primary); }
+.arquivo-aberto-acoes { display: flex; flex-wrap: wrap; gap: 8px; }
+.arquivo-acao {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 0 16px;
+  border-radius: var(--shape-full);
+  border: 1px solid var(--outline);
+  background: transparent;
+  color: var(--on-surface);
+  font-size: var(--body-md);
+  text-decoration: none;
+}
+.arquivo-acao.is-principal { background: var(--solid); border-color: var(--solid); color: var(--on-solid); }
+.arquivo-acao.is-perigo { color: var(--urgent); border-color: var(--urgent); }
+.arquivo-aberto-previa.is-sem-previa { flex: none; min-height: 160px; }
+
+/* Arquivos da anotação, recolhidos quando não há nenhum. */
+.nota-anexos { margin-top: 14px; }
+.nota-anexos > summary {
+  cursor: pointer;
+  padding: 6px 0;
+  font-size: var(--label-md);
+  font-weight: 600;
+  color: var(--on-surface-variant);
+}
+.nota-anexos[open] > summary { margin-bottom: 6px; }
+
+/* Criar projeto: o campo e, embaixo, os modelos como chips de escolha. */
+.projetos-criar { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+.projetos-criar .projetos-novo { margin-bottom: 0; }
+.projetos-modelos { display: flex; flex-wrap: wrap; gap: 6px; }
+.projetos-modelo-dica { margin: 0; }

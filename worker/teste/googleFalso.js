@@ -98,19 +98,51 @@ export function googleFalso({ agora = () => new Date() } = {}) {
       }
     }
 
-    // ---- Drive (appDataFolder) ----
+    // ---- Drive: a appDataFolder e as pastas visíveis dos projetos ----
     if (p === '/drive/v3/files' && metodo === 'GET') {
-      const nome = (u.searchParams.get('q') || '').match(/name = '([^']+)'/)?.[1]
-      return { files: estado.arquivos.filter((a) => a.name === nome).map((a) => ({ id: a.id })) }
+      const q = u.searchParams.get('q') || ''
+      const nome = q.match(/name = '((?:[^'\\]|\\.)*)'/)?.[1]?.replace(/\\(.)/g, '$1')
+      const pai = q.match(/'([^']+)' in parents/)?.[1]
+      const tipo = q.match(/mimeType = '([^']+)'/)?.[1]
+      const achados = estado.arquivos.filter(
+        (a) =>
+          a.name === nome &&
+          !a.trashed &&
+          (!tipo || a.mimeType === tipo) &&
+          // A appDataFolder dos testes não guarda o pai; só as pastas visíveis.
+          (!pai || pai === 'appDataFolder' || (a.parents || []).includes(pai))
+      )
+      return { files: achados.map((a) => ({ id: a.id, webViewLink: a.webViewLink })) }
     }
     if (p === '/drive/v3/files' && metodo === 'POST') {
-      const a = { id: novoId('arq'), name: corpo.name, conteudo: '' }
+      const a = { id: novoId('arq'), name: corpo.name, mimeType: corpo.mimeType, parents: corpo.parents, conteudo: '' }
+      a.webViewLink = `https://drive.google.com/${a.mimeType?.endsWith('folder') ? 'drive/folders' : 'file/d'}/${a.id}`
       estado.arquivos.push(a)
-      return { id: a.id }
+      return { id: a.id, name: a.name, mimeType: a.mimeType, webViewLink: a.webViewLink }
+    }
+    // Documento com conteúdo (multipart): metadados em JSON, depois o texto.
+    if (p === '/upload/drive/v3/files' && metodo === 'POST') {
+      const [, meta, texto] = corpo.match(/\r\n\r\n(\{.*?\})\r\n--[^\r]+\r\n[^\r]+\r\n\r\n([\s\S]*)\r\n--/)
+      const dados = JSON.parse(meta)
+      const a = { id: novoId('doc'), name: dados.name, mimeType: dados.mimeType, parents: dados.parents, conteudo: texto }
+      a.webViewLink = `https://docs.google.com/document/d/${a.id}/edit`
+      estado.arquivos.push(a)
+      return { id: a.id, name: a.name, mimeType: a.mimeType, webViewLink: a.webViewLink }
     }
     if ((m = p.match(/^\/drive\/v3\/files\/([^/]+)$/)) && u.searchParams.get('alt') === 'media') {
       const a = estado.arquivos.find((x) => x.id === m[1])
       return a ? JSON.parse(a.conteudo || 'null') : { status: 404 }
+    }
+    if ((m = p.match(/^\/drive\/v3\/files\/([^/]+)$/)) && metodo === 'GET') {
+      const a = estado.arquivos.find((x) => x.id === m[1])
+      return a ? { id: a.id, trashed: Boolean(a.trashed), webViewLink: a.webViewLink } : { status: 404 }
+    }
+    if ((m = p.match(/^\/drive\/v3\/files\/([^/]+)$/)) && metodo === 'PATCH') {
+      const a = estado.arquivos.find((x) => x.id === m[1])
+      if (!a) return { status: 404 }
+      if (corpo.name !== undefined) a.name = corpo.name
+      if (corpo.trashed !== undefined) a.trashed = corpo.trashed
+      return { id: a.id, name: a.name, trashed: Boolean(a.trashed) }
     }
     if ((m = p.match(/^\/upload\/drive\/v3\/files\/([^/]+)$/)) && metodo === 'PATCH') {
       const a = estado.arquivos.find((x) => x.id === m[1])

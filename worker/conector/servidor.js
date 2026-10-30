@@ -11,6 +11,8 @@ import { z } from 'zod'
 import { criarApiDeTarefas } from '../../src/lib/googleTarefas.js'
 import { criarApiDaAgenda } from '../../src/lib/googleAgenda.js'
 import { criarArmazemNoDrive } from '../../src/lib/driveArquivos.js'
+import { criarDriveDosProjetos } from '../../src/lib/drivePastas.js'
+import { MODELOS } from '../../src/lib/modelosDeProjeto.js'
 import { PRIORITIES } from '../../src/lib/priority.js'
 import { criarRequest, traduzirErro } from './google.js'
 import * as f from './ferramentas.js'
@@ -37,6 +39,12 @@ As anotações são também uma base de conhecimento, no estilo do Obsidian:
 - Para responder a partir das notas: chame buscar_notas com as palavras-chave da pergunta, incluindo sinônimos e siglas por extenso e abreviadas (ex.: "PSR população rua editais recursos"); se não vier nada, tente outras palavras antes de dizer que não há. Leia com ler_nota as mais relevantes e as ligadas a elas, responda só com o que está nas notas e diga de qual nota ([[título]]) veio cada coisa. O que não estiver nas notas, diga que não está.
 - Se a pessoa pedir para guardar a resposta, use guardar_resposta com os ids das notas em que ela se baseou.
 - saude_das_notas aponta links quebrados, notas soltas e títulos repetidos.
+Projetos e arquivos:
+- Cada projeto tem ficha (situação, resultado esperado, marcos), uma pasta no Google Drive ("Segundo Cérebro/<projeto>") e uma página no app com tarefas, anotações, arquivos, compromissos e linha do tempo.
+- Para começar um caso, POP, ofício, reunião de rede ou resposta a calamidade, prefira criar_projeto_de_modelo: já cria a ficha, as primeiras ações, os marcos, a anotação-base e a pasta.
+- Toda etiqueta de projeto usada numa tarefa ganha ficha automaticamente. Se listar_projetos apontar projeto "concluído" com pendências, pergunte à pessoa se é para reabrir ou concluir as tarefas; não decida sozinho.
+- listar_arquivos_projeto mostra os arquivos do projeto e os anexados às notas e tarefas dele. anexar_arquivo vincula um link ou cria um Documento do Google com um texto seu (uma ata, um rascunho de ofício). Arquivos enviados no chat (PDF, foto) não chegam ao conector: peça para a pessoa arrastar no app, na aba Arquivos do projeto.
+
 - Use os ids que as ferramentas devolvem; não invente ids, nomes de projeto ou datas. Datas sempre em AAAA-MM-DD, horários em HH:MM, fuso de Brasília.
 - Não há ferramenta de excluir: para descartar, sugira que ela faça no app.`
 
@@ -164,6 +172,21 @@ export const ESQUEMAS = {
     tipo: z.enum(['projeto', 'rotina']).default('projeto'),
     prazo: DATA.optional(),
     situacao: z.enum(['ativo', 'pausado', 'concluido']).default('ativo'),
+  }),
+  listar_arquivos_projeto: z.object({
+    projeto: TEXTO_CURTO(120).describe('Id do projeto (a etiqueta) ou o nome.'),
+  }),
+  anexar_arquivo: z.object({
+    projeto: TEXTO_CURTO(120).optional().describe('Anexar ao projeto (id ou nome). Use só um destino.'),
+    tarefa_id: ID.optional().describe('Anexar a esta tarefa.'),
+    nota_id: ID.optional().describe('Anexar a esta anotação.'),
+    link: z.string().trim().max(2000).optional().describe('Link http(s) a vincular (Drive, site, sistema).'),
+    texto: z.string().min(1).max(50000).optional().describe('Conteúdo para criar um Documento do Google novo (em vez de link).'),
+    nome: TEXTO_CURTO(200).optional().describe('Nome do arquivo; obrigatório com texto.'),
+  }),
+  criar_projeto_de_modelo: z.object({
+    modelo: z.enum(MODELOS.map((m) => m.id)).describe(MODELOS.map((m) => `${m.id}: ${m.dica}`).join(' ')),
+    nome: TEXTO_CURTO(120).describe('Nome do projeto (ex.: "Caso Silva", "POP Acolhimento"). Vira a etiqueta.'),
   }),
   atualizar_projeto: z.object({
     projeto: TEXTO_CURTO(120).describe('Id do projeto (a etiqueta) ou o nome.'),
@@ -326,6 +349,30 @@ const FERRAMENTAS = [
     leitura: false,
     executar: f.atualizarProjeto,
   },
+  {
+    nome: 'listar_arquivos_projeto',
+    titulo: 'Arquivos do projeto',
+    descricao:
+      'Os arquivos de um projeto (na pasta dele no Drive ou vinculados por link) e os anexados às anotações e tarefas dele, com o link de cada um e o da pasta. Use quando a pessoa perguntar por um documento, ofício, relatório ou foto de um projeto.',
+    leitura: true,
+    executar: f.listarArquivosProjeto,
+  },
+  {
+    nome: 'anexar_arquivo',
+    titulo: 'Anexar arquivo',
+    descricao:
+      'Anexa a um projeto, tarefa ou anotação (um destino só): um link (link) ou um Documento do Google criado com um texto seu (texto + nome), que vai para a pasta do projeto no Drive. Use para guardar uma ata, um rascunho de ofício ou relatório que você escreveu, ou um link que a pessoa mandou. Não serve para arquivos enviados no chat: esses a pessoa arrasta no app.',
+    leitura: false,
+    executar: f.anexarArquivo,
+  },
+  {
+    nome: 'criar_projeto_de_modelo',
+    titulo: 'Criar projeto de modelo',
+    descricao:
+      'Cria um projeto a partir de um modelo da rotina (caso, pop, oficio, reuniao-rede, calamidade): ficha com resultado esperado e marcos, as primeiras próximas ações, a anotação-base com as seções de sempre e a pasta no Drive. Prefira a criar_projeto quando o projeto for de um desses tipos.',
+    leitura: false,
+    executar: f.criarProjetoDeModelo,
+  },
 ]
 
 export const NOMES_DAS_FERRAMENTAS = FERRAMENTAS.map((x) => x.nome)
@@ -337,6 +384,7 @@ export function montarApi(env, props) {
     tarefas: criarApiDeTarefas(request),
     agenda: criarApiDaAgenda(request),
     drive: criarArmazemNoDrive(request),
+    pastas: criarDriveDosProjetos(request),
   }
 }
 

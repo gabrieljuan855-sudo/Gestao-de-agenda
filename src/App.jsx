@@ -20,6 +20,7 @@ import {
   salvarEvento,
   excluirEvento,
   carregarSerie,
+  pastaDoProjeto,
 } from './lib/googleApi.js'
 import {
   LISTA_ENTRADA,
@@ -774,6 +775,17 @@ export default function App() {
     await reload()
   }
 
+  // A pasta no Drive para os anexos de uma tarefa ou nota: a do projeto dela
+  // (criada na hora, se ainda não existe, e guardada na ficha) ou, sem
+  // projeto, uma pasta comum para o que é avulso.
+  async function garantirPastaPara(projetoId, semProjeto = 'Sem projeto') {
+    const ficha = projetoId ? projetosState.projetos.find((p) => p.id === projetoId) : null
+    const alvo = ficha || (projetoId ? { id: projetoId, nome: projetoId } : { id: '_avulsos', nome: semProjeto })
+    const { pasta, nova } = await pastaDoProjeto(alvo)
+    if (ficha && (nova || ficha.pasta?.id !== pasta.id)) projetosState.salvarProjeto({ id: ficha.id, pasta })
+    return pasta
+  }
+
   async function handleSaveTask(patch) {
     await updateTask(editingTask, patch)
     await reload()
@@ -804,6 +816,20 @@ export default function App() {
     await deleteTask(task)
     await reload()
   }
+
+  // Toda etiqueta usada vira projeto com ficha (situação, resultado, pasta).
+  // Só depois da leitura do Drive: antes, a ficha pode existir e só ainda
+  // não ter chegado a este aparelho. Fica antes dos retornos de login abaixo
+  // porque é um efeito (hooks não podem depender de condição).
+  const etiquetasSemFicha = (() => {
+    const comFicha = new Set(projetosState.projetos.map((p) => p.id))
+    const usadas = [...tasks.map((t) => t.projeto), ...notesState.notes.map((n) => n.projeto)].filter(Boolean)
+    return [...new Set(usadas)].filter((id) => !comFicha.has(id)).sort().join(',')
+  })()
+  useEffect(() => {
+    if (projetosState.carregado && etiquetasSemFicha) projetosState.garantirFichas(etiquetasSemFicha.split(','))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projetosState.carregado, etiquetasSemFicha])
 
   // Quem sabe se há login possível é o próprio módulo de autenticação: ele
   // pergunta ao Worker antes de olhar para a variável do build.
@@ -1032,6 +1058,7 @@ export default function App() {
           onCreateEvent={handleCreateEvent}
           onCreateTask={handleCreateTask}
           onAbrirProjeto={abrirProjeto}
+          garantirPasta={(projetoId) => garantirPastaPara(projetoId, 'Anotações')}
         />
       ),
     },
@@ -1436,6 +1463,11 @@ export default function App() {
           onClose={() => setEditingTask(null)}
           contextos={contextosUsados}
           projetos={projetosUsados}
+          onSalvarAnexos={async (notes) => {
+            await updateTask(editingTask, { notes })
+            reload()
+          }}
+          garantirPasta={(projetoId) => garantirPastaPara(projetoId)}
         />
       )}
 

@@ -282,6 +282,20 @@ export function novoProjeto(nome, agora = new Date()) {
   return { id, nome: nome.trim(), resultado: '', situacao: 'ativo', tipo: 'projeto', prazo: null, createdAt: iso, updatedAt: iso, arquivos: [] }
 }
 
+// A ficha de uma etiqueta que ainda não tem ficha: "pops" vira "Pops",
+// "caso-maria" vira "Caso maria". Toda etiqueta usada precisa de ficha —
+// sem ela o projeto não tem situação, resultado nem pasta, e foi assim que
+// um "casos" passou meses sem ninguém saber em que pé estava.
+export function fichaParaEtiqueta(id, agora = new Date()) {
+  if (typeof id !== 'string' || !id) return null
+  const nome = id.replace(/-+/g, ' ').trim()
+  const iso = agora.toISOString()
+  return normalizarProjeto(
+    { id, nome: nome.charAt(0).toUpperCase() + nome.slice(1), situacao: 'ativo', tipo: 'projeto', createdAt: iso, updatedAt: iso },
+    agora
+  )
+}
+
 function maisRecente(...datas) {
   let melhor = null
   for (const d of datas) {
@@ -321,6 +335,10 @@ export function listarProjetos({ registros = [], tasks = [], notes = [], idProxi
         // precisam de próxima ação — é justamente o que os distingue.
         // Rotina também não: ela não anda para uma chegada, só acumula pauta.
         semProximaAcao: p.situacao === 'ativo' && (p.tipo || 'projeto') === 'projeto' && !proximaAcao,
+        // "Concluído" com coisa por fazer é uma contradição: ou o projeto não
+        // terminou, ou as tarefas ficaram esquecidas. O app só avisa — quem
+        // decide qual dos dois é a pessoa.
+        concluidoComPendencias: p.situacao === 'concluido' && pendentes.length > 0,
         ultimaAtividade: maisRecente(
           p.updatedAt,
           ...tasks.filter((t) => t.projeto === p.id).map((t) => t.updated),
@@ -418,6 +436,11 @@ export function panoramaDosProjetos(lista, tasks = [], now = new Date()) {
     semResultado: projetos.filter((p) => !p.resultado?.trim()),
     esquecidos: projetos.filter((p) => !p.semProximaAcao && p.diasSemAtividade !== null && p.diasSemAtividade >= DIAS_ESQUECIDO),
     acaoVaga: projetos.filter((p) => pareceIdeia(p.proximaAcao?.title)),
+    // Estes dois olham a lista inteira, e não só os ativos: são justamente
+    // os projetos que saíram da vista por estarem marcados como concluídos
+    // ou por nunca terem ganhado ficha.
+    concluidosComPendencias: (lista || []).filter((p) => p.concluidoComPendencias),
+    semFicha: (lista || []).filter((p) => p.implicito),
   }
 }
 
@@ -448,6 +471,35 @@ export function historicoDoProjeto({ concluidas = [], eventosPassados = [] }, ev
     })),
   ]
   return itens.filter((x) => x.data && Number.isFinite(x.data.getTime())).sort((a, b) => b.data - a.data)
+}
+
+// A linha do tempo do projeto: tudo o que aconteceu nele, do mais recente
+// para o mais antigo — tarefa concluída, compromisso que passou, anotação
+// criada ou mexida, arquivo que entrou, o próprio projeto sendo aberto. É o
+// "o que andou neste caso?" respondido sem abrir nada.
+export function linhaDoTempoDoProjeto({ projeto, concluidas = [], eventosPassados = [], notas = [] }, eventStart) {
+  const data = (iso) => {
+    const d = iso ? new Date(iso) : null
+    return d && Number.isFinite(d.getTime()) ? d : null
+  }
+  const itens = [
+    ...historicoDoProjeto({ concluidas, eventosPassados }, eventStart).map((h) => ({
+      ...h,
+      rotulo: h.tipo === 'tarefa' ? 'Tarefa concluída' : 'Compromisso',
+    })),
+    ...notas.map((n) => {
+      const criada = data(n.createdAt)
+      const mexida = data(n.updatedAt)
+      // Mexida há menos de um minuto da criação é a mesma escrita, não uma edição.
+      const editada = mexida && criada && mexida - criada > 60000
+      return { tipo: 'nota', id: `n-${n.id}`, titulo: n.title?.trim() || (n.body || '').trim().split('\n')[0] || '(sem título)', data: editada ? mexida : criada || mexida, rotulo: editada ? 'Anotação editada' : 'Anotação criada', item: n }
+    }),
+    ...normalizarArquivos(projeto?.arquivos).map((a) => ({ tipo: 'arquivo', id: `a-${a.id}`, titulo: a.nome, data: data(a.adicionadoEm), rotulo: 'Arquivo adicionado', item: a })),
+    ...(projeto && !projeto.implicito && data(projeto.createdAt)
+      ? [{ tipo: 'projeto', id: `p-${projeto.id}`, titulo: projeto.nome, data: data(projeto.createdAt), rotulo: 'Projeto criado' }]
+      : []),
+  ]
+  return itens.filter((x) => x.data).sort((a, b) => b.data - a.data)
 }
 
 // Junta as concluídas que vieram com a lista geral (quando "Mostrar

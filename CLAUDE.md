@@ -87,6 +87,20 @@ uma pilha de branches que só atrapalha.
   no navegador, fica em `googleApi.js`. O `drive.file` **não** entra no
   `SCOPES` do login pelo navegador (a renovação silenciosa cairia pedindo
   consentimento); é pedido sob demanda (`pedirAcessoAosArquivos`).
+- Projeto: a página é um painel em abas (Resumo, Tarefas, Anotações,
+  Arquivos, Compromissos, Linha do tempo — `linhaDoTempoDoProjeto`). Toda
+  etiqueta usada vira ficha (`fichaParaEtiqueta`; o app cria depois de ler o
+  Drive, o conector ao etiquetar), e "concluído com pendências" só é
+  avisado, nunca corrigido sozinho. Modelos (Caso, POP, Ofício, Reunião de
+  rede, Calamidade) moram em `modelosDeProjeto.js`; o que vem mais adiante
+  vira marco, não tarefa.
+- Arquivos: `Anexos.jsx` serve projeto, tarefa e nota. O que entra é
+  validado por lista do que é aceito (`arquivosValidacao.js`, 100 MB).
+  Remover manda para a lixeira do Drive (recuperável), nunca apaga. Anexo
+  de tarefa mora no texto dela, uma linha `📎 Nome — link`
+  (`anexosNoTexto.js`), porque o Google Tasks não tem campo de anexo e o id
+  da tarefa pode mudar ao mover. Anexo de nota é o campo `anexos`. O
+  conector não recebe binário: anexa link ou cria um Doc com texto.
 - O app e o conector gravam nos mesmos arquivos do Drive: toda gravação é
   ler → mesclar → gravar (`mesclarParaGravar` em `notesMerge.js`), nunca a
   lista local por cima.

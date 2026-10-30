@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import Banner from './Banner.jsx'
 import Modal from './Modal.jsx'
+import ConfirmDialog from './ConfirmDialog.jsx'
 import AssistenteDoProjeto from './AssistenteDoProjeto.jsx'
 import { PRIORITY_LABEL } from '../lib/priority.js'
 import { isOverdueTask } from '../lib/tasks.js'
@@ -8,8 +9,10 @@ import { dateOnlyFromISO, addDays, toDateInput } from '../lib/dates.js'
 import { eventStart, isAllDay } from '../lib/events.js'
 import { parseQuickAdd, descreverQuando } from '../lib/nlp.js'
 import { construirRecorrencia } from '../lib/recorrencia.js'
-import { pastaDoProjeto, criarArquivoGoogle, enviarArquivoAoDrive } from '../lib/googleApi.js'
-import { permissaoDosArquivos, pedirAcessoAosArquivos } from '../lib/googleAuth.js'
+import { pastaDoProjeto } from '../lib/googleApi.js'
+import { permissaoDosArquivos } from '../lib/googleAuth.js'
+import { MODELOS, acharModelo, aplicarModelo } from '../lib/modelosDeProjeto.js'
+import Anexos from './Anexos.jsx'
 import { textoSemFormato } from '../lib/notasFormatacao.js'
 import {
   SITUACOES,
@@ -20,17 +23,11 @@ import {
   novoProjeto,
   tarefasDoProjeto,
   eventoDoProjeto,
-  tipoDoArquivo,
-  vincularArquivo,
-  arquivoDoDrive,
-  juntarArquivos,
-  tamanhoLegivel,
-  NOVOS_ARQUIVOS,
   adicionarMarco,
   alternarMarco,
   removerMarco,
   proximoMarco,
-  historicoDoProjeto,
+  linhaDoTempoDoProjeto,
   juntarConcluidas,
   trechoDaAnotacao,
 } from '../lib/projetos.js'
@@ -66,6 +63,8 @@ function LinhaDoProjeto({ projeto, onAbrir, selecionado }) {
       <span className="projeto-linha-topo">
         <span className="projeto-linha-nome">{projeto.nome}</span>
         {projeto.semProximaAcao && <span className="pill projeto-pill-parado">sem próxima ação</span>}
+        {projeto.concluidoComPendencias && <span className="pill projeto-pill-parado">concluído com pendências</span>}
+        {projeto.implicito && <span className="pill projeto-pill-situacao">sem ficha</span>}
         {projeto.atrasadas > 0 && (
           <span className="pill projeto-pill-atraso">
             {projeto.atrasadas} {projeto.atrasadas === 1 ? 'atrasada' : 'atrasadas'}
@@ -83,8 +82,10 @@ function LinhaDoProjeto({ projeto, onAbrir, selecionado }) {
   )
 }
 
-function ListaDeProjetos({ lista, onAbrir, onCriar, abertoId }) {
+function ListaDeProjetos({ lista, onAbrir, onCriar, abertoId, avisoDoModelo }) {
   const [nome, setNome] = useState('')
+  const [modelo, setModelo] = useState('')
+  const escolhido = acharModelo(modelo)
   const porSituacao = (s) => lista.filter((p) => p.situacao === s)
   const concluidos = porSituacao('concluido')
   // Rotina ativa tem seção própria: misturada aos projetos, ela parecia um
@@ -98,19 +99,44 @@ function ListaDeProjetos({ lista, onAbrir, onCriar, abertoId }) {
   function criar(e) {
     e.preventDefault()
     if (!nome.trim()) return
-    const id = onCriar(nome)
+    const id = onCriar(nome, modelo)
     if (id) {
       setNome('')
+      setModelo('')
       onAbrir(id)
     }
   }
 
   return (
     <div className="projetos">
-      <form className="projetos-novo" onSubmit={criar}>
-        <input type="text" value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Novo projeto (ex.: Caso Maria, Mudança de escritório)" />
-        <button type="submit" className="primary" disabled={!nome.trim()}>Criar</button>
+      <form className="projetos-criar" onSubmit={criar}>
+        <div className="projetos-novo">
+          <input type="text" value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Novo projeto (ex.: Caso Silva, POP Acolhimento)" aria-label="Nome do projeto novo" />
+          <button type="submit" className="primary" disabled={!nome.trim()}>Criar</button>
+        </div>
+        {/* Chips de escolha do MD3: um modelo entre seis, ou nenhum. */}
+        <div className="projetos-modelos" role="radiogroup" aria-label="Modelo do projeto">
+          {[{ id: '', rotulo: 'Em branco' }, ...MODELOS].map((m) => (
+            <button
+              key={m.id || 'branco'}
+              type="button"
+              role="radio"
+              aria-checked={modelo === m.id}
+              className={`pill pill-filtro${modelo === m.id ? ' is-escolhido' : ''}`}
+              onClick={() => setModelo(m.id)}
+            >
+              {m.rotulo}
+            </button>
+          ))}
+        </div>
+        {escolhido && (
+          <p className="muted t-label projetos-modelo-dica">
+            {escolhido.dica} Cria a ficha, {escolhido.tarefas.length} próximas ações, {escolhido.marcos.length} marcos
+            {escolhido.nota ? ', uma anotação-base' : ''} e a pasta no Drive.
+          </p>
+        )}
       </form>
+      {avisoDoModelo && <p className="muted t-label" role="status">{avisoDoModelo}</p>}
 
       {lista.length === 0 && (
         <p className="muted">
@@ -135,7 +161,7 @@ function ListaDeProjetos({ lista, onAbrir, onCriar, abertoId }) {
       {/* Concluído não some — é o histórico dos casos —, mas também não
           disputa atenção com o que ainda está andando. */}
       {concluidos.length > 0 && (
-        <details className="projetos-concluidos">
+        <details className="projetos-concluidos" open={concluidos.some((p) => p.concluidoComPendencias) || undefined}>
           <summary className="projetos-secao">Concluídos ({concluidos.length})</summary>
           <div className="projetos-lista">
             {concluidos.map((p) => (
@@ -153,7 +179,7 @@ function ListaDeProjetos({ lista, onAbrir, onCriar, abertoId }) {
 // Nome, tipo, situação, prazo, IA: decide-se uma vez e quase nunca se mexe.
 // Por isso moram num diálogo atrás do botão "Configurar", e não na página —
 // lá eles disputavam a atenção com o que faz o projeto andar.
-function ConfigurarProjeto({ projeto, onSalvar, onFechar }) {
+function ConfigurarProjeto({ projeto, pendentes = 0, onSalvar, onFechar }) {
   const [nome, setNome] = useState(projeto.nome)
   const [resultado, setResultado] = useState(projeto.resultado || '')
   const [situacao, setSituacao] = useState(projeto.situacao)
@@ -192,6 +218,12 @@ function ConfigurarProjeto({ projeto, onSalvar, onFechar }) {
             <input type="date" value={prazo} onChange={(e) => setPrazo(e.target.value)} />
           </label>
         </div>
+        {situacao === 'concluido' && pendentes > 0 && (
+          <div className="form-error" role="status">
+            Ainda há {pendentes} {pendentes === 1 ? 'tarefa pendente' : 'tarefas pendentes'} neste projeto. Conclua ou mova
+            antes, ou elas ficam penduradas num projeto encerrado.
+          </div>
+        )}
         <label className="field">
           <span>Tipo</span>
           <select value={tipo} onChange={(e) => setTipo(e.target.value)}>
@@ -215,62 +247,12 @@ function ConfigurarProjeto({ projeto, onSalvar, onFechar }) {
   )
 }
 
-// Ícone por tipo, para achar "a planilha" ou "o PDF" de olho numa lista longa.
-const ICONE_DO_TIPO = {
-  doc: 'M6 3h9l5 5v13H6zM14 3v6h6M9 13h8M9 17h6',
-  planilha: 'M5 4h14v16H5zM5 10h14M5 15h14M10 4v16',
-  apresentacao: 'M4 5h16v11H4zM12 16v4M8 20h8',
-  formulario: 'M6 3h12v18H6zM9 8h6M9 12h6M9 16h4',
-  pasta: 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z',
-  pdf: 'M6 3h9l5 5v13H6zM14 3v6h6M9 15h6',
-  drive: 'M6 3h9l5 5v13H6zM14 3v6h6',
-  imagem: 'M4 5h16v14H4zM4 15l4-4 4 4 3-3 5 5M15 9.5a1.5 1.5 0 1 0 0-.01',
-  audio: 'M9 18V6l10-2v12M9 18a3 3 0 1 1-3-3 3 3 0 0 1 3 3zM19 16a3 3 0 1 1-3-3 3 3 0 0 1 3 3z',
-  video: 'M4 6h12v12H4zM16 10l4-2v8l-4-2',
-  link: 'M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1',
-}
-
-// Falta a permissão nova (drive.file), ou o Google disse que ela não veio.
-const SEM_PERMISSAO = 'sem-permissao'
-function semPermissao(err) {
-  return err?.status === 403 && /insufficient|scope|permission/i.test(err.body || err.message || '')
-}
-
-// Os arquivos do projeto. Enviar (escolhendo ou arrastando do computador) e
-// criar Documento/Planilha/Apresentação vão para a pasta do projeto no Drive
-// — antes só dava para colar link, e todo arquivo novo pedia sair do app,
-// subir no Drive, copiar o link e voltar. Vincular por link continua, para o
-// que já mora em outro lugar.
+// Os arquivos do projeto: o componente Anexos, com a pasta do projeto no
+// Drive como destino. A pasta nasce no primeiro arquivo e fica guardada na
+// ficha.
 function Arquivos({ projeto, onSalvar }) {
-  const [link, setLink] = useState('')
-  const [nome, setNome] = useState('')
-  const [erro, setErro] = useState(null)
-  const [vinculando, setVinculando] = useState(false)
-  const [criando, setCriando] = useState(null)
-  const [nomeDoNovo, setNomeDoNovo] = useState('')
-  const [enviando, setEnviando] = useState([])
-  const [arrastando, setArrastando] = useState(false)
-  const [precisaPermissao, setPrecisaPermissao] = useState(false)
-  const escolherRef = useRef(null)
-  const arquivos = projeto.arquivos || []
-  // A lista mais recente, lida depois de cada envio: vários arquivos sobem um
-  // atrás do outro, e a lista de quando o primeiro começou já está velha.
   const projetoRef = useRef(projeto)
   projetoRef.current = projeto
-
-  function salvarArquivos(novos) {
-    onSalvar({ id: projeto.id, arquivos: juntarArquivos(projetoRef.current.arquivos, novos) })
-  }
-
-  // Confere a permissão antes de abrir o seletor: se faltar, o login novo
-  // tiraria a pessoa da tela e os arquivos escolhidos se perderiam.
-  function podeUsarODrive() {
-    if (permissaoDosArquivos() === false) {
-      setPrecisaPermissao(true)
-      return false
-    }
-    return true
-  }
 
   async function garantirPasta() {
     const { pasta, nova } = await pastaDoProjeto(projetoRef.current)
@@ -278,231 +260,14 @@ function Arquivos({ projeto, onSalvar }) {
     return pasta
   }
 
-  function tratarErro(err, oQue) {
-    if (semPermissao(err)) {
-      setPrecisaPermissao(true)
-      return SEM_PERMISSAO
-    }
-    setErro(`Não deu para ${oQue} (${err.message?.slice(0, 140) || 'erro desconhecido'}).`)
-    return null
-  }
-
-  async function enviar(lista) {
-    const escolhidos = [...(lista || [])]
-    if (!escolhidos.length || !podeUsarODrive()) return
-    setErro(null)
-    const fila = escolhidos.map((f, i) => ({ chave: `${Date.now()}-${i}`, nome: f.name, progresso: 0, arquivo: f }))
-    setEnviando((atual) => [...atual, ...fila.map(({ arquivo, ...resto }) => resto)])
-    let pasta
-    try {
-      pasta = await garantirPasta()
-    } catch (err) {
-      tratarErro(err, 'abrir a pasta do projeto no Drive')
-      setEnviando((atual) => atual.filter((e) => !fila.some((f) => f.chave === e.chave)))
-      return
-    }
-    // Um de cada vez: no celular, vários envios juntos disputam a mesma
-    // conexão e todos ficam lentos.
-    for (const item of fila) {
-      try {
-        const doDrive = await enviarArquivoAoDrive(pasta.id, item.arquivo, (p) =>
-          setEnviando((atual) => atual.map((e) => (e.chave === item.chave ? { ...e, progresso: p } : e)))
-        )
-        salvarArquivos([arquivoDoDrive(doDrive)])
-      } catch (err) {
-        if (tratarErro(err, `enviar "${item.nome}"`) === SEM_PERMISSAO) break
-      } finally {
-        setEnviando((atual) => atual.filter((e) => e.chave !== item.chave))
-      }
-    }
-  }
-
-  async function criar(e) {
-    e.preventDefault()
-    const novo = NOVOS_ARQUIVOS.find((n) => n.tipo === criando)
-    const titulo = nomeDoNovo.trim() || `${novo.rotulo} — ${projeto.nome}`
-    if (!podeUsarODrive()) return
-    // A aba é aberta já, no toque: aberta depois da espera pelo Drive, o
-    // navegador a trataria como pop-up e bloquearia.
-    const aba = window.open('', '_blank')
-    try {
-      const pasta = await garantirPasta()
-      const doDrive = await criarArquivoGoogle(pasta.id, titulo, novo.mime)
-      salvarArquivos([arquivoDoDrive(doDrive)])
-      if (aba) aba.location.href = doDrive.webViewLink
-      setCriando(null)
-      setNomeDoNovo('')
-    } catch (err) {
-      aba?.close()
-      tratarErro(err, `criar ${novo.rotulo.toLowerCase()}`)
-    }
-  }
-
-  function vincular(e) {
-    e.preventDefault()
-    const nova = vincularArquivo(arquivos, { url: link, nome })
-    if (!nova) {
-      setErro('Isso não parece um link. Cole o endereço do arquivo (ex.: o "Copiar link" do Drive).')
-      return
-    }
-    onSalvar({ id: projeto.id, arquivos: nova })
-    setLink('')
-    setNome('')
-    setErro(null)
-    setVinculando(false)
-  }
-
-  function remover(id) {
-    onSalvar({ id: projeto.id, arquivos: arquivos.filter((a) => a.id !== id) })
-  }
-
-  // Arrastar do computador: a seção inteira vira o lugar de soltar.
-  const arrastar = {
-    onDragOver: (e) => {
-      if (![...(e.dataTransfer?.types || [])].includes('Files')) return
-      e.preventDefault()
-      setArrastando(true)
-    },
-    onDragLeave: (e) => {
-      if (!e.currentTarget.contains(e.relatedTarget)) setArrastando(false)
-    },
-    onDrop: (e) => {
-      if (!e.dataTransfer?.files?.length) return
-      e.preventDefault()
-      setArrastando(false)
-      enviar(e.dataTransfer.files)
-    },
-  }
-
   return (
-    <div className={`projeto-arquivos${arrastando ? ' is-arrastando' : ''}`} {...arrastar}>
-      {precisaPermissao && (
-        <Banner tone="info" actionLabel="Permitir" onAction={pedirAcessoAosArquivos}>
-          Para enviar e criar arquivos, o Segundo Cérebro precisa de uma permissão nova do Google: acesso aos arquivos que ele
-          mesmo criar no seu Drive (o resto do Drive continua fora de alcance). Depois de permitir, envie de novo.
-        </Banner>
-      )}
-
-      {arquivos.map((a) => {
-        const { tipo, rotulo } = tipoDoArquivo(a)
-        const detalhe = [rotulo, a.tamanho !== undefined && tamanhoLegivel(a.tamanho)].filter(Boolean).join(' · ')
-        return (
-          <div key={a.id} className="projeto-arquivo">
-            <a href={a.url} target="_blank" rel="noopener noreferrer" className="projeto-arquivo-link" title={a.url}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d={ICONE_DO_TIPO[tipo] || ICONE_DO_TIPO.drive} />
-              </svg>
-              <span className="projeto-arquivo-texto">
-                <span className="projeto-arquivo-nome">{a.nome}</span>
-                <span className="projeto-evento-quando">{detalhe}</span>
-              </span>
-            </a>
-            <button
-              type="button"
-              className="icon-btn"
-              aria-label={`Tirar ${a.nome} do projeto`}
-              title={a.driveId ? 'Tirar do projeto (o arquivo continua na pasta do projeto no Drive)' : 'Desvincular (o arquivo em si não é apagado)'}
-              onClick={() => remover(a.id)}
-            >
-              ×
-            </button>
-          </div>
-        )
-      })}
-
-      {/* Indicador de progresso linear do MD3, um por arquivo subindo. */}
-      {enviando.map((e) => (
-        <div key={e.chave} className="projeto-envio" role="status">
-          <span className="projeto-arquivo-nome">{e.nome}</span>
-          <span className="projeto-envio-barra" aria-hidden="true">
-            <span style={{ width: `${Math.round(e.progresso * 100)}%` }} />
-          </span>
-          <span className="projeto-evento-quando">{e.progresso >= 1 ? 'Concluindo…' : `Enviando… ${Math.round(e.progresso * 100)}%`}</span>
-        </div>
-      ))}
-
-      {arquivos.length === 0 && enviando.length === 0 && (
-        <p className="muted projeto-vazio projeto-arquivos-dica">
-          Arraste arquivos para cá ou use os botões abaixo. Eles vão para a pasta do projeto no seu Drive.
-        </p>
-      )}
-
-      <input
-        ref={escolherRef}
-        type="file"
-        multiple
-        hidden
-        onChange={(e) => {
-          enviar(e.target.files)
-          e.target.value = ''
-        }}
-      />
-      <div className="projeto-arquivos-acoes">
-        <button type="button" onClick={() => podeUsarODrive() && escolherRef.current?.click()}>
-          Enviar arquivos
-        </button>
-        <button
-          type="button"
-          className={criando ? 'is-escolhido' : ''}
-          aria-expanded={Boolean(criando)}
-          onClick={() => {
-            setCriando((atual) => (atual ? null : NOVOS_ARQUIVOS[0].tipo))
-            setNomeDoNovo('')
-          }}
-        >
-          + Criar
-        </button>
-      </div>
-
-      {criando && (
-        <form className="projeto-arquivo-criar" onSubmit={criar}>
-          {/* Chips de escolha: um tipo entre três, como no MD3. */}
-          <div className="projeto-arquivo-tipos" role="radiogroup" aria-label="Tipo do arquivo novo">
-            {NOVOS_ARQUIVOS.map((n) => (
-              <button
-                key={n.tipo}
-                type="button"
-                role="radio"
-                aria-checked={criando === n.tipo}
-                className={`pill pill-filtro${criando === n.tipo ? ' is-escolhido' : ''}`}
-                onClick={() => setCriando(n.tipo)}
-              >
-                {n.rotulo}
-              </button>
-            ))}
-          </div>
-          <div className="projeto-arquivo-novo">
-          <input
-            type="text"
-            value={nomeDoNovo}
-            onChange={(e) => setNomeDoNovo(e.target.value)}
-            placeholder={`${NOVOS_ARQUIVOS.find((n) => n.tipo === criando).rotulo} — ${projeto.nome}`}
-            aria-label="Nome do arquivo novo"
-            autoFocus
-          />
-          <button type="submit" className="primary">Criar e abrir</button>
-          </div>
-        </form>
-      )}
-
-      {vinculando ? (
-        <form className="projeto-arquivo-novo" onSubmit={vincular}>
-          <input type="text" value={link} onChange={(e) => { setLink(e.target.value); setErro(null) }} placeholder="Cole o link (Drive, PDF, site)" autoFocus />
-          <input type="text" value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Nome (opcional)" />
-          <button type="submit" disabled={!link.trim()}>Vincular</button>
-        </form>
-      ) : (
-        <div className="projeto-arquivos-rodape">
-          <button type="button" className="link-btn projeto-mais" onClick={() => setVinculando(true)}>Vincular um link</button>
-          {projeto.pasta && (
-            <a className="link-btn projeto-mais" href={projeto.pasta.url} target="_blank" rel="noopener noreferrer">
-              Abrir a pasta no Drive
-            </a>
-          )}
-        </div>
-      )}
-      {erro && <div className="form-error">{erro}</div>}
-    </div>
+    <Anexos
+      arquivos={projeto.arquivos || []}
+      onMudar={(arquivos) => onSalvar({ id: projeto.id, arquivos })}
+      garantirPasta={garantirPasta}
+      nomeDoNovoPadrao={projeto.nome}
+      pastaUrl={projeto.pasta?.url}
+    />
   )
 }
 
@@ -747,6 +512,7 @@ function PaginaDoProjeto({
     .sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0))
   const [versaoEventos, setVersaoEventos] = useState(0)
   const [configurando, setConfigurando] = useState(false)
+  const [concluindoPendencias, setConcluindoPendencias] = useState(false)
   const [historicoTodo, setHistoricoTodo] = useState(false)
   const eventos = useCompromissos(projeto.id, buscarEventos, versaoEventos)
   const [concluidasBuscadas, setConcluidasBuscadas] = useConcluidas(buscarConcluidas)
@@ -760,19 +526,86 @@ function PaginaDoProjeto({
 
   const agora = new Date()
   const proximos = (eventos || []).filter((ev) => eventStart(ev) >= agora)
-  const historico = historicoDoProjeto(
-    {
-      concluidas: juntarConcluidas(grupos.concluidas, concluidasBuscadas.filter((t) => t.projeto === projeto.id)),
-      eventosPassados: (eventos || []).filter((ev) => eventStart(ev) < agora),
-    },
+  const passados = (eventos || []).filter((ev) => eventStart(ev) < agora).reverse()
+  const concluidasDoProjeto = juntarConcluidas(grupos.concluidas, concluidasBuscadas.filter((t) => t.projeto === projeto.id)).sort(
+    (a, b) => new Date(b.completed || 0) - new Date(a.completed || 0)
+  )
+  const linhaDoTempo = linhaDoTempoDoProjeto(
+    { projeto, concluidas: concluidasDoProjeto, eventosPassados: passados, notas: anotacoes },
     eventStart
   )
-  const historicoVisivel = historicoTodo ? historico : historico.slice(0, HISTORICO_INICIAL)
+  const atrasadas = aFazer.filter(({ task }) => isOverdueTask(task)).length
+
+  // A aba aberta é a única coisa da página que não vem do projeto: começa
+  // sempre no Resumo, que é a resposta para "em que pé está".
+  const [aba, setAba] = useState('resumo')
+  const abas = [
+    { id: 'resumo', rotulo: 'Resumo' },
+    { id: 'tarefas', rotulo: 'Tarefas', contagem: aFazer.length },
+    { id: 'anotacoes', rotulo: 'Anotações', contagem: anotacoes.length },
+    { id: 'arquivos', rotulo: 'Arquivos', contagem: (projeto.arquivos || []).length },
+    { id: 'compromissos', rotulo: 'Compromissos', contagem: proximos.length },
+    { id: 'linha', rotulo: 'Linha do tempo' },
+  ]
+
+  function abrirDaLinha(h) {
+    if (h.tipo === 'tarefa') onEditarTarefa(h.item)
+    else if (h.tipo === 'compromisso') onEditarEvento(h.item)
+    else if (h.tipo === 'nota') onAbrirNota(h.item.id)
+    else if (h.tipo === 'arquivo') window.open(h.item.url, '_blank', 'noopener,noreferrer')
+  }
+
+  const linhaDoEvento = (ev) => (
+    <button key={`${ev.calendarId}-${ev.id}`} type="button" className="projeto-evento" onClick={() => onEditarEvento(ev)}>
+      <span className="projeto-evento-quando">{quandoDoEvento(ev)}</span>
+      <span className="projeto-evento-titulo">{semEtiqueta(ev.summary, projeto.id)}</span>
+    </button>
+  )
+
+  const destaque = projeto.proximaAcao ? (
+    <div className="projeto-destaque">
+      <span className="t-label-sm">{rotina ? 'Próximo item da pauta' : 'Próxima ação'}</span>
+      <strong className="projeto-destaque-texto">{projeto.proximaAcao.title}</strong>
+      {/* Uma "ação" do tamanho de um parágrafo é uma ideia inteira:
+          quem lê não sabe por onde começar. */}
+      {pareceIdeia(projeto.proximaAcao.title) && (
+        <div className="projeto-aviso-ideia">
+          <span>Parece uma ideia, não um passo.</span>
+          <button type="button" onClick={() => onEditarTarefa(projeto.proximaAcao)}>Reescrever</button>
+        </div>
+      )}
+    </div>
+  ) : projeto.semProximaAcao ? (
+    <div className="projeto-destaque is-vazio">
+      <span className="t-label-sm">Próxima ação</span>
+      <strong className="projeto-destaque-texto">Nenhuma. Qual é o próximo passo?</strong>
+    </div>
+  ) : null
+
+  const captura = (
+    <CapturaNoProjeto
+      projetoId={projeto.id}
+      idProximas={ids.idProximas}
+      onCreateEvent={async (preview) => {
+        const r = await onCreateEvent(preview)
+        setVersaoEventos((v) => v + 1)
+        return r
+      }}
+      onCreateTask={onCreateTask}
+    />
+  )
 
   async function concluir(task) {
     await onConcluirTarefa(task)
     // Aparece em "Feito" na hora, sem esperar uma nova busca.
     setConcluidasBuscadas((l) => [{ ...task, status: 'completed', completed: new Date().toISOString() }, ...l])
+  }
+
+  // Uma de cada vez, na ordem: em paralelo, o Google Tasks recusa parte das
+  // gravações por excesso de pedidos e algumas ficariam para trás.
+  async function concluirPendencias() {
+    setConcluindoPendencias(false)
+    for (const { task } of aFazer) await concluir(task)
   }
 
   return (
@@ -790,129 +623,165 @@ function PaginaDoProjeto({
               <span className="pill projeto-pill-situacao">{SITUACOES.find((x) => x.id === projeto.situacao)?.label}</span>
             )}
           </h2>
-          {projeto.resultado && <p className="muted projeto-resultado">{projeto.resultado}</p>}
         </div>
         <button type="button" className="projeto-configurar" onClick={() => setConfigurando(true)}>
           Configurar
         </button>
       </header>
 
-      {projeto.proximaAcao ? (
-        <div className="projeto-destaque">
-          <span className="t-label-sm">{rotina ? 'Próximo item da pauta' : 'Próxima ação'}</span>
-          <strong className="projeto-destaque-texto">{projeto.proximaAcao.title}</strong>
-          {/* Uma "ação" do tamanho de um parágrafo é uma ideia inteira:
-              quem lê não sabe por onde começar. */}
-          {pareceIdeia(projeto.proximaAcao.title) && (
-            <div className="projeto-aviso-ideia">
-              <span>Parece uma ideia, não um passo.</span>
-              <button type="button" onClick={() => onEditarTarefa(projeto.proximaAcao)}>Reescrever</button>
-            </div>
-          )}
-        </div>
-      ) : (
-        projeto.semProximaAcao && (
-          <div className="projeto-destaque is-vazio">
-            <span className="t-label-sm">Próxima ação</span>
-            <strong className="projeto-destaque-texto">Nenhuma. Qual é o próximo passo?</strong>
-          </div>
-        )
+      {/* O que está incoerente vem antes de tudo: é o que faz a lista de
+          projetos mentir sobre o que está em andamento. */}
+      {projeto.implicito && (
+        <Banner tone="info" actionLabel="Criar a ficha" onAction={() => onSalvar({ id: projeto.id, nome: projeto.nome })}>
+          Este projeto existe só como etiqueta nas tarefas. A ficha dá a ele situação, resultado esperado e pasta de arquivos.
+        </Banner>
+      )}
+      {projeto.concluidoComPendencias && (
+        <Banner tone="warning" actionLabel="Reabrir o projeto" onAction={() => onSalvar({ id: projeto.id, situacao: 'ativo' })}>
+          Marcado como concluído, mas ainda tem {aFazer.length} {aFazer.length === 1 ? 'tarefa pendente' : 'tarefas pendentes'}.
+          Ou o projeto não terminou, ou elas ficaram esquecidas.{' '}
+          <button type="button" className="link-btn" onClick={() => setConcluindoPendencias(true)}>
+            Concluir as pendências
+          </button>
+        </Banner>
       )}
 
-      <CapturaNoProjeto
-        projetoId={projeto.id}
-        idProximas={ids.idProximas}
-        onCreateEvent={async (preview) => {
-          const r = await onCreateEvent(preview)
-          setVersaoEventos((v) => v + 1)
-          return r
-        }}
-        onCreateTask={onCreateTask}
-      />
+      {/* Primary tabs do MD3: seis visões do mesmo projeto, uma de cada vez.
+          Antes tudo vinha numa página só, em duas colunas, e um projeto com
+          histórico longo virava uma rolagem sem fim. */}
+      <div className="projeto-abas" role="tablist" aria-label="Partes do projeto">
+        {abas.map((a) => (
+          <button
+            key={a.id}
+            type="button"
+            role="tab"
+            id={`projeto-aba-${a.id}`}
+            aria-selected={aba === a.id}
+            aria-controls={`projeto-painel-${a.id}`}
+            className={`projeto-aba${aba === a.id ? ' is-ativa' : ''}`}
+            onClick={() => setAba(a.id)}
+          >
+            {a.rotulo}
+            {a.contagem > 0 && <span className="projeto-aba-contagem">{a.contagem}</span>}
+          </button>
+        ))}
+      </div>
 
-      <AssistenteDoProjeto
-        projeto={projeto}
-        grupos={grupos}
-        anotacoes={anotacoes}
-        contextos={[...new Set(tasks.map((t) => t.contexto).filter(Boolean))]}
-        idProximas={ids.idProximas}
-        onCreateTask={onCreateTask}
-        onSalvar={onSalvar}
-        onAtualizarTarefa={onAtualizarTarefa}
-        onSalvarAnotacao={onSalvarAnotacao}
-        onAbrirNota={onAbrirNota}
-      />
-
-      {/* O que se faz à esquerda (a fazer, feito, agenda); o que se consulta
-          à direita (anotações, marcos, arquivos). No celular, empilham. */}
-      <div className="projeto-colunas">
-        <div className="projeto-coluna">
-          <section>
-            <h3 className="projetos-secao">{rotina ? 'Pauta' : 'A fazer'} · {aFazer.length}</h3>
-            {aFazer.length === 0 ? (
-              <p className="muted projeto-vazio">Nada pendente.</p>
-            ) : (
-              <div className="aguardando-lista">
-                {aFazer.map(({ task, origem }) => (
-                  <LinhaDeTarefa key={task.id} task={task} origem={origem} onEditar={onEditarTarefa} onConcluir={concluir} />
-                ))}
-              </div>
-            )}
-          </section>
-
-          <section>
-            <h3 className="projetos-secao">Feito · {historico.length}</h3>
-            {historico.length === 0 ? (
-              <p className="muted projeto-vazio">Nada concluído ainda.</p>
-            ) : (
-              <ol className="projeto-historico">
-                {historicoVisivel.map((h) => (
-                  <li key={h.id}>
-                    <button
-                      type="button"
-                      className="projeto-historico-item"
-                      onClick={() => (h.tipo === 'tarefa' ? onEditarTarefa(h.item) : onEditarEvento(h.item))}
-                    >
-                      <span className="projeto-historico-data">{dataDoHistorico(h.data)}</span>
-                      <span className="projeto-historico-titulo">
-                        {h.tipo === 'compromisso' && <span className="projeto-historico-tipo" aria-label="compromisso">◷</span>}
-                        {semEtiqueta(h.titulo, projeto.id)}
-                      </span>
+      <div role="tabpanel" id={`projeto-painel-${aba}`} aria-labelledby={`projeto-aba-${aba}`} className="projeto-painel">
+        {aba === 'resumo' && (
+          <>
+            {destaque}
+            {captura}
+            <dl className="projeto-ficha-resumo">
+              <div>
+                <dt>{rotina ? 'Para que serve' : 'Resultado esperado'}</dt>
+                <dd>
+                  {projeto.resultado?.trim() || (
+                    <button type="button" className="link-btn" onClick={() => setConfigurando(true)}>
+                      {rotina ? 'Dizer para que serve' : 'Definir como se sabe que terminou'}
                     </button>
-                  </li>
-                ))}
-              </ol>
-            )}
-            {historico.length > HISTORICO_INICIAL && (
-              <button type="button" className="link-btn projeto-mais" onClick={() => setHistoricoTodo((v) => !v)}>
-                {historicoTodo ? 'Mostrar menos' : `Ver tudo (${historico.length})`}
-              </button>
-            )}
-          </section>
-
-          {proximos.length > 0 && (
-            <section>
-              <h3 className="projetos-secao">Agenda</h3>
-              <div className="aguardando-lista">
-                {proximos.map((ev) => (
-                  <button key={`${ev.calendarId}-${ev.id}`} type="button" className="projeto-evento" onClick={() => onEditarEvento(ev)}>
-                    <span className="projeto-evento-quando">{quandoDoEvento(ev)}</span>
-                    <span className="projeto-evento-titulo">{semEtiqueta(ev.summary, projeto.id)}</span>
-                  </button>
-                ))}
+                  )}
+                </dd>
               </div>
-            </section>
-          )}
-        </div>
+              <div>
+                <dt>Situação</dt>
+                <dd>{SITUACOES.find((x) => x.id === projeto.situacao)?.label} · {rotina ? 'rotina' : 'projeto'}</dd>
+              </div>
+              <div>
+                <dt>Prazo</dt>
+                <dd>{projeto.prazo ? dataCurta(projeto.prazo) : <span className="muted">sem prazo</span>}</dd>
+              </div>
+            </dl>
 
-        <div className="projeto-coluna">
+            {/* Cada número leva à aba dele: o resumo responde "em que pé
+                está" e é a porta de entrada para o resto. */}
+            <div className="projeto-numeros">
+              <button type="button" className="projeto-numero" onClick={() => setAba('tarefas')}>
+                <strong>{aFazer.length}</strong>
+                <span>{rotina ? 'na pauta' : 'a fazer'}</span>
+                {atrasadas > 0 && <span className="projeto-numero-alerta">{atrasadas} atrasada(s)</span>}
+              </button>
+              <button type="button" className="projeto-numero" onClick={() => setAba('anotacoes')}>
+                <strong>{anotacoes.length}</strong>
+                <span>{anotacoes.length === 1 ? 'anotação' : 'anotações'}</span>
+              </button>
+              <button type="button" className="projeto-numero" onClick={() => setAba('arquivos')}>
+                <strong>{(projeto.arquivos || []).length}</strong>
+                <span>{(projeto.arquivos || []).length === 1 ? 'arquivo' : 'arquivos'}</span>
+              </button>
+              <button type="button" className="projeto-numero" onClick={() => setAba('compromissos')}>
+                <strong>{eventos === null ? '…' : proximos.length}</strong>
+                <span>{proximos[0] ? `próximo ${quandoDoEvento(proximos[0])}` : 'compromissos à frente'}</span>
+              </button>
+            </div>
+
+            {!rotina && (
+              <section>
+                <h3 className="projetos-secao">Marcos</h3>
+                <Marcos projeto={projeto} onSalvar={onSalvar} />
+              </section>
+            )}
+
+            <AssistenteDoProjeto
+              projeto={projeto}
+              grupos={grupos}
+              anotacoes={anotacoes}
+              contextos={[...new Set(tasks.map((t) => t.contexto).filter(Boolean))]}
+              idProximas={ids.idProximas}
+              onCreateTask={onCreateTask}
+              onSalvar={onSalvar}
+              onAtualizarTarefa={onAtualizarTarefa}
+              onSalvarAnotacao={onSalvarAnotacao}
+              onAbrirNota={onAbrirNota}
+            />
+          </>
+        )}
+
+        {aba === 'tarefas' && (
+          <>
+            {captura}
+            <section>
+              <h3 className="projetos-secao">{rotina ? 'Pauta' : 'A fazer'} · {aFazer.length}</h3>
+              {aFazer.length === 0 ? (
+                <p className="muted projeto-vazio">Nada pendente. Escreva acima a próxima ação.</p>
+              ) : (
+                <div className="aguardando-lista">
+                  {aFazer.map(({ task, origem }) => (
+                    <LinhaDeTarefa key={task.id} task={task} origem={origem} onEditar={onEditarTarefa} onConcluir={concluir} />
+                  ))}
+                </div>
+              )}
+            </section>
+            <section>
+              <h3 className="projetos-secao">Concluídas · {concluidasDoProjeto.length}</h3>
+              {concluidasDoProjeto.length === 0 ? (
+                <p className="muted projeto-vazio">Nada concluído ainda.</p>
+              ) : (
+                <div className="aguardando-lista">
+                  {concluidasDoProjeto.slice(0, historicoTodo ? undefined : HISTORICO_INICIAL).map((t) => (
+                    <LinhaDeTarefa key={t.id} task={t} onEditar={onEditarTarefa} onConcluir={concluir} />
+                  ))}
+                </div>
+              )}
+              {concluidasDoProjeto.length > HISTORICO_INICIAL && (
+                <button type="button" className="link-btn projeto-mais" onClick={() => setHistoricoTodo((v) => !v)}>
+                  {historicoTodo ? 'Mostrar menos' : `Ver todas (${concluidasDoProjeto.length})`}
+                </button>
+              )}
+            </section>
+          </>
+        )}
+
+        {aba === 'anotacoes' && (
           <section>
             <div className="projeto-secao-cabeca">
               <h3 className="projetos-secao">Anotações · {anotacoes.length}</h3>
-              <button type="button" className="link-btn" onClick={() => onNovaNota(projeto.id)}>+ Nova</button>
+              <button type="button" className="link-btn" onClick={() => onNovaNota(projeto.id)}>+ Nova anotação</button>
             </div>
             {anotacoes.length === 0 ? (
-              <p className="muted projeto-vazio">Nenhuma anotação.</p>
+              <p className="muted projeto-vazio">
+                Nenhuma anotação. Registros de atendimento, atas e combinados do projeto ficam aqui, ligados a ele.
+              </p>
             ) : (
               <div className="projeto-notas">
                 {anotacoes.map((n) => {
@@ -931,22 +800,72 @@ function PaginaDoProjeto({
               </div>
             )}
           </section>
+        )}
 
-          {!rotina && (
+        {aba === 'arquivos' && <Arquivos projeto={projeto} onSalvar={onSalvar} />}
+
+        {aba === 'compromissos' && (
+          <>
+            {captura}
             <section>
-              <h3 className="projetos-secao">Marcos</h3>
-              <Marcos projeto={projeto} onSalvar={onSalvar} />
+              <h3 className="projetos-secao">À frente · {proximos.length}</h3>
+              {eventos === null ? (
+                <p className="muted projeto-vazio">Carregando a agenda…</p>
+              ) : proximos.length === 0 ? (
+                <p className="muted projeto-vazio">Nenhum compromisso marcado. Escreva acima com dia e hora ("reunião de rede quinta 14h").</p>
+              ) : (
+                <div className="aguardando-lista">{proximos.map(linhaDoEvento)}</div>
+              )}
             </section>
-          )}
+            {passados.length > 0 && (
+              <section>
+                <h3 className="projetos-secao">Já aconteceram · {passados.length}</h3>
+                <div className="aguardando-lista">{passados.map(linhaDoEvento)}</div>
+              </section>
+            )}
+          </>
+        )}
 
+        {aba === 'linha' && (
           <section>
-            <h3 className="projetos-secao">Arquivos</h3>
-            <Arquivos projeto={projeto} onSalvar={onSalvar} />
+            {linhaDoTempo.length === 0 ? (
+              <p className="muted projeto-vazio">Nada aconteceu neste projeto ainda.</p>
+            ) : (
+              <ol className="projeto-historico projeto-linha-do-tempo">
+                {linhaDoTempo.slice(0, historicoTodo ? undefined : 30).map((h) => (
+                  <li key={h.id}>
+                    <button type="button" className="projeto-historico-item" onClick={() => abrirDaLinha(h)}>
+                      <span className="projeto-historico-data">{dataDoHistorico(h.data)}</span>
+                      <span className="projeto-historico-titulo">
+                        <span className="t-label-sm muted projeto-linha-rotulo">{h.rotulo}</span>
+                        {semEtiqueta(h.titulo, projeto.id)}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ol>
+            )}
+            {linhaDoTempo.length > 30 && (
+              <button type="button" className="link-btn projeto-mais" onClick={() => setHistoricoTodo((v) => !v)}>
+                {historicoTodo ? 'Mostrar menos' : `Ver tudo (${linhaDoTempo.length})`}
+              </button>
+            )}
           </section>
-        </div>
+        )}
       </div>
 
-      {configurando && <ConfigurarProjeto projeto={projeto} onSalvar={onSalvar} onFechar={() => setConfigurando(false)} />}
+      {configurando && (
+        <ConfigurarProjeto projeto={projeto} pendentes={aFazer.length} onSalvar={onSalvar} onFechar={() => setConfigurando(false)} />
+      )}
+      {concluindoPendencias && (
+        <ConfirmDialog
+          title="Concluir as pendências"
+          message={`Marcar como feitas as ${aFazer.length} tarefas pendentes de "${projeto.nome}"? Dá para reabrir cada uma depois, nas concluídas.`}
+          confirmLabel="Concluir todas"
+          onConfirm={concluirPendencias}
+          onCancel={() => setConcluindoPendencias(false)}
+        />
+      )}
     </div>
   )
 }
@@ -962,6 +881,15 @@ function PainelGeral({ lista, tasks, onAbrir, onEditarTarefa }) {
     { id: 'vaga', titulo: 'Próxima ação vaga', dica: 'A ação escrita é uma ideia inteira; reescreva como primeiro passo.', itens: p.acaoVaga },
     { id: 'esquecidos', titulo: 'Esquecidos', dica: 'Sem nenhum movimento há duas semanas ou mais.', itens: p.esquecidos, extra: (x) => `há ${x.diasSemAtividade} dias` },
     { id: 'semResultado', titulo: 'Sem resultado definido', dica: 'Falta dizer como se sabe que terminou.', itens: p.semResultado },
+    {
+      id: 'concluidosPendentes',
+      titulo: 'Concluídos com tarefas pendentes',
+      dica: 'Reabra o projeto ou conclua as tarefas que sobraram.',
+      itens: p.concluidosComPendencias,
+      tom: 'aviso',
+      extra: (x) => `${x.pendentes} pendente(s)`,
+    },
+    { id: 'semFicha', titulo: 'Sem ficha', dica: 'Etiquetas usadas em tarefas que ainda não viraram projeto.', itens: p.semFicha },
   ]
   const ativos = lista.filter((x) => x.situacao === 'ativo')
   const tudoEmDia = blocos.every((b) => b.itens.length === 0) && p.prazos.length === 0
@@ -1027,13 +955,51 @@ export default function ProjetosPainel({ lista, projetosState, tasks, notes, ids
   const [abertoId, setAbertoId] = useState(abertoInicial)
   const aberto = lista.find((p) => p.id === abertoId)
 
-  function criar(nome) {
+  const [avisoDoModelo, setAvisoDoModelo] = useState(null)
+
+  function criar(nome, modeloId) {
     const ficha = novoProjeto(nome)
     if (!ficha) return null
     // Nome que dá numa etiqueta já existente abre o projeto que já existe,
-    // em vez de sobrescrever a ficha dele com uma em branco.
-    if (!lista.some((p) => p.id === ficha.id && !p.implicito)) projetosState.salvarProjeto(ficha)
-    return ficha.id
+    // em vez de sobrescrever a ficha dele com uma em branco (ou com um modelo).
+    if (lista.some((p) => p.id === ficha.id && !p.implicito)) {
+      if (modeloId) setAvisoDoModelo(`Já existe o projeto "${ficha.nome}"; ele foi aberto sem aplicar o modelo.`)
+      return ficha.id
+    }
+    if (!modeloId) {
+      projetosState.salvarProjeto(ficha)
+      return ficha.id
+    }
+    const pronto = aplicarModelo(modeloId, nome)
+    projetosState.salvarProjeto(pronto.ficha)
+    // A anotação já, no clique: createNote grava sobre a lista de notas
+    // deste instante, e depois das esperas pelo Google ela estaria velha.
+    if (pronto.nota) acoes.onSalvarAnotacao(pronto.ficha.id, pronto.nota)
+    criarDoModelo(pronto)
+    return pronto.ficha.id
+  }
+
+  // A ficha aparece na hora; tarefas, anotação e pasta vêm em seguida, uma
+  // de cada vez (em paralelo, o Google Tasks recusa parte dos pedidos).
+  async function criarDoModelo({ ficha, tarefas }) {
+    setAvisoDoModelo(`Criando "${ficha.nome}" a partir do modelo…`)
+    const falhas = []
+    for (const t of tarefas) {
+      try {
+        await acoes.onCreateTask({ ...t, tasklistId: ids.idProximas || '@default' })
+      } catch {
+        falhas.push(`a tarefa "${t.title}"`)
+      }
+    }
+    if (permissaoDosArquivos() !== false) {
+      try {
+        const { pasta } = await pastaDoProjeto(ficha)
+        projetosState.salvarProjeto({ id: ficha.id, pasta })
+      } catch {
+        falhas.push('a pasta no Drive (ela é criada no primeiro arquivo enviado)')
+      }
+    }
+    setAvisoDoModelo(falhas.length ? `"${ficha.nome}" criado, mas não deu para criar ${falhas.join(' e ')}.` : null)
   }
 
   return (
@@ -1045,7 +1011,7 @@ export default function ProjetosPainel({ lista, projetosState, tasks, notes, ids
       )}
       <div className={`projetos-tela${aberto ? ' tem-aberto' : ''}`}>
         <div className="projetos-mestre">
-          <ListaDeProjetos lista={lista} onAbrir={setAbertoId} onCriar={criar} abertoId={aberto?.id} />
+          <ListaDeProjetos lista={lista} onAbrir={setAbertoId} onCriar={criar} abertoId={aberto?.id} avisoDoModelo={avisoDoModelo} />
         </div>
         <div className="projetos-detalhe">
           {aberto ? (
