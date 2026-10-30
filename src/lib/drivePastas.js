@@ -58,5 +58,24 @@ export function criarDriveDosProjetos(request) {
     })
   }
 
-  return { pastaDoProjeto, criarArquivoGoogle }
+  // Só funciona nos arquivos que o próprio app criou (é o que a permissão
+  // drive.file deixa), que são justamente os da pasta do projeto.
+  function renomearArquivo(id, nome) {
+    return request(`${API}/${encodeURIComponent(id)}?fields=${CAMPOS_DO_ARQUIVO}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ name: nome }),
+    })
+  }
+
+  // Lixeira, e não exclusão: o Drive guarda por 30 dias e dá para recuperar
+  // de lá. Apagar de vez um documento de um caso por um toque errado não
+  // tem volta.
+  function mandarParaLixeira(id) {
+    return request(`${API}/${encodeURIComponent(id)}?fields=id,trashed`, {
+      method: 'PATCH',
+      body: JSON.stringify({ trashed: true }),
+    })
+  }
+
+  return { pastaDoProjeto, criarArquivoGoogle, renomearArquivo, mandarParaLixeira }
 }

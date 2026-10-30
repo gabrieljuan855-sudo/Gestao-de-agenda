@@ -381,7 +381,24 @@ export const {
 
 // ---------- arquivos dos projetos no Drive ----------
 
-export const { pastaDoProjeto, criarArquivoGoogle } = criarDriveDosProjetos(request)
+export const { pastaDoProjeto, criarArquivoGoogle, renomearArquivo, mandarParaLixeira } = criarDriveDosProjetos(request)
+
+// O conteúdo de um arquivo do Drive, para pré-visualizar ou baixar dentro
+// do app. Pelo token, e não pelo link do Drive: o app instalado no iPhone não
+// tem o login do Google do Safari, e o visualizador do Drive pediria entrar
+// de novo dentro da moldura.
+export async function baixarDoDrive(driveId, { tentarDeNovo = true } = {}) {
+  const token = await ensureToken()
+  if (!token) throw new Error('Sem token de acesso. Faça login primeiro.')
+  const res = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(driveId)}?alt=media`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (res.status === 401 && tentarDeNovo && (await refreshAfterUnauthorized(token))) {
+    return baixarDoDrive(driveId, { tentarDeNovo: false })
+  }
+  if (!res.ok) throw erroDoGoogle(res.status, await res.text())
+  return res.blob()
+}
 
 function erroDoGoogle(status, corpo) {
   const err = new Error(`Erro na API do Google (${status}): ${corpo}`)

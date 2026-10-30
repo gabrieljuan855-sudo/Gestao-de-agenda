@@ -9,8 +9,8 @@ import { dateOnlyFromISO, addDays, toDateInput } from '../lib/dates.js'
 import { eventStart, isAllDay } from '../lib/events.js'
 import { parseQuickAdd, descreverQuando } from '../lib/nlp.js'
 import { construirRecorrencia } from '../lib/recorrencia.js'
-import { pastaDoProjeto, criarArquivoGoogle, enviarArquivoAoDrive } from '../lib/googleApi.js'
-import { permissaoDosArquivos, pedirAcessoAosArquivos } from '../lib/googleAuth.js'
+import { pastaDoProjeto } from '../lib/googleApi.js'
+import Anexos from './Anexos.jsx'
 import { textoSemFormato } from '../lib/notasFormatacao.js'
 import {
   SITUACOES,
@@ -21,12 +21,6 @@ import {
   novoProjeto,
   tarefasDoProjeto,
   eventoDoProjeto,
-  tipoDoArquivo,
-  vincularArquivo,
-  arquivoDoDrive,
-  juntarArquivos,
-  tamanhoLegivel,
-  NOVOS_ARQUIVOS,
   adicionarMarco,
   alternarMarco,
   removerMarco,
@@ -224,62 +218,12 @@ function ConfigurarProjeto({ projeto, pendentes = 0, onSalvar, onFechar }) {
   )
 }
 
-// Ícone por tipo, para achar "a planilha" ou "o PDF" de olho numa lista longa.
-const ICONE_DO_TIPO = {
-  doc: 'M6 3h9l5 5v13H6zM14 3v6h6M9 13h8M9 17h6',
-  planilha: 'M5 4h14v16H5zM5 10h14M5 15h14M10 4v16',
-  apresentacao: 'M4 5h16v11H4zM12 16v4M8 20h8',
-  formulario: 'M6 3h12v18H6zM9 8h6M9 12h6M9 16h4',
-  pasta: 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z',
-  pdf: 'M6 3h9l5 5v13H6zM14 3v6h6M9 15h6',
-  drive: 'M6 3h9l5 5v13H6zM14 3v6h6',
-  imagem: 'M4 5h16v14H4zM4 15l4-4 4 4 3-3 5 5M15 9.5a1.5 1.5 0 1 0 0-.01',
-  audio: 'M9 18V6l10-2v12M9 18a3 3 0 1 1-3-3 3 3 0 0 1 3 3zM19 16a3 3 0 1 1-3-3 3 3 0 0 1 3 3z',
-  video: 'M4 6h12v12H4zM16 10l4-2v8l-4-2',
-  link: 'M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1',
-}
-
-// Falta a permissão nova (drive.file), ou o Google disse que ela não veio.
-const SEM_PERMISSAO = 'sem-permissao'
-function semPermissao(err) {
-  return err?.status === 403 && /insufficient|scope|permission/i.test(err.body || err.message || '')
-}
-
-// Os arquivos do projeto. Enviar (escolhendo ou arrastando do computador) e
-// criar Documento/Planilha/Apresentação vão para a pasta do projeto no Drive
-// — antes só dava para colar link, e todo arquivo novo pedia sair do app,
-// subir no Drive, copiar o link e voltar. Vincular por link continua, para o
-// que já mora em outro lugar.
+// Os arquivos do projeto: o componente Anexos, com a pasta do projeto no
+// Drive como destino. A pasta nasce no primeiro arquivo e fica guardada na
+// ficha.
 function Arquivos({ projeto, onSalvar }) {
-  const [link, setLink] = useState('')
-  const [nome, setNome] = useState('')
-  const [erro, setErro] = useState(null)
-  const [vinculando, setVinculando] = useState(false)
-  const [criando, setCriando] = useState(null)
-  const [nomeDoNovo, setNomeDoNovo] = useState('')
-  const [enviando, setEnviando] = useState([])
-  const [arrastando, setArrastando] = useState(false)
-  const [precisaPermissao, setPrecisaPermissao] = useState(false)
-  const escolherRef = useRef(null)
-  const arquivos = projeto.arquivos || []
-  // A lista mais recente, lida depois de cada envio: vários arquivos sobem um
-  // atrás do outro, e a lista de quando o primeiro começou já está velha.
   const projetoRef = useRef(projeto)
   projetoRef.current = projeto
-
-  function salvarArquivos(novos) {
-    onSalvar({ id: projeto.id, arquivos: juntarArquivos(projetoRef.current.arquivos, novos) })
-  }
-
-  // Confere a permissão antes de abrir o seletor: se faltar, o login novo
-  // tiraria a pessoa da tela e os arquivos escolhidos se perderiam.
-  function podeUsarODrive() {
-    if (permissaoDosArquivos() === false) {
-      setPrecisaPermissao(true)
-      return false
-    }
-    return true
-  }
 
   async function garantirPasta() {
     const { pasta, nova } = await pastaDoProjeto(projetoRef.current)
@@ -287,231 +231,14 @@ function Arquivos({ projeto, onSalvar }) {
     return pasta
   }
 
-  function tratarErro(err, oQue) {
-    if (semPermissao(err)) {
-      setPrecisaPermissao(true)
-      return SEM_PERMISSAO
-    }
-    setErro(`Não deu para ${oQue} (${err.message?.slice(0, 140) || 'erro desconhecido'}).`)
-    return null
-  }
-
-  async function enviar(lista) {
-    const escolhidos = [...(lista || [])]
-    if (!escolhidos.length || !podeUsarODrive()) return
-    setErro(null)
-    const fila = escolhidos.map((f, i) => ({ chave: `${Date.now()}-${i}`, nome: f.name, progresso: 0, arquivo: f }))
-    setEnviando((atual) => [...atual, ...fila.map(({ arquivo, ...resto }) => resto)])
-    let pasta
-    try {
-      pasta = await garantirPasta()
-    } catch (err) {
-      tratarErro(err, 'abrir a pasta do projeto no Drive')
-      setEnviando((atual) => atual.filter((e) => !fila.some((f) => f.chave === e.chave)))
-      return
-    }
-    // Um de cada vez: no celular, vários envios juntos disputam a mesma
-    // conexão e todos ficam lentos.
-    for (const item of fila) {
-      try {
-        const doDrive = await enviarArquivoAoDrive(pasta.id, item.arquivo, (p) =>
-          setEnviando((atual) => atual.map((e) => (e.chave === item.chave ? { ...e, progresso: p } : e)))
-        )
-        salvarArquivos([arquivoDoDrive(doDrive)])
-      } catch (err) {
-        if (tratarErro(err, `enviar "${item.nome}"`) === SEM_PERMISSAO) break
-      } finally {
-        setEnviando((atual) => atual.filter((e) => e.chave !== item.chave))
-      }
-    }
-  }
-
-  async function criar(e) {
-    e.preventDefault()
-    const novo = NOVOS_ARQUIVOS.find((n) => n.tipo === criando)
-    const titulo = nomeDoNovo.trim() || `${novo.rotulo} — ${projeto.nome}`
-    if (!podeUsarODrive()) return
-    // A aba é aberta já, no toque: aberta depois da espera pelo Drive, o
-    // navegador a trataria como pop-up e bloquearia.
-    const aba = window.open('', '_blank')
-    try {
-      const pasta = await garantirPasta()
-      const doDrive = await criarArquivoGoogle(pasta.id, titulo, novo.mime)
-      salvarArquivos([arquivoDoDrive(doDrive)])
-      if (aba) aba.location.href = doDrive.webViewLink
-      setCriando(null)
-      setNomeDoNovo('')
-    } catch (err) {
-      aba?.close()
-      tratarErro(err, `criar ${novo.rotulo.toLowerCase()}`)
-    }
-  }
-
-  function vincular(e) {
-    e.preventDefault()
-    const nova = vincularArquivo(arquivos, { url: link, nome })
-    if (!nova) {
-      setErro('Isso não parece um link. Cole o endereço do arquivo (ex.: o "Copiar link" do Drive).')
-      return
-    }
-    onSalvar({ id: projeto.id, arquivos: nova })
-    setLink('')
-    setNome('')
-    setErro(null)
-    setVinculando(false)
-  }
-
-  function remover(id) {
-    onSalvar({ id: projeto.id, arquivos: arquivos.filter((a) => a.id !== id) })
-  }
-
-  // Arrastar do computador: a seção inteira vira o lugar de soltar.
-  const arrastar = {
-    onDragOver: (e) => {
-      if (![...(e.dataTransfer?.types || [])].includes('Files')) return
-      e.preventDefault()
-      setArrastando(true)
-    },
-    onDragLeave: (e) => {
-      if (!e.currentTarget.contains(e.relatedTarget)) setArrastando(false)
-    },
-    onDrop: (e) => {
-      if (!e.dataTransfer?.files?.length) return
-      e.preventDefault()
-      setArrastando(false)
-      enviar(e.dataTransfer.files)
-    },
-  }
-
   return (
-    <div className={`projeto-arquivos${arrastando ? ' is-arrastando' : ''}`} {...arrastar}>
-      {precisaPermissao && (
-        <Banner tone="info" actionLabel="Permitir" onAction={pedirAcessoAosArquivos}>
-          Para enviar e criar arquivos, o Segundo Cérebro precisa de uma permissão nova do Google: acesso aos arquivos que ele
-          mesmo criar no seu Drive (o resto do Drive continua fora de alcance). Depois de permitir, envie de novo.
-        </Banner>
-      )}
-
-      {arquivos.map((a) => {
-        const { tipo, rotulo } = tipoDoArquivo(a)
-        const detalhe = [rotulo, a.tamanho !== undefined && tamanhoLegivel(a.tamanho)].filter(Boolean).join(' · ')
-        return (
-          <div key={a.id} className="projeto-arquivo">
-            <a href={a.url} target="_blank" rel="noopener noreferrer" className="projeto-arquivo-link" title={a.url}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d={ICONE_DO_TIPO[tipo] || ICONE_DO_TIPO.drive} />
-              </svg>
-              <span className="projeto-arquivo-texto">
-                <span className="projeto-arquivo-nome">{a.nome}</span>
-                <span className="projeto-evento-quando">{detalhe}</span>
-              </span>
-            </a>
-            <button
-              type="button"
-              className="icon-btn"
-              aria-label={`Tirar ${a.nome} do projeto`}
-              title={a.driveId ? 'Tirar do projeto (o arquivo continua na pasta do projeto no Drive)' : 'Desvincular (o arquivo em si não é apagado)'}
-              onClick={() => remover(a.id)}
-            >
-              ×
-            </button>
-          </div>
-        )
-      })}
-
-      {/* Indicador de progresso linear do MD3, um por arquivo subindo. */}
-      {enviando.map((e) => (
-        <div key={e.chave} className="projeto-envio" role="status">
-          <span className="projeto-arquivo-nome">{e.nome}</span>
-          <span className="projeto-envio-barra" aria-hidden="true">
-            <span style={{ width: `${Math.round(e.progresso * 100)}%` }} />
-          </span>
-          <span className="projeto-evento-quando">{e.progresso >= 1 ? 'Concluindo…' : `Enviando… ${Math.round(e.progresso * 100)}%`}</span>
-        </div>
-      ))}
-
-      {arquivos.length === 0 && enviando.length === 0 && (
-        <p className="muted projeto-vazio projeto-arquivos-dica">
-          Arraste arquivos para cá ou use os botões abaixo. Eles vão para a pasta do projeto no seu Drive.
-        </p>
-      )}
-
-      <input
-        ref={escolherRef}
-        type="file"
-        multiple
-        hidden
-        onChange={(e) => {
-          enviar(e.target.files)
-          e.target.value = ''
-        }}
-      />
-      <div className="projeto-arquivos-acoes">
-        <button type="button" onClick={() => podeUsarODrive() && escolherRef.current?.click()}>
-          Enviar arquivos
-        </button>
-        <button
-          type="button"
-          className={criando ? 'is-escolhido' : ''}
-          aria-expanded={Boolean(criando)}
-          onClick={() => {
-            setCriando((atual) => (atual ? null : NOVOS_ARQUIVOS[0].tipo))
-            setNomeDoNovo('')
-          }}
-        >
-          + Criar
-        </button>
-      </div>
-
-      {criando && (
-        <form className="projeto-arquivo-criar" onSubmit={criar}>
-          {/* Chips de escolha: um tipo entre três, como no MD3. */}
-          <div className="projeto-arquivo-tipos" role="radiogroup" aria-label="Tipo do arquivo novo">
-            {NOVOS_ARQUIVOS.map((n) => (
-              <button
-                key={n.tipo}
-                type="button"
-                role="radio"
-                aria-checked={criando === n.tipo}
-                className={`pill pill-filtro${criando === n.tipo ? ' is-escolhido' : ''}`}
-                onClick={() => setCriando(n.tipo)}
-              >
-                {n.rotulo}
-              </button>
-            ))}
-          </div>
-          <div className="projeto-arquivo-novo">
-          <input
-            type="text"
-            value={nomeDoNovo}
-            onChange={(e) => setNomeDoNovo(e.target.value)}
-            placeholder={`${NOVOS_ARQUIVOS.find((n) => n.tipo === criando).rotulo} — ${projeto.nome}`}
-            aria-label="Nome do arquivo novo"
-            autoFocus
-          />
-          <button type="submit" className="primary">Criar e abrir</button>
-          </div>
-        </form>
-      )}
-
-      {vinculando ? (
-        <form className="projeto-arquivo-novo" onSubmit={vincular}>
-          <input type="text" value={link} onChange={(e) => { setLink(e.target.value); setErro(null) }} placeholder="Cole o link (Drive, PDF, site)" autoFocus />
-          <input type="text" value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Nome (opcional)" />
-          <button type="submit" disabled={!link.trim()}>Vincular</button>
-        </form>
-      ) : (
-        <div className="projeto-arquivos-rodape">
-          <button type="button" className="link-btn projeto-mais" onClick={() => setVinculando(true)}>Vincular um link</button>
-          {projeto.pasta && (
-            <a className="link-btn projeto-mais" href={projeto.pasta.url} target="_blank" rel="noopener noreferrer">
-              Abrir a pasta no Drive
-            </a>
-          )}
-        </div>
-      )}
-      {erro && <div className="form-error">{erro}</div>}
-    </div>
+    <Anexos
+      arquivos={projeto.arquivos || []}
+      onMudar={(arquivos) => onSalvar({ id: projeto.id, arquivos })}
+      garantirPasta={garantirPasta}
+      nomeDoNovoPadrao={projeto.nome}
+      pastaUrl={projeto.pasta?.url}
+    />
   )
 }
 

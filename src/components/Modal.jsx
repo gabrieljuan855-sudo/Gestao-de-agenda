@@ -4,7 +4,9 @@ import { useEffect } from 'react'
 // excluir, aberta de dentro do modal de editar): sem subir o z-index, os dois
 // ficam na mesma camada e o de baixo pode vazar por cima do de cima,
 // dependendo da ordem em que o React montou os dois.
-export default function Modal({ title, onClose, children, elevated = false }) {
+// `largo` é para conteúdo que precisa de espaço (um PDF aberto): no celular
+// vira diálogo de tela cheia, como o MD3 pede.
+export default function Modal({ title, onClose, children, elevated = false, largo = false }) {
   useEffect(() => {
     const onKey = (e) => e.key === 'Escape' && onClose()
     window.addEventListener('keydown', onKey)
@@ -18,7 +20,7 @@ export default function Modal({ title, onClose, children, elevated = false }) {
 
   return (
     <div className="modal-backdrop" style={elevated ? { zIndex: 60 } : undefined} onClick={onClose}>
-      <div className="modal-card" onClick={(e) => e.stopPropagation()} role="dialog" aria-label={title}>
+      <div className={`modal-card${largo ? ' is-larga' : ''}`} onClick={(e) => e.stopPropagation()} role="dialog" aria-label={title}>
         <div className="modal-head">
           <strong style={{ fontSize: 'var(--body-lg)' }}>{title}</strong>
           <button onClick={onClose} aria-label="Fechar">✕</button>
