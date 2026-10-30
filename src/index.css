@@ -1255,7 +1255,9 @@ input[type="text"].nota-titulo:focus-visible { outline: none; border-bottom-colo
 textarea.nota-corpo {
   display: block;
   width: 100%;
-  min-height: 50vh;
+  /* Espaço de folha em branco, mas sem empurrar para longe as fontes e os
+     links que vêm embaixo de uma nota curta. */
+  min-height: 30vh;
   margin-top: 6px;
   padding: 4px 0;
   border: none;
@@ -1267,6 +1269,41 @@ textarea.nota-corpo {
   overflow: hidden;
 }
 textarea.nota-corpo:focus-visible { outline: none; }
+
+/* Fontes e links da anotação, embaixo do texto. */
+.nota-ligacoes {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--outline-variant);
+}
+.nota-ligacoes h4 {
+  margin: 0 0 4px;
+  font-size: var(--label-md);
+  font-weight: 600;
+  color: var(--on-surface-variant);
+}
+.nota-ligacoes ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.nota-fonte { font-size: var(--body-md); padding: 4px 0; }
+.nota-fonte a { color: var(--primary); }
+.nota-link {
+  min-height: 36px;
+  padding: 6px 10px;
+  border: none;
+  border-radius: var(--shape-sm);
+  background: transparent;
+  color: var(--primary);
+  font-size: var(--body-md);
+  text-align: left;
+}
+.nota-link:hover { background: var(--surface-variant); }
+/* Nota que ainda não existe: tracejado, como um lugar reservado. */
+.nota-link.is-nova {
+  border: 1px dashed var(--outline-variant);
+  color: var(--on-surface-variant);
+}
 
 /* ---------- barra de período ---------- */
 
@@ -2517,6 +2554,7 @@ textarea.nota-corpo:focus-visible { outline: none; }
   /* A anotação ganha a altura da tela em vez de 12 linhas fixas — só ela: o
      campo curto da ficha do projeto continua curto. */
   .rail-panel.is-wide textarea { min-height: 55vh; }
+  .rail-panel.is-wide textarea.nota-corpo { min-height: 30vh; }
   .rail-panel.is-wide .projeto-ficha textarea { min-height: 0; }
   /* A revisão guiada reaproveita a Entrada: o campo dela continua curto. */
   .rail-panel.is-wide.tela-sobreposta textarea { min-height: 0; }

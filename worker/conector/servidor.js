@@ -29,6 +29,12 @@ Como agir:
 - Antes de responder sobre as demandas, o dia ou a semana dela ("como estou?", "o que tenho pra hoje?"), chame visao_geral.
 - Quando ela disser "anota aí", "lembra de", "preciso...", use capturar com o texto como ela disse, sem decidir lista, prazo ou prioridade.
 - Informação para guardar (não uma ação) vira nota: criar_nota, ou atualizar_nota com modo "acrescentar" para somar a uma nota existente.
+
+As anotações são também uma base de conhecimento, no estilo do Obsidian:
+- [[Título de outra nota]] dentro do texto liga as notas; cada nota sabe quem a cita (ler_nota mostra). Ao escrever, ligue a notas que já existem (procure antes com buscar_notas) e use o título exato delas.
+- Quando a pessoa trouxer um material (PDF, artigo, link, transcrição, reunião) e pedir para guardar, use importar_fonte: um resumo da fonte e as ideias principais, cada uma como uma nota curta com título claro, ligadas entre si e às notas existentes. Registre a fonte (título, link, autor, data) e não invente nada que não esteja no material.
+- Para responder a partir das notas, busque e leia antes, e diga em qual nota achou cada coisa.
+- saude_das_notas aponta links quebrados, notas soltas e títulos repetidos.
 - Use os ids que as ferramentas devolvem; não invente ids, nomes de projeto ou datas. Datas sempre em AAAA-MM-DD, horários em HH:MM, fuso de Brasília.
 - Não há ferramenta de excluir: para descartar, sugira que ela faça no app.`
 
@@ -41,6 +47,13 @@ const TEXTO_CURTO = (max) => z.string().trim().min(1).max(max)
 const LISTA = z.enum(['entrada', 'proximas', 'aguardando', 'algum_dia'])
 const PRIORIDADE = z.enum(PRIORITIES.map((p) => p.id))
 const ID = z.string().trim().min(1).max(300)
+
+const FONTE = z.object({
+  titulo: TEXTO_CURTO(300).describe('Título do material (artigo, livro, PDF, reunião).'),
+  url: z.string().trim().max(2000).optional().describe('Link, se houver.'),
+  autor: z.string().trim().max(200).optional(),
+  data: DATA.optional().describe('Data do material, se souber.'),
+})
 
 const SO_LEITURA = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }
 const ESCRITA = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }
@@ -110,8 +123,9 @@ export const ESQUEMAS = {
   }),
   criar_nota: z.object({
     titulo: z.string().trim().max(200).optional(),
-    texto: z.string().min(1).max(20000),
+    texto: z.string().min(1).max(20000).describe('Pode ligar a outras notas com [[Título da nota]].'),
     projeto: TEXTO_CURTO(80).optional(),
+    fontes: z.array(FONTE).max(10).optional().describe('De onde veio o que a nota diz.'),
   }),
   atualizar_nota: z.object({
     id: ID,
@@ -119,7 +133,23 @@ export const ESQUEMAS = {
     texto: z.string().min(1).max(20000).optional(),
     modo: z.enum(['acrescentar', 'substituir']).default('acrescentar').describe('"acrescentar" soma o texto ao fim sem apagar nada; "substituir" troca o texto inteiro.'),
     projeto: z.string().trim().max(80).nullable().optional().describe('null ou "" tira do projeto.'),
+    fontes: z.array(FONTE).max(10).optional().describe('Fontes a somar às que a nota já tem.'),
   }),
+  importar_fonte: z.object({
+    fonte: FONTE,
+    resumo: z.string().trim().min(1).max(20000).describe('Resumo da fonte: o que é e o que diz de mais importante.'),
+    notas: z
+      .array(
+        z.object({
+          titulo: TEXTO_CURTO(200).describe('Título curto e claro da ideia (é por ele que as notas se ligam).'),
+          texto: z.string().trim().min(1).max(20000).describe('A ideia, com [[links]] para outras notas quando fizer sentido.'),
+        })
+      )
+      .min(1)
+      .max(20),
+    projeto: TEXTO_CURTO(80).optional().describe('Projeto a que tudo isso pertence (id/etiqueta).'),
+  }),
+  saude_das_notas: z.object({}),
   criar_projeto: z.object({
     nome: TEXTO_CURTO(120),
     resultado: z.string().trim().max(500).optional().describe('Como se sabe que terminou (ou o propósito, se for rotina).'),
@@ -189,7 +219,7 @@ const FERRAMENTAS = [
   {
     nome: 'ler_nota',
     titulo: 'Ler anotação',
-    descricao: 'O texto completo de uma anotação, pelo id (de buscar_notas ou ver_projeto).',
+    descricao: 'O texto completo de uma anotação, pelo id (de buscar_notas ou ver_projeto), com as fontes, as notas a que ela liga e as que a citam.',
     leitura: true,
     executar: f.lerNota,
   },
@@ -236,7 +266,7 @@ const FERRAMENTAS = [
     nome: 'criar_nota',
     titulo: 'Criar anotação',
     descricao:
-      'Cria uma anotação (informação para guardar, não uma ação), opcionalmente dentro de um projeto. Antes, veja com buscar_notas se já não existe uma nota sobre o mesmo assunto para acrescentar.',
+      'Cria uma anotação (informação para guardar, não uma ação), opcionalmente dentro de um projeto e com a fonte de onde veio. O texto pode ligar a outras notas com [[Título da nota]]. Antes, veja com buscar_notas se já não existe uma nota sobre o mesmo assunto para acrescentar. Para um material inteiro (PDF, artigo), prefira importar_fonte.',
     leitura: false,
     executar: f.criarNota,
   },
@@ -247,6 +277,22 @@ const FERRAMENTAS = [
       'Muda uma anotação existente. Com modo "acrescentar" (padrão), o texto novo entra no fim sem apagar nada — é o jeito de ir somando informações a uma nota. "substituir" troca o texto inteiro. Também muda título e projeto.',
     leitura: false,
     executar: f.atualizarNota,
+  },
+  {
+    nome: 'importar_fonte',
+    titulo: 'Importar fonte',
+    descricao:
+      'Transforma um material que a pessoa trouxe (PDF anexado, artigo, link, transcrição, anotações de reunião) em conhecimento guardado: uma nota da fonte com o resumo e uma nota por ideia principal, ligadas por [[título]] e com a fonte registrada em cada uma. Ideia com o mesmo título de uma nota existente é somada a ela, sem duplicar. Antes, use buscar_notas para achar notas existentes e ligar as novas a elas.',
+    leitura: false,
+    executar: f.importarFonte,
+  },
+  {
+    nome: 'saude_das_notas',
+    titulo: 'Revisar anotações',
+    descricao:
+      'Revisão de saúde da base de anotações: links [[...]] para notas que não existem, notas soltas (sem links, sem quem as cite e fora de projeto), títulos repetidos e notas vazias. Use quando a pessoa pedir para organizar ou revisar as anotações.',
+    leitura: true,
+    executar: f.saudeDasNotasTexto,
   },
   {
     nome: 'criar_projeto',

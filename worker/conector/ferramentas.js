@@ -36,7 +36,9 @@ import { findFreeGaps, occursOnDay, isAllDay, eventStart, eventEnd } from '../..
 import { workBlocksFor, horarioPadrao } from '../../src/lib/schedule.js'
 import { loadCalendarPrefs, occupiesTime, isDeclined } from '../../src/lib/calendarPrefs.js'
 import { montarEventoDeConclusao, ehRegistroDeConclusao } from '../../src/lib/taskDoneEvent.js'
-import { newNote, sanitizeNotes } from '../../src/lib/notasFormato.js'
+import { newNote, sanitizeNotes, juntarFontes } from '../../src/lib/notasFormato.js'
+import { ligacoesDaNota, saudeDasNotas, indiceDeTitulos, chaveDeTitulo } from '../../src/lib/notasLinks.js'
+import { tituloDaNota } from '../../src/lib/notasLista.js'
 import { mesclarParaGravar, mesclarAnotacoes } from '../../src/lib/notesMerge.js'
 import { semAcento } from '../../src/lib/texto.js'
 import {
@@ -496,23 +498,40 @@ export async function buscarNotas(api, agora, { texto, projeto, limite = 10 }) {
   )}`
 }
 
+function fonteEmTexto(f) {
+  const extra = [f.autor, f.data && dataComDia(f.data)].filter(Boolean).join(', ')
+  return `${f.titulo}${extra ? ` (${extra})` : ''}${f.url ? ` — ${f.url}` : ''}`
+}
+
 export async function lerNota(api, agora, { id }) {
   const remoto = await api.drive.loadNotes()
-  const nota = sanitizeNotes(remoto?.notes).find((n) => n.id === id)
+  const notas = sanitizeNotes(remoto?.notes)
+  const nota = notas.find((n) => n.id === id)
   if (!nota) throw new ErroDeUso(`Não existe anotação com id "${id}". Use buscar_notas para achar o id.`)
+  const { ligaA, citadaPor } = ligacoesDaNota(nota, notas)
   return [
-    `# ${nota.title?.trim() || '(sem título)'} [nota: ${nota.id}]`,
+    `# ${tituloDaNota(nota)} [nota: ${nota.id}]`,
     `Criada ${dataComDia(dataNoFuso(new Date(nota.createdAt)))} · editada ${dataComDia(dataNoFuso(new Date(nota.updatedAt)))} ${horaNoFuso(new Date(nota.updatedAt))}${nota.projeto ? ` · projeto #${nota.projeto}` : ''}`,
     '',
     nota.body || '(sem texto)',
-  ].join('\n')
+    '',
+    nota.fontes?.length ? `Fontes:\n${nota.fontes.map((f) => `- ${fonteEmTexto(f)}`).join('\n')}` : null,
+    ligaA.length
+      ? `Liga a:\n${ligaA.map((l) => (l.nota ? `- ${tituloDaNota(l.nota)} [nota: ${l.nota.id}]` : `- ${l.titulo} (ainda não existe)`)).join('\n')}`
+      : null,
+    citadaPor.length ? `Citada por:\n${citadaPor.map((n) => `- ${tituloDaNota(n)} [nota: ${n.id}]`).join('\n')}` : null,
+  ]
+    .filter((x) => x !== null)
+    .join('\n')
+    .trimEnd()
 }
 
-export async function criarNota(api, agora, { titulo, texto, projeto }) {
+export async function criarNota(api, agora, { titulo, texto, projeto, fontes }) {
   return alterarNotas(api, agora, (atuais) => {
     const iso = agora.toISOString()
     const nota = { ...newNote(), title: titulo || '', body: texto, createdAt: iso, updatedAt: iso }
     if (projeto) nota.projeto = etiqueta(projeto)
+    if (fontes?.length) nota.fontes = juntarFontes(fontes)
     return {
       notas: [nota, ...atuais],
       resultado: `Anotação criada: ${nota.title || '(sem título)'} [nota: ${nota.id}]${nota.projeto ? ` no projeto #${nota.projeto}` : ''}.`,
@@ -520,7 +539,7 @@ export async function criarNota(api, agora, { titulo, texto, projeto }) {
   })
 }
 
-export async function atualizarNota(api, agora, { id, titulo, texto, modo = 'acrescentar', projeto }) {
+export async function atualizarNota(api, agora, { id, titulo, texto, modo = 'acrescentar', projeto, fontes }) {
   return alterarNotas(api, agora, (atuais) => {
     const atual = atuais.find((n) => n.id === id)
     if (!atual) throw new ErroDeUso(`Não existe anotação com id "${id}". Use buscar_notas para achar o id.`)
@@ -536,11 +555,109 @@ export async function atualizarNota(api, agora, { id, titulo, texto, modo = 'acr
       if (projeto) nova.projeto = etiqueta(projeto)
       else delete nova.projeto
     }
+    // Fonte nova soma às que a nota já tinha; nenhuma some por aqui.
+    if (fontes?.length) nova.fontes = juntarFontes(atual.fontes || [], fontes)
     return {
       notas: atuais.map((n) => (n.id === id ? nova : n)),
       resultado: `Anotação atualizada: ${nova.title || '(sem título)'} [nota: ${id}]${texto !== undefined ? (modo === 'substituir' ? ' (texto substituído)' : ' (texto acrescentado ao fim)') : ''}.`,
     }
   })
+}
+
+// ---------- base de conhecimento ----------
+
+// O "ingest" do claude-obsidian, pela conversa: o Claude leu um material (um
+// PDF anexado, um artigo, uma transcrição) e entrega o resumo e as ideias já
+// separadas. Aqui isso vira, numa gravação só, uma nota da fonte e uma nota
+// por ideia, ligadas entre si por [[título]] e com a fonte registrada em cada
+// uma. Uma ideia que já tem nota com o mesmo título é somada a ela (no fim,
+// com a fonte junto), em vez de virar uma segunda nota igual — é assim que a
+// base engrossa em vez de se repetir.
+export async function importarFonte(api, agora, { fonte, resumo, notas: ideias, projeto }) {
+  return alterarNotas(api, agora, (atuais) => {
+    const [fonteLimpa] = juntarFontes([fonte])
+    if (!fonteLimpa) throw new ErroDeUso('A fonte precisa de um título.')
+    const id = projeto ? etiqueta(projeto) : null
+    const iso = agora.toISOString()
+    const lista = [...atuais]
+    const indice = indiceDeTitulos(lista)
+    const criadas = []
+    const somadas = []
+    const titulosUsados = new Set()
+
+    function gravar(titulo, texto) {
+      const chave = chaveDeTitulo(titulo)
+      const existente = indice.get(chave)
+      if (existente) {
+        const i = lista.findIndex((n) => n.id === existente.id)
+        const atualizada = {
+          ...existente,
+          body: existente.body.trim() ? `${existente.body.replace(/\s+$/, '')}\n\n${texto}` : texto,
+          fontes: juntarFontes(existente.fontes || [], [fonteLimpa]),
+          updatedAt: carimboDepois(agora, existente.updatedAt),
+        }
+        if (id && !existente.projeto) atualizada.projeto = id
+        lista[i] = atualizada
+        indice.set(chave, atualizada)
+        somadas.push(atualizada)
+        return
+      }
+      const nova = { ...newNote(), title: titulo, body: texto, createdAt: iso, updatedAt: iso, fontes: [fonteLimpa] }
+      if (id) nova.projeto = id
+      lista.unshift(nova)
+      indice.set(chave, nova)
+      criadas.push(nova)
+    }
+
+    const tituloDaFonte = fonteLimpa.titulo
+    const ideiasValidas = ideias.filter((n) => {
+      const chave = chaveDeTitulo(n.titulo)
+      if (!chave || chave === chaveDeTitulo(tituloDaFonte) || titulosUsados.has(chave)) return false
+      titulosUsados.add(chave)
+      return true
+    })
+    const indiceDeIdeias = ideiasValidas.map((n) => `- [[${n.titulo.trim()}]]`).join('\n')
+    gravar(tituloDaFonte, `${resumo.trim()}${indiceDeIdeias ? `\n\nNotas tiradas desta fonte:\n${indiceDeIdeias}` : ''}`)
+    for (const ideia of ideiasValidas) {
+      const texto = ideia.texto.trim()
+      // Toda ideia aponta de volta para a fonte, para "de onde veio isto?" ter
+      // resposta com um toque.
+      const comFonte = texto.includes(`[[${tituloDaFonte}]]`) ? texto : `${texto}\n\nFonte: [[${tituloDaFonte}]]`
+      gravar(ideia.titulo.trim(), comFonte)
+    }
+
+    const linha = (n) => `- ${tituloDaNota(n)} [nota: ${n.id}]`
+    return {
+      notas: lista,
+      resultado: [
+        `Fonte "${tituloDaFonte}" guardada${id ? ` no projeto #${id}` : ''}.`,
+        criadas.length ? `Notas criadas (${criadas.length}):\n${criadas.map(linha).join('\n')}` : null,
+        somadas.length ? `Notas que já existiam e receberam o conteúdo novo no fim (${somadas.length}):\n${somadas.map(linha).join('\n')}` : null,
+      ]
+        .filter(Boolean)
+        .join('\n'),
+    }
+  })
+}
+
+const MAX_ITENS_DA_SAUDE = 15
+
+export async function saudeDasNotasTexto(api) {
+  const remoto = await api.drive.loadNotes()
+  const notas = sanitizeNotes(remoto?.notes)
+  if (notas.length === 0) return 'Ainda não há anotações.'
+  const s = saudeDasNotas(notas)
+  const nome = (n) => `${tituloDaNota(n)} [nota: ${n.id}]`
+  const secoes = [`Revisão de ${notas.length} anotaç${notas.length === 1 ? 'ão' : 'ões'}:`]
+  const secao = (titulo, itens, fmt) =>
+    secoes.push(`## ${titulo}: ${itens.length}${itens.length ? `\n${listaComLimite(itens, MAX_ITENS_DA_SAUDE, fmt)}` : ''}`)
+  secao('Links para notas que não existem', s.linksQuebrados, (x) => `- em ${nome(x.nota)}: [[${x.alvo}]]`)
+  secao('Notas soltas (sem links, sem quem cite e fora de projeto)', s.soltas, (n) => `- ${nome(n)}`)
+  secao('Títulos repetidos (o link vai para a editada por último)', s.duplicadas, (g) => `- "${tituloDaNota(g[0])}": ${g.map((n) => `[nota: ${n.id}]`).join(', ')}`)
+  secao('Notas vazias', s.vazias, (n) => `- [nota: ${n.id}]`)
+  const tudoCerto = !s.linksQuebrados.length && !s.soltas.length && !s.duplicadas.length && !s.vazias.length
+  if (tudoCerto) secoes.push('Tudo ligado e sem pendências.')
+  return secoes.join('\n\n')
 }
 
 // ---------- escrita de tarefas ----------
