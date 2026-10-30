@@ -68,7 +68,8 @@ uma pilha de branches que só atrapalha.
 - Anotações são uma base de conhecimento: links `[[título]]` e fontes
   (`notasLinks.js`, campo `fontes` em `notasFormato.js`). O link aponta para o
   título, não para o id, e a regra de resolução é uma só para o app e o
-  conector.
+  conector — assim como renomear (`renomearLinks`, que leva os links junto) e
+  buscar (`notasBusca.js`, por palavras com BM25).
 - O app e o conector gravam nos mesmos arquivos do Drive: toda gravação é
   ler → mesclar → gravar (`mesclarParaGravar` em `notesMerge.js`), nunca a
   lista local por cima.

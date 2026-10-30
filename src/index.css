@@ -1111,6 +1111,8 @@ button.danger:hover { background: var(--urgent-bg); }
    no computador. */
 .notas-lista,
 .nota-editor {
+  /* Referência para as sugestões de [[link]], que flutuam sobre o texto. */
+  position: relative;
   max-width: 760px;
   margin: 0 auto;
 }
@@ -3049,3 +3051,36 @@ textarea.quickadd-campo {
   color: var(--text-muted);
 }
 .tarefa-meta > * { white-space: nowrap; }
+
+/* Sugestões de [[link]] enquanto se digita: chips de sugestão do MD3 na
+   versão elevada (32dp, rótulo, sombra), que é a indicada quando o chip
+   flutua sobre o conteúdo — aqui, logo acima da linha em digitação (a
+   posição vem do Notes.jsx). Rolam na horizontal em vez de quebrar linha. */
+.nota-sugestoes {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 2;
+  display: flex;
+  gap: 8px;
+  padding: 2px 0 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.nota-sugestoes::-webkit-scrollbar { display: none; }
+.chip-sugestao {
+  flex-shrink: 0;
+  min-height: 32px;
+  max-width: 70vw;
+  padding: 0 14px;
+  border: none;
+  border-radius: var(--shape-sm);
+  background: var(--surface);
+  box-shadow: 0 1px 3px var(--shadow), 0 1px 2px var(--shadow-weak);
+  color: var(--on-surface-variant);
+  font-size: var(--label-md);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

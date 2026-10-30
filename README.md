@@ -184,12 +184,21 @@ do app, no celular e no computador:
   ligar para acento ou maiúscula. Embaixo de cada nota aparecem **Esta nota
   liga a** e **Citada por**; um link para uma nota que ainda não existe oferece
   criá-la. `[[Nota|outro texto]]` e `[[Nota#Seção]]` também apontam para "Nota".
+- **Escrever ligado:** ao digitar `[[`, aparecem sugestões com os títulos das
+  notas que existem, logo acima da linha; tocar completa o link.
+- **Renomear sem quebrar:** trocar o título de uma nota atualiza os links das
+  outras notas para ela, ao sair do campo de título (no app) ou na hora (pelo
+  Claude).
+- **Busca por palavras:** a busca da lista e a do Claude acham cada palavra em
+  qualquer ordem, sem acento, maiúscula ou plural; a do Claude ordena pela
+  relevância (BM25 — título e palavras raras pesam mais).
 - **Fontes:** cada nota guarda de onde veio (título, link, autor, data).
 - **Pelo Claude:** anexe um PDF ou cole um artigo e peça para guardar no
   Segundo Cérebro — `importar_fonte` cria a nota da fonte e uma nota por ideia,
   ligadas entre si e às notas que já existem (uma ideia com o título de uma
   nota existente é somada a ela). Perguntas sobre as anotações são respondidas
-  a partir delas, dizendo em qual nota está cada coisa.
+  a partir delas, dizendo em qual nota está cada coisa; se você pedir, a
+  resposta vira nota (`guardar_resposta`), ligada às notas de onde saiu.
 
 ## Usar pelo Claude (conector MCP)
 
@@ -240,12 +249,13 @@ do celular e no de desktop.
 | `listar_tarefas` | Tarefas por lista, contexto, projeto, atrasadas ou "cabe em X minutos" |
 | `agenda` | Compromissos entre duas datas, com os vãos livres do expediente |
 | `listar_projetos` / `ver_projeto` | Projetos, e a ficha completa com tarefas, notas e compromissos |
-| `buscar_notas` / `ler_nota` | Busca nas anotações (sem acento, sem caixa) e o texto inteiro |
+| `buscar_notas` / `ler_nota` | Busca por palavras nas anotações, em ordem de relevância, com as notas vizinhas; e o texto inteiro |
 | `capturar` | Texto cru na Entrada, sem decidir nada |
 | `criar_tarefa` / `atualizar_tarefa` / `concluir_tarefa` | Tarefas já esclarecidas, mover de lista, concluir (com o registro na agenda) |
 | `criar_evento` | Compromisso no Calendar, com ou sem projeto |
 | `criar_nota` / `atualizar_nota` | Anotações, com o modo "acrescentar ao fim" e as fontes |
 | `importar_fonte` | Um material (PDF, artigo, link, reunião) vira a nota da fonte e uma nota por ideia, ligadas e com a fonte registrada |
+| `guardar_resposta` | Uma resposta dada a partir das notas vira nota, ligada às notas de origem (só quando você pede) |
 | `saude_das_notas` | Links quebrados, notas soltas, títulos repetidos e notas vazias |
 | `criar_projeto` / `atualizar_projeto` | A ficha do projeto |
 

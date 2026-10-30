@@ -37,8 +37,9 @@ import { workBlocksFor, horarioPadrao } from '../../src/lib/schedule.js'
 import { loadCalendarPrefs, occupiesTime, isDeclined } from '../../src/lib/calendarPrefs.js'
 import { montarEventoDeConclusao, ehRegistroDeConclusao } from '../../src/lib/taskDoneEvent.js'
 import { newNote, sanitizeNotes, juntarFontes } from '../../src/lib/notasFormato.js'
-import { ligacoesDaNota, saudeDasNotas, indiceDeTitulos, chaveDeTitulo } from '../../src/lib/notasLinks.js'
-import { tituloDaNota } from '../../src/lib/notasLista.js'
+import { ligacoesDaNota, saudeDasNotas, indiceDeTitulos, chaveDeTitulo, renomearLinks } from '../../src/lib/notasLinks.js'
+import { buscarNasNotas, trechoDaBusca } from '../../src/lib/notasBusca.js'
+import { tituloDaNota, notaVazia } from '../../src/lib/notasLista.js'
 import { mesclarParaGravar, mesclarAnotacoes } from '../../src/lib/notesMerge.js'
 import { semAcento } from '../../src/lib/texto.js'
 import {
@@ -475,27 +476,58 @@ async function alterarNotas(api, agora, alterar) {
   return resultado
 }
 
-function trechosDaBusca(nota, termo) {
-  const linhas = `${nota.title || ''}\n${nota.body || ''}`.split('\n').filter((l) => l.trim())
-  const achadas = linhas.filter((l) => semAcento(l).includes(termo)).slice(0, 3)
-  return achadas.map((l) => trechoDaAnotacao(l, 160)).join(' … ')
-}
-
+// Por palavras e com ranking (ver notasBusca.js, a mesma regra da busca do
+// app): a nota mais relevante primeiro, com o trecho que a fez aparecer e as
+// notas a que ela liga — muitas vezes a resposta está na vizinha. As notas
+// ligadas aos primeiros resultados que a busca não trouxe vêm no fim, como
+// pista de onde mais ler.
 export async function buscarNotas(api, agora, { texto, projeto, limite = 10 }) {
   const remoto = await api.drive.loadNotes()
-  const termo = semAcento(texto.trim())
-  let notas = sanitizeNotes(remoto?.notes)
-  if (projeto) notas = notas.filter((n) => n.projeto === etiqueta(projeto))
-  const achadas = notas
-    .filter((n) => !termo || semAcento(`${n.title}\n${n.body}`).includes(termo))
-    .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
-  if (achadas.length === 0) return `Nenhuma anotação com "${texto}"${projeto ? ` no projeto ${etiqueta(projeto)}` : ''}.`
-  return `${achadas.length} anotaç${achadas.length === 1 ? 'ão' : 'ões'} com "${texto}", mais recentes primeiro (use ler_nota com o id para o texto inteiro):\n${listaComLimite(
-    achadas,
-    limite,
-    (n) =>
-      `- ${n.title?.trim() || '(sem título)'} [nota: ${n.id}] · editada ${dataComDia(dataNoFuso(new Date(n.updatedAt)), { ano: false })}${n.projeto ? ` · #${n.projeto}` : ''}\n  ${trechosDaBusca(n, termo) || trechoDaAnotacao(n.body, 160)}`
-  )}`
+  const todas = sanitizeNotes(remoto?.notes)
+  const notas = projeto ? todas.filter((n) => n.projeto === etiqueta(projeto)) : todas
+  const achadas = buscarNasNotas(notas, texto)
+  if (achadas.length === 0) {
+    return `Nenhuma anotação com as palavras "${texto}"${projeto ? ` no projeto ${etiqueta(projeto)}` : ''}. Tente sinônimos, a sigla por extenso (ou o contrário) ou menos palavras.`
+  }
+  const mostradas = achadas.slice(0, limite)
+  const linhas = mostradas.map(({ nota: n }) => {
+    const { ligaA } = ligacoesDaNota(n, todas)
+    const ligadas = ligaA.filter((l) => l.nota).map((l) => `[[${tituloDaNota(l.nota)}]]`)
+    const trecho = trechoDaBusca(n.body, texto, 200) || trechoDaAnotacao(n.body, 200)
+    return [
+      `- ${tituloDaNota(n)} [nota: ${n.id}] · editada ${dataComDia(dataNoFuso(new Date(n.updatedAt)), { ano: false })}${n.projeto ? ` · #${n.projeto}` : ''}`,
+      trecho ? `  ${trecho}` : null,
+      ligadas.length ? `  liga a: ${ligadas.join(', ')}` : null,
+    ]
+      .filter(Boolean)
+      .join('\n')
+  })
+
+  const jaMostradas = new Set(mostradas.map((r) => r.nota.id))
+  const vizinhas = []
+  for (const { nota } of mostradas.slice(0, 3)) {
+    const { ligaA, citadaPor } = ligacoesDaNota(nota, todas)
+    for (const vizinha of [...ligaA.map((l) => l.nota).filter(Boolean), ...citadaPor]) {
+      if (jaMostradas.has(vizinha.id) || vizinhas.some((v) => v.id === vizinha.id)) continue
+      vizinhas.push(vizinha)
+    }
+  }
+
+  const cabecalho = `${achadas.length} anotaç${achadas.length === 1 ? 'ão' : 'ões'} com as palavras "${texto}", da mais relevante para a menos${
+    achadas.length > mostradas.length ? ` (mostrando ${mostradas.length})` : ''
+  }. Use ler_nota com o id para o texto inteiro.`
+  return [
+    cabecalho,
+    linhas.join('\n'),
+    vizinhas.length
+      ? `Ligadas a esses resultados (podem ter o resto da resposta):\n${vizinhas
+          .slice(0, 5)
+          .map((v) => `- ${tituloDaNota(v)} [nota: ${v.id}]`)
+          .join('\n')}`
+      : null,
+  ]
+    .filter(Boolean)
+    .join('\n\n')
 }
 
 function fonteEmTexto(f) {
@@ -557,14 +589,62 @@ export async function atualizarNota(api, agora, { id, titulo, texto, modo = 'acr
     }
     // Fonte nova soma às que a nota já tinha; nenhuma some por aqui.
     if (fontes?.length) nova.fontes = juntarFontes(atual.fontes || [], fontes)
+    // Título novo leva junto os [[links]] das outras notas, na mesma gravação
+    // (a mesma regra do app, ver renomearLinks).
+    const renomeadas = renomearLinks(
+      atuais.map((n) => (n.id === id ? nova : n)),
+      id,
+      // Nota vazia ainda não tinha título (ver tituloQueLiga em Notes.jsx).
+      notaVazia(atual) ? '' : tituloDaNota(atual),
+      carimboDepois(agora, nova.updatedAt)
+    )
+    const outras = renomeadas.alteradas.filter((n) => n.id !== id).length
     return {
-      notas: atuais.map((n) => (n.id === id ? nova : n)),
-      resultado: `Anotação atualizada: ${nova.title || '(sem título)'} [nota: ${id}]${texto !== undefined ? (modo === 'substituir' ? ' (texto substituído)' : ' (texto acrescentado ao fim)') : ''}.`,
+      notas: renomeadas.notas,
+      resultado: `Anotação atualizada: ${nova.title || '(sem título)'} [nota: ${id}]${texto !== undefined ? (modo === 'substituir' ? ' (texto substituído)' : ' (texto acrescentado ao fim)') : ''}${
+        outras ? `. Links atualizados para o título novo em ${outras} nota${outras === 1 ? '' : 's'}` : ''
+      }.`,
     }
   })
 }
 
 // ---------- base de conhecimento ----------
+
+// O "save" do claude-obsidian: uma resposta que valeu a pena (montada a
+// partir das notas) vira nota, ligada às notas de onde saiu. Os links são
+// montados aqui, a partir dos ids, para não depender de o modelo acertar o
+// título exato de cada uma. Se já existe nota com o mesmo título, a resposta
+// é somada a ela, com a data — a base engrossa em vez de se repetir.
+export async function guardarResposta(api, agora, { titulo, resposta, baseada_em: baseadaEm = [], projeto }) {
+  return alterarNotas(api, agora, (atuais) => {
+    const origens = [...new Set(baseadaEm)].map((idOrigem) => {
+      const origem = atuais.find((n) => n.id === idOrigem)
+      if (!origem) throw new ErroDeUso(`Não existe anotação com id "${idOrigem}". Use os ids que buscar_notas devolveu.`)
+      return origem
+    })
+    const rodape = origens.length ? `\n\nBaseada em: ${origens.map((o) => `[[${tituloDaNota(o)}]]`).join(', ')}` : ''
+    const texto = `${resposta.trim()}${rodape}`
+    const existente = indiceDeTitulos(atuais).get(chaveDeTitulo(titulo))
+    if (existente) {
+      const somada = {
+        ...existente,
+        body: `${existente.body.replace(/\s+$/, '')}\n\n${dataComDia(dataNoFuso(agora))}:\n${texto}`,
+        updatedAt: carimboDepois(agora, existente.updatedAt),
+      }
+      return {
+        notas: atuais.map((n) => (n.id === existente.id ? somada : n)),
+        resultado: `Resposta somada à anotação que já existia: ${tituloDaNota(somada)} [nota: ${somada.id}].`,
+      }
+    }
+    const iso = agora.toISOString()
+    const nota = { ...newNote(), title: titulo, body: texto, createdAt: iso, updatedAt: iso }
+    if (projeto) nota.projeto = etiqueta(projeto)
+    return {
+      notas: [nota, ...atuais],
+      resultado: `Resposta guardada: ${titulo} [nota: ${nota.id}]${origens.length ? `, ligada a ${origens.length} nota${origens.length === 1 ? '' : 's'}` : ''}.`,
+    }
+  })
+}
 
 // O "ingest" do claude-obsidian, pela conversa: o Claude leu um material (um
 // PDF anexado, um artigo, uma transcrição) e entrega o resumo e as ideias já

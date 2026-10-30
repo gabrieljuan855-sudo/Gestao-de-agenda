@@ -33,7 +33,8 @@ Como agir:
 As anotações são também uma base de conhecimento, no estilo do Obsidian:
 - [[Título de outra nota]] dentro do texto liga as notas; cada nota sabe quem a cita (ler_nota mostra). Ao escrever, ligue a notas que já existem (procure antes com buscar_notas) e use o título exato delas.
 - Quando a pessoa trouxer um material (PDF, artigo, link, transcrição, reunião) e pedir para guardar, use importar_fonte: um resumo da fonte e as ideias principais, cada uma como uma nota curta com título claro, ligadas entre si e às notas existentes. Registre a fonte (título, link, autor, data) e não invente nada que não esteja no material.
-- Para responder a partir das notas, busque e leia antes, e diga em qual nota achou cada coisa.
+- Para responder a partir das notas: chame buscar_notas com as palavras-chave da pergunta, incluindo sinônimos e siglas por extenso e abreviadas (ex.: "PSR população rua editais recursos"); se não vier nada, tente outras palavras antes de dizer que não há. Leia com ler_nota as mais relevantes e as ligadas a elas, responda só com o que está nas notas e diga de qual nota ([[título]]) veio cada coisa. O que não estiver nas notas, diga que não está.
+- Se a pessoa pedir para guardar a resposta, use guardar_resposta com os ids das notas em que ela se baseou.
 - saude_das_notas aponta links quebrados, notas soltas e títulos repetidos.
 - Use os ids que as ferramentas devolvem; não invente ids, nomes de projeto ou datas. Datas sempre em AAAA-MM-DD, horários em HH:MM, fuso de Brasília.
 - Não há ferramenta de excluir: para descartar, sugira que ela faça no app.`
@@ -78,7 +79,7 @@ export const ESQUEMAS = {
   }),
   ver_projeto: z.object({ projeto: TEXTO_CURTO(120).describe('Id do projeto (a etiqueta) ou o nome.') }),
   buscar_notas: z.object({
-    texto: TEXTO_CURTO(200).describe('Palavras a procurar no título e no texto (sem diferença de acento ou maiúscula).'),
+    texto: TEXTO_CURTO(200).describe('Palavras-chave (não precisa ser frase exata): cada palavra conta sozinha, sem diferença de acento, maiúscula ou plural. Inclua sinônimos e siglas.'),
     projeto: TEXTO_CURTO(80).optional(),
     limite: z.number().int().min(1).max(50).default(10),
   }),
@@ -150,6 +151,12 @@ export const ESQUEMAS = {
     projeto: TEXTO_CURTO(80).optional().describe('Projeto a que tudo isso pertence (id/etiqueta).'),
   }),
   saude_das_notas: z.object({}),
+  guardar_resposta: z.object({
+    titulo: TEXTO_CURTO(200).describe('Título claro do que a resposta responde (ex.: "Editais abertos para PSR").'),
+    resposta: z.string().trim().min(1).max(20000).describe('A resposta como foi dada à pessoa, com [[links]] quando citar notas.'),
+    baseada_em: z.array(ID).max(30).default([]).describe('Ids das notas em que a resposta se baseou (de buscar_notas/ler_nota).'),
+    projeto: TEXTO_CURTO(80).optional().describe('Projeto a que a resposta pertence (id/etiqueta).'),
+  }),
   criar_projeto: z.object({
     nome: TEXTO_CURTO(120),
     resultado: z.string().trim().max(500).optional().describe('Como se sabe que terminou (ou o propósito, se for rotina).'),
@@ -212,7 +219,7 @@ const FERRAMENTAS = [
     nome: 'buscar_notas',
     titulo: 'Buscar anotações',
     descricao:
-      'Procura palavras nas anotações (título e texto, sem diferença de acento ou maiúscula), opcionalmente só de um projeto. Devolve trechos e ids; use ler_nota para o texto inteiro.',
+      'Busca nas anotações por palavras-chave, da mais relevante para a menos (título pesa mais; palavra rara pesa mais que comum; sem diferença de acento, maiúscula ou plural), opcionalmente só de um projeto. Devolve trecho, id e as notas ligadas a cada resultado; use ler_nota para o texto inteiro. Use antes de responder qualquer pergunta sobre o que a pessoa já anotou.',
     leitura: true,
     executar: f.buscarNotas,
   },
@@ -274,7 +281,7 @@ const FERRAMENTAS = [
     nome: 'atualizar_nota',
     titulo: 'Atualizar anotação',
     descricao:
-      'Muda uma anotação existente. Com modo "acrescentar" (padrão), o texto novo entra no fim sem apagar nada — é o jeito de ir somando informações a uma nota. "substituir" troca o texto inteiro. Também muda título e projeto.',
+      'Muda uma anotação existente. Com modo "acrescentar" (padrão), o texto novo entra no fim sem apagar nada — é o jeito de ir somando informações a uma nota. "substituir" troca o texto inteiro. Também muda título e projeto; ao trocar o título, os [[links]] das outras notas para ela são atualizados juntos.',
     leitura: false,
     executar: f.atualizarNota,
   },
@@ -285,6 +292,14 @@ const FERRAMENTAS = [
       'Transforma um material que a pessoa trouxe (PDF anexado, artigo, link, transcrição, anotações de reunião) em conhecimento guardado: uma nota da fonte com o resumo e uma nota por ideia principal, ligadas por [[título]] e com a fonte registrada em cada uma. Ideia com o mesmo título de uma nota existente é somada a ela, sem duplicar. Antes, use buscar_notas para achar notas existentes e ligar as novas a elas.',
     leitura: false,
     executar: f.importarFonte,
+  },
+  {
+    nome: 'guardar_resposta',
+    titulo: 'Guardar resposta',
+    descricao:
+      'Guarda como anotação uma resposta que você deu a partir das notas, quando a pessoa pedir ("guarda isso", "salva essa resposta"), ligada por [[título]] às notas em que se baseou (passe os ids). Se já existir nota com o mesmo título, a resposta é somada a ela com a data. Não use sem a pessoa pedir.',
+    leitura: false,
+    executar: f.guardarResposta,
   },
   {
     nome: 'saude_das_notas',

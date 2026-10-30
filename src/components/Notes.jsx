@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import ConfirmDialog from './ConfirmDialog.jsx'
 import Banner from './Banner.jsx'
 import SuggestionCard from './SuggestionCard.jsx'
 import { AI_MIN_LENGTH, descreverSincronizacao } from '../lib/useNotes.js'
 import { IA_DESLIGADA } from '../lib/aiCooldown.js'
 import { organizarNotas, tituloDaNota, previaDaNota, dataCurta, dataPorExtenso, notaVazia } from '../lib/notasLista.js'
-import { ligacoesDaNota } from '../lib/notasLinks.js'
+import { ligacoesDaNota, linkEmDigitacao, completarLink, sugerirTitulos } from '../lib/notasLinks.js'
 
 // Tempo parado depois da última tecla para considerar que a anotação foi
 // "finalizada" e vale a pena gastar uma chamada de IA nela. Bem mais longo
@@ -13,12 +13,44 @@ import { ligacoesDaNota } from '../lib/notasLinks.js'
 // de a pessoa realmente terminar o pensamento.
 const AI_IDLE_MS = 45000
 
+// Onde fica, dentro do textarea, a linha em que o cursor está. O textarea não
+// diz isso; a medida vem de uma cópia invisível com o mesmo estilo e o texto
+// até o cursor (a técnica de sempre para "onde está o cursor").
+const ESTILO_DO_TEXTO = [
+  'boxSizing', 'width', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
+  'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth',
+  'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'letterSpacing', 'lineHeight',
+  'textTransform', 'wordSpacing', 'textIndent', 'tabSize',
+]
+function linhaDoCursor(textarea, posicao) {
+  const estilo = getComputedStyle(textarea)
+  const copia = document.createElement('div')
+  for (const prop of ESTILO_DO_TEXTO) copia.style[prop] = estilo[prop]
+  Object.assign(copia.style, { position: 'absolute', visibility: 'hidden', top: '0', left: '-9999px', whiteSpace: 'pre-wrap', overflowWrap: 'break-word' })
+  copia.textContent = textarea.value.slice(0, posicao)
+  const marca = document.createElement('span')
+  marca.textContent = '\u200b'
+  copia.appendChild(marca)
+  document.body.appendChild(copia)
+  const topo = marca.offsetTop
+  document.body.removeChild(copia)
+  return { topo, altura: parseFloat(estilo.lineHeight) || parseFloat(estilo.fontSize) * 1.5 }
+}
+
+// O título que os [[links]] das outras notas usam. Nota vazia ainda não tem
+// título nenhum (o "Nova anotação" da lista é só um rótulo): dar o primeiro
+// título a ela não é renomear, e tratar como renomeação levaria junto links
+// de outras notas para "Nova anotação".
+function tituloQueLiga(nota) {
+  return notaVazia(nota) ? '' : tituloDaNota(nota)
+}
+
 // Título e corpo ficam com estado próprio aqui dentro, sincronizado com a
 // nota selecionada só depois de uma pausa na digitação — o mesmo motivo de
 // sempre: gravar a cada tecla gastaria uma chamada ao Drive por letra. A IA
 // tem seu próprio timer, bem mais longo (ver AI_IDLE_MS): a ideia é analisar
 // quando a anotação estiver "pronta", não a cada pausa curta de digitação.
-function NoteEditor({ note, projetos = [], onProjetoChange, onChange, onAnalyze, analyzing, syncStatus, calendars, taskLists, onCreateEvent, onCreateTask, onSelectRelated, onVoltar, onAlternarFixada, onExcluir, todas = [], onAbrirNota, onCriarNota }) {
+function NoteEditor({ note, projetos = [], onProjetoChange, onChange, onAnalyze, analyzing, syncStatus, calendars, taskLists, onCreateEvent, onCreateTask, onSelectRelated, onVoltar, onAlternarFixada, onExcluir, todas = [], onAbrirNota, onCriarNota, onRenomear }) {
   const [title, setTitle] = useState(note.title)
   const [body, setBody] = useState(note.body)
   const firstRender = useRef(true)
@@ -34,6 +66,14 @@ function NoteEditor({ note, projetos = [], onProjetoChange, onChange, onAnalyze,
   // ao Drive à toa).
   const lastKnownTitleRef = useRef(note.title)
   const syncingTitleRef = useRef(false)
+  // O título pelo qual as outras notas conhecem esta (é o alvo dos [[links]]
+  // delas). Só muda quando a troca de título é confirmada — ver
+  // confirmarTitulo.
+  const tituloLigadoRef = useRef(tituloQueLiga(note))
+  // Onde está o cursor do texto, para as sugestões de [[link]]; null quando o
+  // texto não está em edição.
+  const [cursor, setCursor] = useState(null)
+  const sairDoTextoTimer = useRef(null)
 
   // Trocar de nota reseta os campos para o conteúdo dela, sem disparar
   // gravação nem análise — é troca de tela, não edição.
@@ -42,9 +82,12 @@ function NoteEditor({ note, projetos = [], onProjetoChange, onChange, onAnalyze,
     setBody(note.body)
     analyzedBodyRef.current = note.body
     lastKnownTitleRef.current = note.title
+    tituloLigadoRef.current = tituloQueLiga(note)
+    setCursor(null)
     firstRender.current = true
     clearTimeout(saveTimer.current)
     clearTimeout(aiTimer.current)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [note.id])
 
   // A IA pode preencher o título enquanto esta mesma nota continua aberta: a
@@ -110,20 +153,78 @@ function NoteEditor({ note, projetos = [], onProjetoChange, onChange, onAnalyze,
     el.style.height = `${el.scrollHeight}px`
   }, [body])
 
+  // Grava já o que está no debounce e, se o título mudou, leva junto os
+  // [[links]] das outras notas (onRenomear). Roda ao sair do campo e ao sair
+  // da nota — é aí que o título novo está decidido, e não a cada letra.
+  function confirmarTitulo() {
+    clearTimeout(saveTimer.current)
+    if (title !== note.title || body !== note.body) onChange({ title, body })
+    const atual = tituloQueLiga({ title, body })
+    if (atual !== tituloLigadoRef.current) {
+      if (tituloLigadoRef.current) onRenomear(tituloLigadoRef.current)
+      tituloLigadoRef.current = atual
+    }
+  }
+
   // Voltar leva junto o que ainda está no debounce: sem isso, a última frase
   // digitada antes de tocar em "Anotações" se perdia.
   function voltar() {
-    clearTimeout(saveTimer.current)
-    if (title !== note.title || body !== note.body) onChange({ title, body })
+    confirmarTitulo()
     onVoltar({ title, body })
   }
 
   // O mesmo cuidado para sair por um link: a gravação pendente vai junto antes
   // de trocar de nota (a troca cancela o debounce).
   function irPara(acao) {
-    clearTimeout(saveTimer.current)
-    if (title !== note.title || body !== note.body) onChange({ title, body })
+    confirmarTitulo()
     acao()
+  }
+
+  // ---- sugestões de [[link]] enquanto se digita ----
+  // No celular ninguém lembra o título exato de outra nota: digitar "[[" já
+  // oferece as notas que existem, como no Obsidian, e tocar completa o link.
+  const emDigitacao = cursor === null ? null : linkEmDigitacao(body, cursor)
+  const sugestoes = useMemo(
+    () => (emDigitacao ? sugerirTitulos(todas, emDigitacao.parcial, { excetoId: note.id }) : []),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [emDigitacao?.parcial, emDigitacao?.inicio, todas, note.id]
+  )
+  // As sugestões flutuam logo acima da linha que se está digitando, como a
+  // bolha de sugestão do próprio iPhone: embaixo do texto elas ficavam longe
+  // do cursor e, com o teclado aberto, escondidas atrás dele. Na primeira
+  // linha não há espaço acima, então vão logo abaixo dela.
+  const [topoDasSugestoes, setTopoDasSugestoes] = useState(0)
+  useLayoutEffect(() => {
+    const el = corpoRef.current
+    if (!sugestoes.length || !el || cursor === null) return
+    const { topo, altura } = linhaDoCursor(el, cursor)
+    const alturaDosChips = 40
+    setTopoDasSugestoes(el.offsetTop + (topo >= alturaDosChips ? topo - alturaDosChips : topo + altura + 4))
+  }, [sugestoes.length, cursor, body])
+
+  function acompanharCursor(e) {
+    clearTimeout(sairDoTextoTimer.current)
+    setCursor(e.target.selectionStart === e.target.selectionEnd ? e.target.selectionStart : null)
+  }
+
+  function sairDoTexto() {
+    // Um pouco de espera: no iPhone o toque na sugestão às vezes tira o foco
+    // do texto antes do clique chegar, e as sugestões sumiriam sob o dedo.
+    sairDoTextoTimer.current = setTimeout(() => setCursor(null), 200)
+    confirmarTitulo()
+  }
+
+  function escolherSugestao(titulo) {
+    const completo = completarLink(body, cursor, titulo)
+    if (!completo) return
+    setBody(completo.texto)
+    setCursor(null)
+    requestAnimationFrame(() => {
+      const el = corpoRef.current
+      if (!el) return
+      el.focus()
+      el.setSelectionRange(completo.cursor, completo.cursor)
+    })
   }
 
   // Calculado do texto que está na tela, e não do salvo: o link aparece
@@ -176,6 +277,7 @@ function NoteEditor({ note, projetos = [], onProjetoChange, onChange, onAnalyze,
         className="nota-titulo"
         value={title}
         onChange={(e) => setTitle(e.target.value)}
+        onBlur={confirmarTitulo}
         placeholder="Título"
         aria-label="Título"
       />
@@ -204,10 +306,34 @@ function NoteEditor({ note, projetos = [], onProjetoChange, onChange, onAnalyze,
         // para ler não deveria jogar o teclado por cima do texto.
         autoFocus={notaVazia(note)}
         value={body}
-        onChange={(e) => setBody(e.target.value)}
-        placeholder="Escreva aqui... Para ligar a outra anotação, use [[Nome da nota]]."
+        onChange={(e) => {
+          setBody(e.target.value)
+          acompanharCursor(e)
+        }}
+        onSelect={acompanharCursor}
+        onBlur={sairDoTexto}
+        placeholder="Escreva aqui... Para ligar a outra anotação, digite [[ e escolha."
         aria-label="Texto da anotação"
       />
+
+      {/* Chips de sugestão do MD3: oferecem uma escolha para o que se está
+          digitando. O mousedown não pode tirar o foco do texto, senão o
+          teclado fecha e o cursor se perde antes do link ser completado. */}
+      {sugestoes.length > 0 && (
+        <div className="nota-sugestoes" style={{ top: topoDasSugestoes }} role="group" aria-label="Ligar a uma anotação">
+          {sugestoes.map((titulo) => (
+            <button
+              key={titulo}
+              type="button"
+              className="chip-sugestao"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => escolherSugestao(titulo)}
+            >
+              {titulo}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="notes-status">
         <StatusDoDrive status={syncStatus} />
@@ -466,6 +592,7 @@ export default function Notes({ notesState, projetos = [], calendars = [], taskL
     dismissAiError,
     createNote,
     updateNote,
+    renomearLinksDaNota,
     deleteNote,
     analyzeNote,
     analyzingIds,
@@ -528,6 +655,7 @@ export default function Notes({ notesState, projetos = [], calendars = [], taskL
             todas={notes}
             onAbrirNota={setSelectedId}
             onCriarNota={(titulo) => createNote({ title: titulo })}
+            onRenomear={(tituloAntigo) => renomearLinksDaNota(selected.id, tituloAntigo)}
           />
         </>
       ) : (

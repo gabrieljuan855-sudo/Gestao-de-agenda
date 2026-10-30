@@ -67,8 +67,9 @@ export async function resumoDaResposta({ request, response, metodo = '' }) {
     ...(request.headers.get('authorization') ? { comToken: true } : {}),
     ...(request.headers.get('sec-fetch-site') ? { site: request.headers.get('sec-fetch-site') } : {}),
     // Navegação de verdade ou pedido em segundo plano (fetch), se foi toque
-    // da pessoa, e se o cookie da tela de consentimento veio junto: é o que
-    // separa o pedido real das repetições do navegador embutido do Claude.
+    // da pessoa, e se o cookie da tela de consentimento veio junto: foi o que
+    // separou a navegação real dos pedidos que o service worker do app fazia
+    // por trás (o vindoDe /sw.js entregou a causa).
     ...(request.headers.get('sec-fetch-mode') ? { modo: request.headers.get('sec-fetch-mode') } : {}),
     ...(request.headers.get('sec-fetch-dest') ? { alvo: request.headers.get('sec-fetch-dest') } : {}),
     ...(request.headers.get('sec-fetch-user') ? { toque: request.headers.get('sec-fetch-user') } : {}),
