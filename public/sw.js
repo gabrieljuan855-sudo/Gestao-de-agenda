@@ -8,7 +8,9 @@
 // pronta para a próxima abertura — o aviso de "versão nova" (useNovaVersao)
 // continua perguntando ao servidor direto, então ninguém fica preso numa
 // versão velha sem saber.
-const CACHE_NAME = 'gestao-agenda-v5'
+// v6: a v5 podia ter guardado a tela do conector no lugar da página do app
+// (ver o fetch, abaixo); trocar o nome descarta esse cache envenenado.
+const CACHE_NAME = 'gestao-agenda-v6'
 
 // Só o essencial para a página conseguir montar sozinha: os arquivos com hash
 // do build (JS/CSS) entram no cache sozinhos, na primeira vez que passam por
@@ -23,6 +25,10 @@ const APP_SHELL = [
   '/icon-192.png',
   '/icon-512.png',
 ]
+
+// As rotas do conector do Claude (worker/conector/oauth.js). Elas dividem o
+// domínio com o app, mas não são páginas dele.
+const ROTAS_DO_CONECTOR = ['/mcp', '/authorize', '/token', '/register', '/conector', '/.well-known']
 
 // As fontes vêm do Google e bloqueiam a primeira pintura da tela. O arquivo
 // de cada versão da fonte nunca muda, então guardá-las de vez é seguro.
@@ -149,10 +155,20 @@ self.addEventListener('fetch', (event) => {
   // interpretação por IA sempre precisam de uma resposta fresca do servidor.
   if (url.pathname.startsWith('/api/')) return
 
+  // Navegação: só a página do app (que é uma só, em "/"). Este service
+  // worker atendia qualquer navegação do domínio com a página guardada e
+  // buscava o endereço de verdade por trás — e o conector do Claude mora no
+  // mesmo domínio. No iPhone, a tela de permissão (/authorize), a volta do
+  // Google (/conector/callback) e o resto do login abriam o app no lugar da
+  // página certa, enquanto a busca por trás gastava o pedido de uso único;
+  // pior, a tela do conector chegava a ser guardada como se fosse "/". Foi o
+  // registro do conector que mostrou: os pedidos vinham de /sw.js.
   if (request.mode === 'navigate') {
-    event.respondWith(abrirPagina(event))
+    if (url.pathname === '/' || url.pathname === '/index.html') event.respondWith(abrirPagina(event))
     return
   }
+  // Nem como subrecurso: as rotas do conector (OAuth e MCP) são do servidor.
+  if (ROTAS_DO_CONECTOR.some((rota) => url.pathname === rota || url.pathname.startsWith(`${rota}/`))) return
   // Com hash no nome, o conteúdo nunca muda: não há o que conferir na rede.
   if (url.pathname.startsWith('/assets/')) {
     event.respondWith(doCacheOuRede(request))
