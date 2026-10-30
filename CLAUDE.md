@@ -65,6 +65,10 @@ uma pilha de branches que só atrapalha.
   módulos que recebem o `request` de fora (`googleTarefas.js`,
   `googleAgenda.js`, `driveArquivos.js`). Se algo de `src/lib/` precisar do
   navegador, separe a parte pura em vez de copiar código para o Worker.
+- Anotações são uma base de conhecimento: links `[[título]]` e fontes
+  (`notasLinks.js`, campo `fontes` em `notasFormato.js`). O link aponta para o
+  título, não para o id, e a regra de resolução é uma só para o app e o
+  conector.
 - O app e o conector gravam nos mesmos arquivos do Drive: toda gravação é
   ler → mesclar → gravar (`mesclarParaGravar` em `notesMerge.js`), nunca a
   lista local por cima.

@@ -225,3 +225,79 @@ describe('agenda e visão geral', () => {
     expect(texto).toMatch(/sábado, 31\/10\/2026:\n- 10:00–12:00 Visita domiciliar/)
   })
 })
+
+describe('base de conhecimento', () => {
+  const nota = (id, title, body, extra = {}) => ({ id, title, body, createdAt: '2026-10-01T10:00:00.000Z', updatedAt: '2026-10-29T10:00:00.000Z', ...extra })
+
+  it('importar_fonte cria a nota da fonte e uma por ideia, ligadas e com a fonte, numa gravação só', async () => {
+    g.gravarArquivo('anotacoes.json', { notes: [nota('a', 'Do app', 'escrita no app')], deleted: [] })
+    const r = await f.importarFonte(api, agora, {
+      fonte: { titulo: 'Tipificação dos serviços', url: 'mds.gov.br/tipificacao', autor: 'MDS', data: '2009-11-11' },
+      resumo: 'Documento que padroniza os serviços socioassistenciais.',
+      notas: [
+        { titulo: 'PAIF', texto: 'Serviço de proteção e atendimento integral à família.' },
+        { titulo: 'PAEFI', texto: 'Atendimento especializado, ligado ao [[PAIF]].' },
+      ],
+      projeto: 'Imersão AEPETI',
+    })
+    const { notes } = g.lerArquivo('anotacoes.json')
+    const porTitulo = Object.fromEntries(notes.map((n) => [n.title, n]))
+    expect(Object.keys(porTitulo).sort()).toEqual(['Do app', 'PAEFI', 'PAIF', 'Tipificação dos serviços'])
+    expect(porTitulo['Tipificação dos serviços'].body).toContain('- [[PAIF]]\n- [[PAEFI]]')
+    expect(porTitulo.PAIF.body).toMatch(/Fonte: \[\[Tipificação dos serviços\]\]$/)
+    expect(porTitulo.PAIF.fontes).toEqual([{ titulo: 'Tipificação dos serviços', url: 'https://mds.gov.br/tipificacao', autor: 'MDS', data: '2009-11-11' }])
+    expect(porTitulo.PAIF.projeto).toBe('imersao-aepeti')
+    expect(r).toMatch(/Notas criadas \(3\)/)
+  })
+
+  it('ideia com título de nota existente é somada a ela, sem duplicar e sem perder a fonte antiga', async () => {
+    g.gravarArquivo('anotacoes.json', {
+      notes: [nota('p', 'paif', 'O que eu já sabia.', { fontes: [{ titulo: 'Curso' }] })],
+      deleted: [],
+    })
+    const r = await f.importarFonte(api, agora, {
+      fonte: { titulo: 'Caderno de orientações' },
+      resumo: 'Orientações técnicas.',
+      notas: [{ titulo: 'PAIF', texto: 'Acompanhamento familiar em grupo.' }],
+    })
+    const { notes } = g.lerArquivo('anotacoes.json')
+    expect(notes).toHaveLength(2)
+    const paif = notes.find((n) => n.id === 'p')
+    expect(paif.body).toBe('O que eu já sabia.\n\nAcompanhamento familiar em grupo.\n\nFonte: [[Caderno de orientações]]')
+    expect(paif.fontes.map((x) => x.titulo)).toEqual(['Curso', 'Caderno de orientações'])
+    expect(r).toMatch(/receberam o conteúdo novo no fim \(1\):\n- paif \[nota: p\]/)
+  })
+
+  it('ler_nota mostra fontes, para onde a nota liga e quem a cita', async () => {
+    g.gravarArquivo('anotacoes.json', {
+      notes: [
+        nota('a', 'Audiência', 'Ver [[Caso Silva]] e [[Ofício]].', { fontes: [{ titulo: 'Intimação', data: '2026-10-20' }] }),
+        nota('b', 'Caso Silva', 'Família acompanhada.'),
+        nota('c', 'Reunião', 'Falamos da [[audiencia]].'),
+      ],
+      deleted: [],
+    })
+    const texto = await f.lerNota(api, agora, { id: 'a' })
+    expect(texto).toContain('Fontes:\n- Intimação (ter. 20/10/2026)')
+    expect(texto).toContain('Liga a:\n- Caso Silva [nota: b]\n- Ofício (ainda não existe)')
+    expect(texto).toContain('Citada por:\n- Reunião [nota: c]')
+  })
+
+  it('criar_nota e atualizar_nota registram fontes, somando sem repetir', async () => {
+    await f.criarNota(api, agora, { titulo: 'Lei', texto: 'texto', fontes: [{ titulo: 'LOAS', url: 'planalto.gov.br' }] })
+    const [criada] = g.lerArquivo('anotacoes.json').notes
+    expect(criada.fontes).toEqual([{ titulo: 'LOAS', url: 'https://planalto.gov.br/' }])
+    await f.atualizarNota(api, agora, { id: criada.id, fontes: [{ titulo: 'loas' }, { titulo: 'Decreto' }] })
+    expect(g.lerArquivo('anotacoes.json').notes[0].fontes.map((x) => x.titulo)).toEqual(['LOAS', 'Decreto'])
+  })
+
+  it('saude_das_notas aponta link quebrado, nota solta e título repetido', async () => {
+    g.gravarArquivo('anotacoes.json', {
+      notes: [nota('a', 'Audiência', 'Ver [[Não existe]]'), nota('b', 'Solta', 'sozinha'), nota('c', 'solta', 'outra')],
+      deleted: [],
+    })
+    const texto = await f.saudeDasNotasTexto(api)
+    expect(texto).toContain('## Links para notas que não existem: 1\n- em Audiência [nota: a]: [[Não existe]]')
+    expect(texto).toMatch(/## Títulos repetidos .*: 1\n- "Solta": \[nota: b\], \[nota: c\]/)
+  })
+})

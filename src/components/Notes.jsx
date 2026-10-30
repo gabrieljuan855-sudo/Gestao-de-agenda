@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import ConfirmDialog from './ConfirmDialog.jsx'
 import Banner from './Banner.jsx'
 import SuggestionCard from './SuggestionCard.jsx'
 import { AI_MIN_LENGTH, descreverSincronizacao } from '../lib/useNotes.js'
 import { IA_DESLIGADA } from '../lib/aiCooldown.js'
 import { organizarNotas, tituloDaNota, previaDaNota, dataCurta, dataPorExtenso, notaVazia } from '../lib/notasLista.js'
+import { ligacoesDaNota } from '../lib/notasLinks.js'
 
 // Tempo parado depois da última tecla para considerar que a anotação foi
 // "finalizada" e vale a pena gastar uma chamada de IA nela. Bem mais longo
@@ -17,7 +18,7 @@ const AI_IDLE_MS = 45000
 // sempre: gravar a cada tecla gastaria uma chamada ao Drive por letra. A IA
 // tem seu próprio timer, bem mais longo (ver AI_IDLE_MS): a ideia é analisar
 // quando a anotação estiver "pronta", não a cada pausa curta de digitação.
-function NoteEditor({ note, projetos = [], onProjetoChange, onChange, onAnalyze, analyzing, syncStatus, calendars, taskLists, onCreateEvent, onCreateTask, onSelectRelated, onVoltar, onAlternarFixada, onExcluir }) {
+function NoteEditor({ note, projetos = [], onProjetoChange, onChange, onAnalyze, analyzing, syncStatus, calendars, taskLists, onCreateEvent, onCreateTask, onSelectRelated, onVoltar, onAlternarFixada, onExcluir, todas = [], onAbrirNota, onCriarNota }) {
   const [title, setTitle] = useState(note.title)
   const [body, setBody] = useState(note.body)
   const firstRender = useRef(true)
@@ -117,6 +118,18 @@ function NoteEditor({ note, projetos = [], onProjetoChange, onChange, onAnalyze,
     onVoltar({ title, body })
   }
 
+  // O mesmo cuidado para sair por um link: a gravação pendente vai junto antes
+  // de trocar de nota (a troca cancela o debounce).
+  function irPara(acao) {
+    clearTimeout(saveTimer.current)
+    if (title !== note.title || body !== note.body) onChange({ title, body })
+    acao()
+  }
+
+  // Calculado do texto que está na tela, e não do salvo: o link aparece
+  // embaixo enquanto se digita.
+  const ligacoes = useMemo(() => ligacoesDaNota({ ...note, title, body }, todas), [note, title, body, todas])
+
   return (
     <div className="nota-editor">
       <div className="nota-barra">
@@ -192,7 +205,7 @@ function NoteEditor({ note, projetos = [], onProjetoChange, onChange, onAnalyze,
         autoFocus={notaVazia(note)}
         value={body}
         onChange={(e) => setBody(e.target.value)}
-        placeholder="Escreva aqui..."
+        placeholder="Escreva aqui... Para ligar a outra anotação, use [[Nome da nota]]."
         aria-label="Texto da anotação"
       />
 
@@ -200,6 +213,14 @@ function NoteEditor({ note, projetos = [], onProjetoChange, onChange, onAnalyze,
         <StatusDoDrive status={syncStatus} />
         {analyzing && <span>· revisando com a IA...</span>}
       </div>
+
+      <LigacoesDaNota
+        fontes={note.fontes || []}
+        ligaA={ligacoes.ligaA}
+        citadaPor={ligacoes.citadaPor}
+        onAbrir={(id) => irPara(() => onAbrirNota(id))}
+        onCriar={(titulo) => irPara(() => onCriarNota(titulo))}
+      />
 
       {/* Só isto fica visível na hora de imprimir (ver @media print em
           index.css) — título e input/textarea têm bordas, placeholder e
@@ -212,7 +233,7 @@ function NoteEditor({ note, projetos = [], onProjetoChange, onChange, onAnalyze,
       </div>
 
       {note.relatedNote && (
-        <Banner tone="info" actionLabel="Abrir" onAction={() => onSelectRelated(note.relatedNote.id)}>
+        <Banner tone="info" actionLabel="Abrir" onAction={() => irPara(() => onSelectRelated(note.relatedNote.id))}>
           A IA notou que isto parece relacionado a "{note.relatedNote.title || '(sem título)'}".
         </Banner>
       )}
@@ -233,6 +254,66 @@ function NoteEditor({ note, projetos = [], onProjetoChange, onChange, onAnalyze,
             ))}
           </div>
         </div>
+      )}
+    </div>
+  )
+}
+
+// Embaixo do texto, como o painel de links do Obsidian: de onde a nota veio
+// (fontes), para onde ela aponta e quem aponta para ela. Item de lista, e não
+// chip: tocar navega para a outra nota (chip no MD3 é filtro e entrada). Um
+// link para uma nota que ainda não existe é o convite para criá-la — é assim
+// que a base cresce no Obsidian.
+function LigacoesDaNota({ fontes, ligaA, citadaPor, onAbrir, onCriar }) {
+  if (!fontes.length && !ligaA.length && !citadaPor.length) return null
+  return (
+    <div className="nota-ligacoes">
+      {fontes.length > 0 && (
+        <section>
+          <h4>Fontes</h4>
+          <ul>
+            {fontes.map((f) => (
+              <li key={f.titulo} className="nota-fonte">
+                {f.url ? (
+                  <a href={f.url} target="_blank" rel="noreferrer">{f.titulo}</a>
+                ) : (
+                  <span>{f.titulo}</span>
+                )}
+                {(f.autor || f.data) && <span className="muted"> · {[f.autor, f.data && f.data.split('-').reverse().join('/')].filter(Boolean).join(' · ')}</span>}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+      {ligaA.length > 0 && (
+        <section>
+          <h4>Esta nota liga a</h4>
+          <ul>
+            {ligaA.map((l) => (
+              <li key={l.titulo}>
+                {l.nota ? (
+                  <button type="button" className="nota-link" onClick={() => onAbrir(l.nota.id)}>{tituloDaNota(l.nota)}</button>
+                ) : (
+                  <button type="button" className="nota-link is-nova" onClick={() => onCriar(l.titulo)} title="Esta nota ainda não existe">
+                    Criar “{l.titulo}”
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+      {citadaPor.length > 0 && (
+        <section>
+          <h4>Citada por</h4>
+          <ul>
+            {citadaPor.map((n) => (
+              <li key={n.id}>
+                <button type="button" className="nota-link" onClick={() => onAbrir(n.id)}>{tituloDaNota(n)}</button>
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
     </div>
   )
@@ -444,6 +525,9 @@ export default function Notes({ notesState, projetos = [], calendars = [], taskL
             onVoltar={(atual) => voltar(selected.id, atual)}
             onAlternarFixada={() => updateNote(selected.id, { fixada: selected.fixada ? undefined : true })}
             onExcluir={() => setPendingDeleteId(selected.id)}
+            todas={notes}
+            onAbrirNota={setSelectedId}
+            onCriarNota={(titulo) => createNote({ title: titulo })}
           />
         </>
       ) : (

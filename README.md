@@ -175,6 +175,22 @@ desconecta tudo de uma vez, se precisar.
 Mantenha o `VITE_GOOGLE_CLIENT_ID` do passo 2 como está: ele é a rede de
 segurança para o caso de o login pelo servidor sair do ar.
 
+## Anotações como base de conhecimento
+
+As anotações funcionam no estilo do Obsidian (e do claude-obsidian), mas dentro
+do app, no celular e no computador:
+
+- **Links entre notas:** `[[Nome da nota]]` no texto liga uma nota à outra, sem
+  ligar para acento ou maiúscula. Embaixo de cada nota aparecem **Esta nota
+  liga a** e **Citada por**; um link para uma nota que ainda não existe oferece
+  criá-la. `[[Nota|outro texto]]` e `[[Nota#Seção]]` também apontam para "Nota".
+- **Fontes:** cada nota guarda de onde veio (título, link, autor, data).
+- **Pelo Claude:** anexe um PDF ou cole um artigo e peça para guardar no
+  Segundo Cérebro — `importar_fonte` cria a nota da fonte e uma nota por ideia,
+  ligadas entre si e às notas que já existem (uma ideia com o título de uma
+  nota existente é somada a ela). Perguntas sobre as anotações são respondidas
+  a partir delas, dizendo em qual nota está cada coisa.
+
 ## Usar pelo Claude (conector MCP)
 
 O mesmo Worker é também um **servidor MCP remoto**: adicionado como conector
@@ -228,7 +244,9 @@ do celular e no de desktop.
 | `capturar` | Texto cru na Entrada, sem decidir nada |
 | `criar_tarefa` / `atualizar_tarefa` / `concluir_tarefa` | Tarefas já esclarecidas, mover de lista, concluir (com o registro na agenda) |
 | `criar_evento` | Compromisso no Calendar, com ou sem projeto |
-| `criar_nota` / `atualizar_nota` | Anotações, com o modo "acrescentar ao fim" |
+| `criar_nota` / `atualizar_nota` | Anotações, com o modo "acrescentar ao fim" e as fontes |
+| `importar_fonte` | Um material (PDF, artigo, link, reunião) vira a nota da fonte e uma nota por ideia, ligadas e com a fonte registrada |
+| `saude_das_notas` | Links quebrados, notas soltas, títulos repetidos e notas vazias |
 | `criar_projeto` / `atualizar_projeto` | A ficha do projeto |
 
 Não há ferramenta de excluir. Os vãos livres usam o expediente padrão do app

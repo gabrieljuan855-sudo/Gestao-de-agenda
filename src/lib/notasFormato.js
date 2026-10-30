@@ -3,6 +3,38 @@
 // grava notas no mesmo arquivo — e uma nota que o app não reconhecesse seria
 // descartada na primeira leitura dele.
 
+import { normalizarLink } from './projetos.js'
+
+const DATA_ISO = /^\d{4}-\d{2}-\d{2}$/
+export const MAX_FONTES = 20
+
+// De onde veio o que a nota diz: um artigo, um PDF, uma reunião, um livro.
+// Guardar a fonte junto é o que deixa a nota ser conferida depois — "onde foi
+// que eu li isso?" —, e é a outra metade da base de conhecimento, junto dos
+// links. Só o título é obrigatório; link só http(s), pelo mesmo motivo dos
+// arquivos de projeto (um "javascript:" clicável seria uma porta aberta).
+export function sanitizeFonte(fonte) {
+  if (!fonte || typeof fonte !== 'object') return null
+  const titulo = typeof fonte.titulo === 'string' ? fonte.titulo.trim().slice(0, 300) : ''
+  if (!titulo) return null
+  const limpa = { titulo }
+  const url = fonte.url ? normalizarLink(String(fonte.url)) : null
+  if (url) limpa.url = url
+  if (typeof fonte.autor === 'string' && fonte.autor.trim()) limpa.autor = fonte.autor.trim().slice(0, 200)
+  if (DATA_ISO.test(fonte.data || '')) limpa.data = fonte.data
+  return limpa
+}
+
+// Junta fontes sem repetir a mesma (mesmo título, sem ligar para caixa).
+export function juntarFontes(...listas) {
+  const porTitulo = new Map()
+  for (const f of listas.flat().map(sanitizeFonte).filter(Boolean)) {
+    const chave = f.titulo.toLowerCase()
+    if (!porTitulo.has(chave)) porTitulo.set(chave, f)
+  }
+  return [...porTitulo.values()].slice(0, MAX_FONTES)
+}
+
 function makeId() {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID()
   return `nota-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
@@ -47,6 +79,10 @@ export function sanitizeNote(note) {
   if (typeof note.projeto === 'string' && note.projeto) limpa.projeto = note.projeto
   // Fixada no topo da lista, como no Notas do iPhone. Só existe quando é true.
   if (note.fixada === true) limpa.fixada = true
+  if (Array.isArray(note.fontes)) {
+    const fontes = juntarFontes(note.fontes)
+    if (fontes.length) limpa.fontes = fontes
+  }
   if (note.relatedNote && typeof note.relatedNote.id === 'string') {
     limpa.relatedNote = { id: note.relatedNote.id, title: textoOuVazio(note.relatedNote.title) }
   }
