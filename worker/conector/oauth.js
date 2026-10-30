@@ -201,7 +201,16 @@ async function paginasDoConector(request, env) {
     if (pathname === ROTA_CALLBACK) return await voltaDoGoogle(request, env)
   } catch (err) {
     if (err instanceof AuthorizationError && err.redirectTo) return Response.redirect(err.redirectTo, 302)
-    if (err instanceof AuthorizationError) return erroLocal('Não deu para conectar', err.description || err.message)
+    if (err instanceof AuthorizationError) {
+      // As mensagens da biblioteca vêm em inglês e não dizem o que fazer. O
+      // caso comum é a tentativa ter sido usada, expirado ou voltado por outra
+      // janela (voltar ou recarregar no meio do caminho já basta para isso),
+      // e a saída é sempre a mesma: recomeçar pelo Claude.
+      return erroLocal(
+        'Não deu para conectar',
+        `Esta tentativa de conexão expirou, já foi usada ou voltou por outra janela. Feche esta página e toque em Conectar de novo no Claude, sem voltar nem recarregar no meio do caminho. (Detalhe: ${err.description || err.message})`
+      )
+    }
     if (err instanceof CimdFetchError) return erroLocal('Não deu para conectar', 'O aplicativo que pediu acesso não pôde ser verificado.')
     throw err
   }
