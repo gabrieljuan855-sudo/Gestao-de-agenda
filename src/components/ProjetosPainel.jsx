@@ -10,6 +10,8 @@ import { eventStart, isAllDay } from '../lib/events.js'
 import { parseQuickAdd, descreverQuando } from '../lib/nlp.js'
 import { construirRecorrencia } from '../lib/recorrencia.js'
 import { pastaDoProjeto } from '../lib/googleApi.js'
+import { permissaoDosArquivos } from '../lib/googleAuth.js'
+import { MODELOS, acharModelo, aplicarModelo } from '../lib/modelosDeProjeto.js'
 import Anexos from './Anexos.jsx'
 import { textoSemFormato } from '../lib/notasFormatacao.js'
 import {
@@ -80,8 +82,10 @@ function LinhaDoProjeto({ projeto, onAbrir, selecionado }) {
   )
 }
 
-function ListaDeProjetos({ lista, onAbrir, onCriar, abertoId }) {
+function ListaDeProjetos({ lista, onAbrir, onCriar, abertoId, avisoDoModelo }) {
   const [nome, setNome] = useState('')
+  const [modelo, setModelo] = useState('')
+  const escolhido = acharModelo(modelo)
   const porSituacao = (s) => lista.filter((p) => p.situacao === s)
   const concluidos = porSituacao('concluido')
   // Rotina ativa tem seção própria: misturada aos projetos, ela parecia um
@@ -95,19 +99,44 @@ function ListaDeProjetos({ lista, onAbrir, onCriar, abertoId }) {
   function criar(e) {
     e.preventDefault()
     if (!nome.trim()) return
-    const id = onCriar(nome)
+    const id = onCriar(nome, modelo)
     if (id) {
       setNome('')
+      setModelo('')
       onAbrir(id)
     }
   }
 
   return (
     <div className="projetos">
-      <form className="projetos-novo" onSubmit={criar}>
-        <input type="text" value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Novo projeto (ex.: Caso Maria, Mudança de escritório)" />
-        <button type="submit" className="primary" disabled={!nome.trim()}>Criar</button>
+      <form className="projetos-criar" onSubmit={criar}>
+        <div className="projetos-novo">
+          <input type="text" value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Novo projeto (ex.: Caso Silva, POP Acolhimento)" aria-label="Nome do projeto novo" />
+          <button type="submit" className="primary" disabled={!nome.trim()}>Criar</button>
+        </div>
+        {/* Chips de escolha do MD3: um modelo entre seis, ou nenhum. */}
+        <div className="projetos-modelos" role="radiogroup" aria-label="Modelo do projeto">
+          {[{ id: '', rotulo: 'Em branco' }, ...MODELOS].map((m) => (
+            <button
+              key={m.id || 'branco'}
+              type="button"
+              role="radio"
+              aria-checked={modelo === m.id}
+              className={`pill pill-filtro${modelo === m.id ? ' is-escolhido' : ''}`}
+              onClick={() => setModelo(m.id)}
+            >
+              {m.rotulo}
+            </button>
+          ))}
+        </div>
+        {escolhido && (
+          <p className="muted t-label projetos-modelo-dica">
+            {escolhido.dica} Cria a ficha, {escolhido.tarefas.length} próximas ações, {escolhido.marcos.length} marcos
+            {escolhido.nota ? ', uma anotação-base' : ''} e a pasta no Drive.
+          </p>
+        )}
       </form>
+      {avisoDoModelo && <p className="muted t-label" role="status">{avisoDoModelo}</p>}
 
       {lista.length === 0 && (
         <p className="muted">
@@ -926,13 +955,51 @@ export default function ProjetosPainel({ lista, projetosState, tasks, notes, ids
   const [abertoId, setAbertoId] = useState(abertoInicial)
   const aberto = lista.find((p) => p.id === abertoId)
 
-  function criar(nome) {
+  const [avisoDoModelo, setAvisoDoModelo] = useState(null)
+
+  function criar(nome, modeloId) {
     const ficha = novoProjeto(nome)
     if (!ficha) return null
     // Nome que dá numa etiqueta já existente abre o projeto que já existe,
-    // em vez de sobrescrever a ficha dele com uma em branco.
-    if (!lista.some((p) => p.id === ficha.id && !p.implicito)) projetosState.salvarProjeto(ficha)
-    return ficha.id
+    // em vez de sobrescrever a ficha dele com uma em branco (ou com um modelo).
+    if (lista.some((p) => p.id === ficha.id && !p.implicito)) {
+      if (modeloId) setAvisoDoModelo(`Já existe o projeto "${ficha.nome}"; ele foi aberto sem aplicar o modelo.`)
+      return ficha.id
+    }
+    if (!modeloId) {
+      projetosState.salvarProjeto(ficha)
+      return ficha.id
+    }
+    const pronto = aplicarModelo(modeloId, nome)
+    projetosState.salvarProjeto(pronto.ficha)
+    // A anotação já, no clique: createNote grava sobre a lista de notas
+    // deste instante, e depois das esperas pelo Google ela estaria velha.
+    if (pronto.nota) acoes.onSalvarAnotacao(pronto.ficha.id, pronto.nota)
+    criarDoModelo(pronto)
+    return pronto.ficha.id
+  }
+
+  // A ficha aparece na hora; tarefas, anotação e pasta vêm em seguida, uma
+  // de cada vez (em paralelo, o Google Tasks recusa parte dos pedidos).
+  async function criarDoModelo({ ficha, tarefas }) {
+    setAvisoDoModelo(`Criando "${ficha.nome}" a partir do modelo…`)
+    const falhas = []
+    for (const t of tarefas) {
+      try {
+        await acoes.onCreateTask({ ...t, tasklistId: ids.idProximas || '@default' })
+      } catch {
+        falhas.push(`a tarefa "${t.title}"`)
+      }
+    }
+    if (permissaoDosArquivos() !== false) {
+      try {
+        const { pasta } = await pastaDoProjeto(ficha)
+        projetosState.salvarProjeto({ id: ficha.id, pasta })
+      } catch {
+        falhas.push('a pasta no Drive (ela é criada no primeiro arquivo enviado)')
+      }
+    }
+    setAvisoDoModelo(falhas.length ? `"${ficha.nome}" criado, mas não deu para criar ${falhas.join(' e ')}.` : null)
   }
 
   return (
@@ -944,7 +1011,7 @@ export default function ProjetosPainel({ lista, projetosState, tasks, notes, ids
       )}
       <div className={`projetos-tela${aberto ? ' tem-aberto' : ''}`}>
         <div className="projetos-mestre">
-          <ListaDeProjetos lista={lista} onAbrir={setAbertoId} onCriar={criar} abertoId={aberto?.id} />
+          <ListaDeProjetos lista={lista} onAbrir={setAbertoId} onCriar={criar} abertoId={aberto?.id} avisoDoModelo={avisoDoModelo} />
         </div>
         <div className="projetos-detalhe">
           {aberto ? (

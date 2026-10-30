@@ -3587,3 +3587,9 @@ button.projeto-arquivo {
   color: var(--on-surface-variant);
 }
 .nota-anexos[open] > summary { margin-bottom: 6px; }
+
+/* Criar projeto: o campo e, embaixo, os modelos como chips de escolha. */
+.projetos-criar { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+.projetos-criar .projetos-novo { margin-bottom: 0; }
+.projetos-modelos { display: flex; flex-wrap: wrap; gap: 6px; }
+.projetos-modelo-dica { margin: 0; }
