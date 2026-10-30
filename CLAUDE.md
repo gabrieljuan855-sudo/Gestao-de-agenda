@@ -72,6 +72,15 @@ uma pilha de branches que só atrapalha.
   buscar (`notasBusca.js`, por palavras com BM25). A teia (grafo) sai de
   `teia.js`: montar os pontos e linhas e a simulação de forças são lógica
   pura, testada; `TeiaDasNotas.jsx` só desenha e trata os gestos.
+- A formatação das notas (títulos, listas, checklist, negrito...) é Markdown
+  dentro do próprio `body` — nada de HTML nem campo novo, para o conector, a
+  busca e os links continuarem lendo texto. A lógica é pura e testada em
+  `notasFormatacao.js` (ler a linha, aplicar estilo, Enter que continua a
+  lista, marcar item); `NotaFormatada.jsx` desenha a nota formatada e a barra.
+  Lendo, a nota aparece formatada e o círculo da checklist marca com um
+  toque; tocar no texto abre a edição do texto cru com a barra de formatação.
+  As mudanças da barra entram pelo `execCommand('insertText')` para o
+  desfazer do navegador continuar valendo.
 - Arquivos dos projetos vão para o Drive visível (`Segundo Cérebro/<projeto>`)
   com o escopo `drive.file` — só o que o app criou. A pasta e os Docs saem de
   `drivePastas.js` (recebe o `request`); o envio com progresso, que só existe

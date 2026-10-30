@@ -1307,6 +1307,199 @@ textarea.nota-corpo:focus-visible { outline: none; }
   color: var(--on-surface-variant);
 }
 
+/* ---------- anotação formatada ----------
+   Lendo, a nota aparece como no Notas: títulos, listas e a checklist com o
+   círculo que se toca. A marcação ("- [ ]", "**") só aparece escrevendo. */
+.nf-corpo {
+  min-height: 30vh;
+  margin-top: 6px;
+  padding: 4px 0;
+  font-size: var(--body-lg);
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+  color: var(--on-surface);
+}
+.nf-corpo.is-interativo { cursor: text; }
+.nf-corpo:focus-visible { outline: 2px solid var(--primary); outline-offset: 4px; border-radius: var(--shape-xs); }
+.nf-placeholder { margin: 0; color: var(--on-surface-variant); }
+.nf-paragrafo { margin: 0; min-height: 1.55em; }
+.nf-vazia { height: 1.55em; }
+.nf-titulo,
+.nf-subtitulo,
+.nf-cabecalho {
+  margin: 10px 0 4px;
+  font-family: var(--font-heading);
+  font-weight: 600;
+  line-height: 1.25;
+}
+.nf-titulo { font-size: var(--headline-sm); }
+.nf-subtitulo { font-size: var(--title-lg); }
+.nf-cabecalho { font-size: var(--title-md); font-family: var(--font-body); }
+.nf-corpo > :first-child { margin-top: 0; }
+.nf-citacao {
+  margin: 4px 0;
+  padding: 2px 0 2px 12px;
+  border-left: 3px solid var(--outline-variant);
+  color: var(--on-surface-variant);
+}
+.nf-divisor { margin: 12px 0; border: none; border-top: 1px solid var(--outline-variant); }
+.nf-codigo {
+  padding: 1px 5px;
+  border-radius: var(--shape-xs);
+  background: var(--surface-variant);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9em;
+}
+.nf-corpo a { color: var(--primary); }
+
+/* Item de lista: o marcador numa coluna própria, para o texto que quebra
+   linha continuar alinhado com o texto, e não com o marcador. */
+.nf-item { display: flex; align-items: flex-start; gap: 8px; }
+.nf-item-texto { flex: 1; min-width: 0; }
+.nf-marca {
+  flex-shrink: 0;
+  min-width: 14px;
+  color: var(--on-surface-variant);
+  text-align: center;
+}
+.nf-numero { min-width: 22px; text-align: right; font-variant-numeric: tabular-nums; }
+
+/* O círculo da checklist: alvo de toque de 40dp (o mínimo do MD3 para
+   toque) num desenho de 22px, puxado para não empurrar o texto. */
+.nf-circulo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  margin: -8px -6px -8px -9px;
+  padding: 0;
+  border: none;
+  border-radius: var(--shape-full);
+  background: transparent;
+  color: var(--on-surface-variant);
+}
+.nf-tarefa { min-height: 32px; align-items: center; }
+.nf-tarefa.is-feita .nf-circulo { color: var(--primary); }
+.nf-tarefa.is-feita .nf-item-texto { color: var(--on-surface-variant); text-decoration: line-through; }
+
+/* [[link]] no meio do texto: parece link (é para navegar), não botão. */
+.nf-link {
+  display: inline;
+  /* O botão global ganha 40dp de altura no toque; no meio da frase isso
+     desalinhava a linha inteira. */
+  min-height: 0;
+  height: auto;
+  padding: 0;
+  border: none;
+  border-radius: var(--shape-xs);
+  background: transparent;
+  color: var(--primary);
+  font: inherit;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--primary) 40%, transparent);
+  text-underline-offset: 3px;
+}
+.nf-link.is-nova { color: var(--on-surface-variant); text-decoration-style: dashed; }
+
+/* Progresso da checklist e as duas arrumações do Notas. Botões de texto do
+   MD3: são saídas secundárias, não a ação da tela. */
+.nf-resumo {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin: 6px 0 4px;
+  font-size: var(--label-md);
+  color: var(--on-surface-variant);
+}
+.nf-progresso {
+  position: relative;
+  width: 56px;
+  height: 4px;
+  border-radius: var(--shape-full);
+  background: var(--surface-variant);
+  overflow: hidden;
+}
+.nf-progresso > span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: inherit;
+  background: var(--primary);
+  transition: width var(--dur-medium) var(--ease-standard);
+}
+.nf-resumo-texto { font-variant-numeric: tabular-nums; }
+.nf-acao {
+  min-height: 32px;
+  padding: 0 10px;
+  border: none;
+  background: transparent;
+  color: var(--primary);
+  font-size: var(--label-md);
+  font-weight: 600;
+}
+
+/* A barra de formatação, como a que fica em cima do teclado no Notas: o
+   "Aa" abre os estilos (título, negrito...), e o resto são os de uso
+   constante — checklist, listas, recuo, link. Grudada no alto da folha
+   enquanto se escreve (a posição vem do Notes.jsx). */
+.nf-barra {
+  position: sticky;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 4px 0 2px;
+  padding: 4px;
+  border-radius: var(--shape-lg);
+  background: var(--surface-variant);
+  box-shadow: var(--elevation-1);
+}
+.nf-barra-linha {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.nf-barra-linha::-webkit-scrollbar { display: none; }
+.nf-barra-estilos { padding-bottom: 4px; border-bottom: 1px solid var(--outline-variant); }
+.nf-ferramenta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  min-width: 40px;
+  height: 40px;
+  padding: 0 8px;
+  border: none;
+  border-radius: var(--shape-sm);
+  background: transparent;
+  color: var(--on-surface);
+  font-size: var(--body-lg);
+  -webkit-tap-highlight-color: transparent;
+}
+.nf-ferramenta--texto { padding: 0 12px; font-size: var(--body-md); }
+.nf-ferramenta.is-ativa { background: var(--primary-container); color: var(--on-primary-container); }
+.nf-op-titulo { font-family: var(--font-heading); font-weight: 700; font-size: var(--title-md); }
+.nf-op-subtitulo { font-family: var(--font-heading); font-weight: 600; }
+.nf-op-cabecalho { font-weight: 600; }
+.nf-aa { font-family: var(--font-heading); font-weight: 600; font-size: var(--title-md); }
+.nf-colchetes { font-family: ui-monospace, Menlo, monospace; font-size: var(--body-sm); font-weight: 600; }
+.nf-separador { flex-shrink: 0; width: 1px; height: 24px; margin: 0 4px; background: var(--outline-variant); }
+/* "OK" encerra a edição, como no Notas: botão de texto, cor de destaque. */
+.nf-ok {
+  flex-shrink: 0;
+  height: 40px;
+  padding: 0 14px;
+  border: none;
+  background: transparent;
+  color: var(--primary);
+  font-size: var(--body-lg);
+  font-weight: 600;
+}
+
 /* ---------- barra de período ---------- */
 
 .period-bar {

@@ -29,6 +29,7 @@ Como agir:
 - Antes de responder sobre as demandas, o dia ou a semana dela ("como estou?", "o que tenho pra hoje?"), chame visao_geral.
 - Quando ela disser "anota aí", "lembra de", "preciso...", use capturar com o texto como ela disse, sem decidir lista, prazo ou prioridade.
 - Informação para guardar (não uma ação) vira nota: criar_nota, ou atualizar_nota com modo "acrescentar" para somar a uma nota existente.
+- O app mostra o texto das notas formatado: # Título, ## Subtítulo, ### Cabeçalho, **negrito**, _itálico_, ~~riscado~~, listas com "- " ou "1. ", checklist com "- [ ] " (e "- [x] " para o que já foi feito; a pessoa marca tocando no círculo) e "> " para citação. Lista de compras, de afazeres ou de passos vira checklist.
 
 As anotações são também uma base de conhecimento, no estilo do Obsidian:
 - [[Título de outra nota]] dentro do texto liga as notas; cada nota sabe quem a cita (ler_nota mostra). Ao escrever, ligue a notas que já existem (procure antes com buscar_notas) e use o título exato delas.
@@ -124,7 +125,7 @@ export const ESQUEMAS = {
   }),
   criar_nota: z.object({
     titulo: z.string().trim().max(200).optional(),
-    texto: z.string().min(1).max(20000).describe('Pode ligar a outras notas com [[Título da nota]].'),
+    texto: z.string().min(1).max(20000).describe('Pode ligar a outras notas com [[Título da nota]] e usar a formatação das notas (# título, **negrito**, - [ ] checklist).'),
     projeto: TEXTO_CURTO(80).optional(),
     fontes: z.array(FONTE).max(10).optional().describe('De onde veio o que a nota diz.'),
   }),

@@ -1,12 +1,25 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import ConfirmDialog from './ConfirmDialog.jsx'
 import Banner from './Banner.jsx'
 import SuggestionCard from './SuggestionCard.jsx'
 import TeiaDasNotas from './TeiaDasNotas.jsx'
+import { CorpoFormatado, BarraDeFormatacao, ResumoDaChecklist } from './NotaFormatada.jsx'
 import { AI_MIN_LENGTH, descreverSincronizacao } from '../lib/useNotes.js'
 import { IA_DESLIGADA } from '../lib/aiCooldown.js'
 import { organizarNotas, tituloDaNota, previaDaNota, dataCurta, dataPorExtenso, notaVazia } from '../lib/notasLista.js'
-import { ligacoesDaNota, linkEmDigitacao, completarLink, sugerirTitulos } from '../lib/notasLinks.js'
+import { ligacoesDaNota, linkEmDigitacao, completarLink, sugerirTitulos, indiceDeTitulos, resolverLink } from '../lib/notasLinks.js'
+import {
+  aplicarEstilo,
+  alternarMarca,
+  recuar,
+  quebrarLinha,
+  alternarTarefa,
+  estiloNaPosicao,
+  progressoDasTarefas,
+  desmarcarTodas,
+  marcadasParaOFim,
+} from '../lib/notasFormatacao.js'
 
 // Tempo parado depois da última tecla para considerar que a anotação foi
 // "finalizada" e vale a pena gastar uma chamada de IA nela. Bem mais longo
@@ -46,6 +59,12 @@ function tituloQueLiga(nota) {
   return notaVazia(nota) ? '' : tituloDaNota(nota)
 }
 
+// Atalhos de teclado de formatação, os mesmos do Notas no Mac (⌘B, ⌘I,
+// ⇧⌘X para riscado, ⇧⌘L para checklist, ⇧⌘T/H/J para os títulos, ⇧⌘B
+// para o corpo).
+const MARCAS_DO_TECLADO = { b: '**', i: '_' }
+const ESTILOS_DO_TECLADO = { l: 'tarefa', t: 'titulo', h: 'subtitulo', j: 'cabecalho', b: 'corpo' }
+
 // Título e corpo ficam com estado próprio aqui dentro, sincronizado com a
 // nota selecionada só depois de uma pausa na digitação — o mesmo motivo de
 // sempre: gravar a cada tecla gastaria uma chamada ao Drive por letra. A IA
@@ -75,6 +94,11 @@ function NoteEditor({ note, projetos = [], onProjetoChange, onChange, onAnalyze,
   // texto não está em edição.
   const [cursor, setCursor] = useState(null)
   const sairDoTextoTimer = useRef(null)
+  // Lendo ou escrevendo. Lendo, a nota aparece formatada (títulos, a
+  // checklist com círculos que se tocam); escrevendo, é o texto com a barra
+  // de formatação. Nota nova já abre escrevendo, como no Notas.
+  const [editando, setEditando] = useState(() => notaVazia(note))
+  const [estiloAtual, setEstiloAtual] = useState('texto')
 
   // Trocar de nota reseta os campos para o conteúdo dela, sem disparar
   // gravação nem análise — é troca de tela, não edição.
@@ -85,6 +109,7 @@ function NoteEditor({ note, projetos = [], onProjetoChange, onChange, onAnalyze,
     lastKnownTitleRef.current = note.title
     tituloLigadoRef.current = tituloQueLiga(note)
     setCursor(null)
+    setEditando(notaVazia(note))
     firstRender.current = true
     clearTimeout(saveTimer.current)
     clearTimeout(aiTimer.current)
@@ -152,7 +177,7 @@ function NoteEditor({ note, projetos = [], onProjetoChange, onChange, onAnalyze,
     if (!el) return
     el.style.height = 'auto'
     el.style.height = `${el.scrollHeight}px`
-  }, [body])
+  }, [body, editando])
 
   // Grava já o que está no debounce e, se o título mudou, leva junto os
   // [[links]] das outras notas (onRenomear). Roda ao sair do campo e ao sair
@@ -211,14 +236,157 @@ function NoteEditor({ note, projetos = [], onProjetoChange, onChange, onAnalyze,
   function acompanharCursor(e) {
     clearTimeout(sairDoTextoTimer.current)
     setCursor(e.target.selectionStart === e.target.selectionEnd ? e.target.selectionStart : null)
+    setEstiloAtual(estiloNaPosicao(e.target.value, e.target.selectionStart))
   }
 
   function sairDoTexto() {
-    // Um pouco de espera: no iPhone o toque na sugestão às vezes tira o foco
-    // do texto antes do clique chegar, e as sugestões sumiriam sob o dedo.
-    sairDoTextoTimer.current = setTimeout(() => setCursor(null), 200)
+    // Um pouco de espera: no iPhone o toque na sugestão ou num botão da barra
+    // às vezes tira o foco do texto antes do clique chegar, e eles sumiriam
+    // sob o dedo. Se o foco voltar nesse meio tempo, continua editando.
+    sairDoTextoTimer.current = setTimeout(() => {
+      setCursor(null)
+      if (document.activeElement !== corpoRef.current) setEditando(false)
+    }, 200)
     confirmarTitulo()
   }
+
+  // ---- edição formatada ----
+
+  // Tocar no texto formatado abre a edição com o cursor naquela linha. O
+  // foco precisa sair dentro do próprio toque (flushSync monta o campo na
+  // hora): o iPhone só abre o teclado para um foco pedido pelo dedo.
+  function editarEm(posicao) {
+    flushSync(() => setEditando(true))
+    const el = corpoRef.current
+    if (!el) return
+    el.focus()
+    el.setSelectionRange(posicao, posicao)
+    setEstiloAtual(estiloNaPosicao(el.value, posicao))
+  }
+
+  function terminarEdicao() {
+    clearTimeout(sairDoTextoTimer.current)
+    corpoRef.current?.blur()
+    clearTimeout(sairDoTextoTimer.current)
+    setCursor(null)
+    setEditando(false)
+  }
+
+  // Aplica no campo o resultado de uma das funções de notasFormatacao.js.
+  // Vai pelo insertText do navegador, trocando só o trecho que mudou, porque
+  // assim o desfazer (⌘Z, chacoalhar o iPhone) continua funcionando; trocar
+  // o value inteiro apagaria o histórico. Se o navegador não aceitar, troca
+  // o texto pelo estado do React, perdendo só o desfazer.
+  function aplicar(resultado) {
+    const el = corpoRef.current
+    if (!el || !resultado) return
+    clearTimeout(sairDoTextoTimer.current)
+    const atual = el.value
+    const novo = resultado.texto
+    if (novo !== atual) {
+      let a = 0
+      while (a < atual.length && a < novo.length && atual[a] === novo[a]) a++
+      let b = 0
+      while (b < atual.length - a && b < novo.length - a && atual[atual.length - 1 - b] === novo[novo.length - 1 - b]) b++
+      const inserido = novo.slice(a, novo.length - b)
+      el.focus()
+      el.setSelectionRange(a, atual.length - b)
+      let foi = false
+      try {
+        foi = inserido ? document.execCommand('insertText', false, inserido) : document.execCommand('delete')
+      } catch {
+        foi = false
+      }
+      if (!foi || el.value !== novo) setBody(novo)
+    }
+    const posicionar = () => {
+      el.focus()
+      el.setSelectionRange(resultado.ini, resultado.fim)
+      setCursor(resultado.ini === resultado.fim ? resultado.ini : null)
+      setEstiloAtual(estiloNaPosicao(novo, resultado.ini))
+    }
+    posicionar()
+    requestAnimationFrame(posicionar)
+  }
+
+  function selecao() {
+    const el = corpoRef.current
+    return el ? [el.value, el.selectionStart, el.selectionEnd] : [body, body.length, body.length]
+  }
+
+  const formatar = {
+    estilo: (estilo) => aplicar(aplicarEstilo(...selecao(), estilo)),
+    marca: (marca) => aplicar(alternarMarca(...selecao(), marca)),
+    recuo: (direcao) => aplicar(recuar(...selecao(), direcao)),
+    // Abre o [[ ]] com o cursor no meio: as sugestões de nota aparecem na
+    // hora, como se a pessoa tivesse digitado.
+    link: () => {
+      const [texto, ini, fim] = selecao()
+      aplicar({ texto: texto.slice(0, ini) + '[[' + texto.slice(ini, fim) + ']]' + texto.slice(fim), ini: fim + 2, fim: fim + 2 })
+    },
+    divisor: () => {
+      const [texto, ini] = selecao()
+      const inserido = `${ini > 0 && texto[ini - 1] !== '\n' ? '\n' : ''}---\n`
+      aplicar({ texto: texto.slice(0, ini) + inserido + texto.slice(ini), ini: ini + inserido.length, fim: ini + inserido.length })
+    },
+  }
+
+  function teclaNoTexto(e) {
+    if (e.nativeEvent.isComposing) return
+    const el = e.currentTarget
+    const mod = e.metaKey || e.ctrlKey
+    const tecla = e.key.toLowerCase()
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      terminarEdicao()
+    } else if (e.key === 'Enter' && !e.shiftKey && !mod && !e.altKey) {
+      const r = quebrarLinha(el.value, el.selectionStart, el.selectionEnd)
+      if (r) {
+        e.preventDefault()
+        aplicar(r)
+      }
+    } else if (e.key === 'Tab' && !mod && !e.altKey) {
+      // Só dentro de lista: fora dela o Tab continua levando ao próximo
+      // controle, que é como se navega pelo teclado.
+      if (['tarefa', 'marcador', 'numerada'].includes(estiloNaPosicao(el.value, el.selectionStart))) {
+        e.preventDefault()
+        formatar.recuo(e.shiftKey ? -1 : 1)
+      }
+    } else if (mod && !e.altKey && e.shiftKey && tecla === 'x') {
+      e.preventDefault()
+      formatar.marca('~~')
+    } else if (mod && !e.altKey && e.shiftKey && ESTILOS_DO_TECLADO[tecla]) {
+      e.preventDefault()
+      formatar.estilo(ESTILOS_DO_TECLADO[tecla])
+    } else if (mod && !e.altKey && !e.shiftKey && MARCAS_DO_TECLADO[tecla]) {
+      e.preventDefault()
+      formatar.marca(MARCAS_DO_TECLADO[tecla])
+    }
+  }
+
+  // A barra fica grudada no alto enquanto se rola, logo abaixo do cabeçalho
+  // do painel. No iPhone, com o teclado aberto, a parte de cima do painel
+  // pode ficar fora da tela (a parte visível desce junto com o cursor); aí a
+  // barra acompanha o topo do que está visível.
+  const [topoDaBarra, setTopoDaBarra] = useState(0)
+  useLayoutEffect(() => {
+    if (!editando) return
+    const cabeca = corpoRef.current?.closest('.rail-panel')?.querySelector('.rail-panel-head')
+    const alturaDaCabeca = cabeca ? cabeca.offsetHeight : 0
+    const vv = window.visualViewport
+    const medir = () => setTopoDaBarra(Math.max(alturaDaCabeca, vv ? Math.round(vv.offsetTop) : 0))
+    medir()
+    if (!vv) return
+    vv.addEventListener('resize', medir)
+    vv.addEventListener('scroll', medir)
+    return () => {
+      vv.removeEventListener('resize', medir)
+      vv.removeEventListener('scroll', medir)
+    }
+  }, [editando])
+
+  const progresso = useMemo(() => progressoDasTarefas(body), [body])
+  const indice = useMemo(() => indiceDeTitulos(todas), [todas])
 
   function escolherSugestao(titulo) {
     const completo = completarLink(body, cursor, titulo)
@@ -313,22 +481,57 @@ function NoteEditor({ note, projetos = [], onProjetoChange, onChange, onAnalyze,
         </label>
       )}
 
-      <textarea
-        ref={corpoRef}
-        className="nota-corpo"
-        // Só a nota recém-criada abre com o teclado: abrir uma existente
-        // para ler não deveria jogar o teclado por cima do texto.
-        autoFocus={notaVazia(note)}
-        value={body}
-        onChange={(e) => {
-          setBody(e.target.value)
-          acompanharCursor(e)
-        }}
-        onSelect={acompanharCursor}
-        onBlur={sairDoTexto}
-        placeholder="Escreva aqui... Para ligar a outra anotação, digite [[ e escolha."
-        aria-label="Texto da anotação"
-      />
+      {editando ? (
+        <>
+          <BarraDeFormatacao
+            estiloAtual={estiloAtual}
+            topo={topoDaBarra}
+            onEstilo={formatar.estilo}
+            onMarca={formatar.marca}
+            onRecuo={formatar.recuo}
+            onLink={formatar.link}
+            onDivisor={formatar.divisor}
+            onOk={terminarEdicao}
+          />
+          <textarea
+            ref={corpoRef}
+            className="nota-corpo"
+            // Só a nota recém-criada abre com o teclado: abrir uma existente
+            // para ler não deveria jogar o teclado por cima do texto.
+            autoFocus={notaVazia(note)}
+            value={body}
+            onChange={(e) => {
+              setBody(e.target.value)
+              acompanharCursor(e)
+            }}
+            onSelect={acompanharCursor}
+            onFocus={() => clearTimeout(sairDoTextoTimer.current)}
+            onBlur={sairDoTexto}
+            onKeyDown={teclaNoTexto}
+            placeholder="Escreva aqui... Para ligar a outra anotação, digite [[ e escolha."
+            aria-label="Texto da anotação"
+          />
+        </>
+      ) : (
+        <>
+          {/* Marcar a checklist não abre o teclado: é tocar no círculo,
+              como no Notas, e a gravação segue o mesmo caminho da digitação. */}
+          <ResumoDaChecklist
+            {...progresso}
+            onDesmarcar={() => setBody(desmarcarTodas(body))}
+            onMarcadasParaOFim={() => setBody(marcadasParaOFim(body))}
+          />
+          <CorpoFormatado
+            texto={body}
+            onEditar={editarEm}
+            onAlternarTarefa={(linha) => setBody(alternarTarefa(body, linha))}
+            resolverLink={(alvo) => resolverLink(alvo, indice)}
+            onAbrirLink={(id) => irPara(() => onAbrirNota(id))}
+            onCriarLink={(titulo) => irPara(() => onCriarNota(titulo))}
+            placeholder="Toque para escrever..."
+          />
+        </>
+      )}
 
       {/* Chips de sugestão do MD3: oferecem uma escolha para o que se está
           digitando. O mousedown não pode tirar o foco do texto, senão o
@@ -367,9 +570,7 @@ function NoteEditor({ note, projetos = [], onProjetoChange, onChange, onAnalyze,
           podem cortar texto que não cabe na altura visível deles. */}
       <div className="notes-print-only" aria-hidden="true">
         <h1>{tituloDaNota({ title, body })}</h1>
-        {body.split('\n').map((linha, i) => (
-          <p key={i}>{linha || ' '}</p>
-        ))}
+        <CorpoFormatado texto={body} resolverLink={(alvo) => resolverLink(alvo, indice)} />
       </div>
 
       {note.relatedNote && (
