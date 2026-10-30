@@ -77,7 +77,7 @@ function pagina(titulo, corpo, status = 200, headers = new Headers()) {
   .suave { color: var(--suave); font-size: 14px; }
   .aviso { padding: 10px 12px; border-radius: 12px; border: 1px solid var(--borda); }
   .acoes { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
-  .acoes a { font: inherit; display: inline-flex; align-items: center; min-height: 40px; padding: 0 20px; border-radius: 999px; text-decoration: none; }
+  button { font: inherit; min-height: 40px; padding: 0 20px; border-radius: 999px; border: none; cursor: pointer; }
   .primario { background: var(--primary); color: var(--on-primary); }
   .texto { background: transparent; color: var(--primary); }
 </style></head>
@@ -203,10 +203,13 @@ async function autorizar(request, env) {
 <p class="suave">${origem} O acesso será enviado para <strong>${escapar(quem.redirectHost)}</strong>.</p>
 ${local}
 <p class="suave">Em seguida o Google vai pedir para você entrar com a conta autorizada neste app.</p>
-<div class="acoes">
-  <a class="texto" href="${escapar(`${ROTA_DECISAO}?${new URLSearchParams({ handle: consentimento.handle, decisao: 'recusar' })}`)}">Recusar</a>
-  <a class="primario" href="${escapar(`${ROTA_DECISAO}?${new URLSearchParams({ handle: consentimento.handle, decisao: 'permitir' })}`)}">Permitir</a>
-</div>`,
+<form method="get" action="${ROTA_DECISAO}">
+  <input type="hidden" name="handle" value="${escapar(consentimento.handle)}">
+  <div class="acoes">
+    <button class="texto" name="decisao" value="recusar">Recusar</button>
+    <button class="primario" name="decisao" value="permitir">Permitir</button>
+  </div>
+</form>`,
       200,
       consentimento.headers
     )
@@ -217,15 +220,15 @@ ${local}
   return new Response(null, { status: 303, headers: { Location: request.url, 'Cache-Control': 'no-store' } })
 }
 
-// A decisão da tela de consentimento, por link e não por formulário. O
-// navegador embutido do app do Claude no iPhone repete sozinho o último
-// envio de formulário contra os endereços seguintes: o registro do conector
-// mostrou um POST na volta do Google (com Origin deste site) logo antes do
-// GET verdadeiro, e o endereço de volta do Claude responde 405 a POST — a
-// conexão morria ali, sem o Claude nem pedir o token. Sem formulário no
-// caminho, não há o que repetir.
+// A decisão da tela de consentimento, num formulário GET. O navegador
+// embutido do app do Claude no iPhone tem duas manias que o registro do
+// conector mostrou: repete por conta própria um POST para a página aberta
+// (um POST na volta do Google, logo antes do GET verdadeiro, e o endereço
+// de volta do Claude responde 405 a POST); e toque em link comum ele busca
+// mas não mostra, então o Permitir por link nunca chegava ao Google. Botão
+// de formulário navega de verdade, e com GET não há corpo para repetir.
 //
-// O link não abre brecha: o `handle` é aleatório, de uso único, e só vale com
+// O GET não abre brecha: o `handle` é aleatório, de uso único, e só vale com
 // o cookie gravado quando esta mesma tela foi aberta; outro site não
 // consegue lê-lo, porque a tela não pode ser embutida (frame-ancestors).
 async function decidir(request, env) {

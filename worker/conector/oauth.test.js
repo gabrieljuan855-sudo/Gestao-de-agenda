@@ -103,9 +103,13 @@ async function conectar(env, { comCookieNaVolta = true, semVolta = false } = {})
   const pagina = await chamar(env, `/authorize?${params}`)
   expect(pagina.status).toBe(200)
   const html = await pagina.text()
-  // Permitir é um link (não um formulário), amarrado ao cookie da tela.
-  const link = html.match(/href="([^"]*decisao=permitir[^"]*)"/)[1].replace(/&#38;/g, '&')
-  const permitir = await chamar(env, link, { headers: { Cookie: cookiesDe(pagina) } })
+  // Permitir é um formulário GET (sem corpo para o navegador repetir),
+  // amarrado ao cookie da tela.
+  expect(html).toMatch(/<form method="get" action="\/conector\/decidir">/)
+  const handle = html.match(/name="handle" value="([^"]+)"/)[1]
+  const permitir = await chamar(env, `/conector/decidir?${new URLSearchParams({ handle, decisao: 'permitir' })}`, {
+    headers: { Cookie: cookiesDe(pagina) },
+  })
   expect(permitir.status).toBe(303)
   const google = new URL(permitir.headers.get('Location'))
   if (semVolta) return { html, google, client_id, verifier }
@@ -239,7 +243,7 @@ describe('login do conector', () => {
   it('o envio de formulário que o navegador do iPhone repete não faz estrago', async () => {
     const env = ambiente()
     const { html } = await conectar(env, { semVolta: true })
-    expect(html).not.toContain('<form')
+    expect(html).not.toContain('method="post"')
     // POST no /authorize volta para a mesma página, que começa limpa.
     const repetido = await chamar(env, '/authorize?client_id=x&state=y', { method: 'POST', body: 'handle=velho&decisao=permitir' })
     expect(repetido.status).toBe(303)
