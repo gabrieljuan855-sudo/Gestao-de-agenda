@@ -89,6 +89,53 @@ function erroLocal(titulo, mensagem, status = 400) {
   return pagina(titulo, `<h1>${escapar(titulo)}</h1><p>${escapar(mensagem)}</p>`, status)
 }
 
+// ---------- a ida e a volta do Google ----------
+//
+// Entre o "Permitir" e a volta do Google, o pedido aprovado precisa ficar
+// guardado. A biblioteca oferece beginUpstream/finishUpstream para isso, que
+// amarram a volta a um cookie gravado na ida — e no navegador embutido do app
+// do Claude no iPhone esse cookie não volta: o "Permitir" funcionava, o Google
+// também, e a volta caía em "This authorization was not started in this
+// browser". No Chromium e no curl o mesmo fluxo passava, então o problema é do
+// navegador, não do servidor.
+//
+// Aqui o pedido aprovado fica no KV, achado pelo `state` que vai ao Google:
+// 32 bytes aleatórios, de uso único, que valem 10 minutos, guardados só pelo
+// hash. O que o cookie protegia (alguém reaproveitar a volta de outra pessoa)
+// continua coberto: o `state` e o código do Google só existem na barra de
+// endereço de quem fez o login, o código só é trocado junto com o verificador
+// PKCE guardado aqui, e a autorização só vai para o endereço do cliente que a
+// pessoa aprovou na tela de consentimento — essa, sim, segue amarrada ao cookie,
+// que funciona porque é o mesmo site do começo ao fim.
+const VALIDADE_DA_VOLTA_S = 10 * 60
+
+async function hashHex(texto) {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(texto))
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('')
+}
+
+export async function guardarIdaAoGoogle(kv, pedido, verifier) {
+  const state = randomText(32)
+  await kv.put(`conector-volta:${await hashHex(state)}`, JSON.stringify({ pedido, verifier }), {
+    expirationTtl: VALIDADE_DA_VOLTA_S,
+  })
+  return state
+}
+
+// null quando o `state` não existe, já foi usado ou venceu.
+export async function recuperarVoltaDoGoogle(kv, state) {
+  if (!state) return null
+  const chave = `conector-volta:${await hashHex(state)}`
+  const guardado = await kv.get(chave)
+  if (!guardado) return null
+  await kv.delete(chave)
+  try {
+    return JSON.parse(guardado)
+  } catch {
+    return null
+  }
+}
+
 // GET /authorize: valida o pedido do cliente e pergunta se ele pode entrar.
 // POST /authorize: a pessoa aprovou; só agora vai para o Google.
 async function autorizar(request, env) {
@@ -133,7 +180,9 @@ ${local}
   }
   const aprovado = await oauth.approveConsent(request, handle)
   const verifier = randomText(48)
-  const { state, headers } = await oauth.beginUpstream(aprovado.request, { data: { verifier }, headers: aprovado.headers })
+  const state = await guardarIdaAoGoogle(env.OAUTH_KV, aprovado.request, verifier)
+  const headers = aprovado.headers
+  headers.set('Cache-Control', 'no-store')
   headers.set('Location', await urlDoGoogle(env, { redirectUri: new URL(ROTA_CALLBACK, request.url).toString(), state, verifier }))
   return new Response(null, { status: 302, headers })
 }
@@ -141,8 +190,17 @@ ${local}
 // A volta do Google: troca o código, confere a conta e conclui a autorização.
 async function voltaDoGoogle(request, env) {
   const oauth = env.OAUTH_PROVIDER
-  const { request: pedido, data, headers } = await oauth.finishUpstream(request)
   const url = new URL(request.url)
+  const volta = await recuperarVoltaDoGoogle(env.OAUTH_KV, url.searchParams.get('state'))
+  if (!volta?.pedido) {
+    return erroLocal(
+      'Não deu para conectar',
+      'Esta tentativa de conexão expirou ou já foi usada. Feche esta página e toque em Conectar de novo no Claude.'
+    )
+  }
+  const { pedido } = volta
+  const data = { verifier: volta.verifier }
+  const headers = new Headers({ 'Cache-Control': 'no-store' })
   const negar = (descricao) => {
     headers.set('Location', authorizationErrorRedirect(pedido, 'access_denied', descricao))
     return new Response(null, { status: 302, headers })
