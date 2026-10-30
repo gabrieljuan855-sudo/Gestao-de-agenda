@@ -8,6 +8,7 @@ import { criarApiDeTarefas } from './googleTarefas.js'
 import { criarApiDaAgenda, MAX_PAGINAS } from './googleAgenda.js'
 import { isAllDay } from './events.js'
 import { encerrarAntes } from './recorrencia.js'
+import { criarDriveDosProjetos, CAMPOS_DO_ARQUIVO } from './drivePastas.js'
 import { inicioOriginal, ehPrimeiraDaSerie, horarioDaSerie, restanteDaContagem, corpoDaContinuacao } from './serieRecorrente.js'
 
 const CAL_BASE = 'https://www.googleapis.com/calendar/v3'
@@ -377,3 +378,64 @@ export const {
   deleteTask,
   moverTarefa,
 } = criarApiDeTarefas(request)
+
+// ---------- arquivos dos projetos no Drive ----------
+
+export const { pastaDoProjeto, criarArquivoGoogle } = criarDriveDosProjetos(request)
+
+function erroDoGoogle(status, corpo) {
+  const err = new Error(`Erro na API do Google (${status}): ${corpo}`)
+  err.status = status
+  err.body = corpo
+  return err
+}
+
+// Envio em duas etapas (o "resumable" do Drive): abre a sessão com o nome e
+// a pasta, e manda o conteúdo para o endereço que ela devolve. Assim o
+// arquivo vai inteiro, de qualquer tamanho, e o XMLHttpRequest dá o
+// andamento para a barra de progresso — o fetch não informa quanto já subiu.
+export async function enviarArquivoAoDrive(pastaId, arquivo, aoProgredir = () => {}, { tentarDeNovo = true } = {}) {
+  const token = await ensureToken()
+  if (!token) throw new Error('Sem token de acesso. Faça login primeiro.')
+  const inicio = `https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=${CAMPOS_DO_ARQUIVO}`
+  const sessao = await fetch(inicio, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json; charset=UTF-8',
+      'X-Upload-Content-Type': arquivo.type || 'application/octet-stream',
+    },
+    body: JSON.stringify({ name: arquivo.name, parents: [pastaId] }),
+  })
+  if (sessao.status === 401 && tentarDeNovo && (await refreshAfterUnauthorized(token))) {
+    return enviarArquivoAoDrive(pastaId, arquivo, aoProgredir, { tentarDeNovo: false })
+  }
+  if (!sessao.ok) throw erroDoGoogle(sessao.status, await sessao.text())
+  // O endereço do envio vem no Location. Se o navegador não puder lê-lo (o
+  // Google decide pela resposta quais cabeçalhos expõe), o id da sessão, que
+  // ele sempre expõe, monta o mesmo endereço.
+  const idDaSessao = sessao.headers.get('X-GUploader-UploadID')
+  const destino = sessao.headers.get('Location') || (idDaSessao && `${inicio}&upload_id=${encodeURIComponent(idDaSessao)}`)
+  if (!destino) throw new Error('O Drive não abriu o envio. Tente de novo.')
+
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open('PUT', destino)
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) aoProgredir(e.loaded / e.total)
+    }
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          resolve(JSON.parse(xhr.responseText))
+        } catch {
+          reject(new Error('O Drive recebeu o arquivo, mas a resposta veio estranha.'))
+        }
+      } else {
+        reject(erroDoGoogle(xhr.status, xhr.responseText))
+      }
+    }
+    xhr.onerror = () => reject(new Error('A conexão caiu durante o envio.'))
+    xhr.send(arquivo)
+  })
+}

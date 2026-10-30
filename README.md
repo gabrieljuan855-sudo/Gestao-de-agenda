@@ -46,6 +46,13 @@ no painel ao lado.
 - **Aguardando & Algum dia**: o que depende de outra pessoa (com quem e desde
   quando, destacado depois de uma semana de espera) e o que não é para agora,
   com um botão para reativar quando deixar de fazer sentido esperar.
+- **Arquivos do projeto no Drive**: arraste arquivos do computador para a
+  seção Arquivos do projeto (ou toque em *Enviar arquivos*, que no iPhone abre
+  Fotos e Arquivos), ou crie ali mesmo um Documento, Planilha ou Apresentação
+  do Google. Tudo vai para `Segundo Cérebro/<projeto>` no seu Drive, visível e
+  compartilhável. Vincular por link continua para o que mora em outro lugar.
+  Na primeira vez o app pede uma permissão nova do Google (`drive.file`): ela
+  dá acesso só aos arquivos que o próprio app criar, não ao resto do Drive.
 - **Projeto sem próxima ação**: um aviso quando alguma etiqueta de projeto
   (`#caso-silva`) não tem nenhuma tarefa em Próximas ações — o sinal clássico
   de um projeto que parou de andar sem ninguém perceber.
@@ -192,6 +199,12 @@ do app, no celular e no computador:
 - **Busca por palavras:** a busca da lista e a do Claude acham cada palavra em
   qualquer ordem, sem acento, maiúscula ou plural; a do Claude ordena pela
   relevância (BM25 — título e palavras raras pesam mais).
+- **Teia de ligações:** em Anotações, *Lista | Teia* mostra as notas como um
+  grafo, como o do Obsidian — cada nota é um ponto, cada link uma linha, e os
+  projetos entram como pontos maiores ligados às suas notas. Arraste para
+  mover, use a pinça (ou a roda) para aproximar, arraste um ponto para puxá-lo
+  e toque para acender a vizinhança e abrir. Em cada nota, o botão da teia
+  abre o grafo já com ela acesa.
 - **Fontes:** cada nota guarda de onde veio (título, link, autor, data).
 - **Pelo Claude:** anexe um PDF ou cole um artigo e peça para guardar no
   Segundo Cérebro — `importar_fonte` cria a nota da fonte e uma nota por ideia,

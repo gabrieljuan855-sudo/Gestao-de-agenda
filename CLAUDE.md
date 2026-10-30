@@ -69,7 +69,15 @@ uma pilha de branches que só atrapalha.
   (`notasLinks.js`, campo `fontes` em `notasFormato.js`). O link aponta para o
   título, não para o id, e a regra de resolução é uma só para o app e o
   conector — assim como renomear (`renomearLinks`, que leva os links junto) e
-  buscar (`notasBusca.js`, por palavras com BM25).
+  buscar (`notasBusca.js`, por palavras com BM25). A teia (grafo) sai de
+  `teia.js`: montar os pontos e linhas e a simulação de forças são lógica
+  pura, testada; `TeiaDasNotas.jsx` só desenha e trata os gestos.
+- Arquivos dos projetos vão para o Drive visível (`Segundo Cérebro/<projeto>`)
+  com o escopo `drive.file` — só o que o app criou. A pasta e os Docs saem de
+  `drivePastas.js` (recebe o `request`); o envio com progresso, que só existe
+  no navegador, fica em `googleApi.js`. O `drive.file` **não** entra no
+  `SCOPES` do login pelo navegador (a renovação silenciosa cairia pedindo
+  consentimento); é pedido sob demanda (`pedirAcessoAosArquivos`).
 - O app e o conector gravam nos mesmos arquivos do Drive: toda gravação é
   ler → mesclar → gravar (`mesclarParaGravar` em `notesMerge.js`), nunca a
   lista local por cima.

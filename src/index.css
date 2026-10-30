@@ -2997,7 +2997,7 @@ textarea.nota-corpo:focus-visible { outline: none; }
   padding: 6px 8px;
   border-radius: var(--shape-xs);
 }
-.projeto-historico-data { flex: 0 0 52px; font-size: var(--label-sm); color: var(--on-surface-variant); font-variant-numeric: tabular-nums; }
+.projeto-historico-data { flex: 0 0 64px; white-space: nowrap; font-size: var(--label-sm); color: var(--on-surface-variant); font-variant-numeric: tabular-nums; }
 .projeto-historico-titulo { flex: 1; min-width: 0; color: var(--on-surface-variant); overflow-wrap: anywhere; }
 .projeto-historico-tipo { margin-right: 6px; color: var(--primary); }
 
@@ -3084,3 +3084,153 @@ textarea.quickadd-campo {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* Botões segmentados do MD3 (40dp, contorno, o escolhido preenchido com
+   o check na frente). Para alternar entre formas de ver a mesma coisa. */
+.segmentado {
+  display: inline-flex;
+  border: 1px solid var(--outline);
+  border-radius: var(--shape-full);
+  overflow: hidden;
+}
+.segmentado button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 40px;
+  min-width: 96px;
+  padding: 0 16px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--on-surface);
+  font-size: var(--label-md);
+  font-weight: 600;
+}
+.segmentado button + button { border-left: 1px solid var(--outline); }
+.segmentado button.is-escolhido {
+  background: var(--primary-container);
+  color: var(--on-primary-container);
+}
+.notas-modo { display: flex; width: fit-content; margin: 0 auto 12px; }
+
+/* ---------- teia de ligações ---------- */
+.teia { position: relative; max-width: 960px; margin: 0 auto; }
+.teia-filtros { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.teia-tela {
+  display: block;
+  width: 100%;
+  height: 68vh;
+  min-height: 320px;
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--shape-lg);
+  background: var(--surface);
+  /* Os gestos são da teia: sem isto, arrastar rolaria a página e a pinça
+     daria zoom no site inteiro. */
+  touch-action: none;
+  user-select: none;
+  cursor: grab;
+}
+.teia-tela:active { cursor: grabbing; }
+.teia-linha {
+  stroke: var(--outline-variant);
+  stroke-width: 1.2px;
+  vector-effect: non-scaling-stroke;
+}
+.teia-linha.is-projeto { stroke-dasharray: 3 3; }
+.teia-linha.is-acesa { stroke: var(--primary); stroke-width: 2px; }
+.teia-linha.is-apagada { opacity: 0.2; }
+.teia-ponto { cursor: pointer; }
+.teia-ponto circle:not(.teia-alvo),
+.teia-ponto rect { fill: var(--primary); }
+.teia-ponto.is-projeto rect { fill: var(--solid); }
+.teia-ponto.is-solta circle:not(.teia-alvo) { fill: var(--outline-variant); }
+.teia-ponto.is-escolhido circle:not(.teia-alvo),
+.teia-ponto.is-escolhido rect {
+  stroke: var(--on-surface);
+  stroke-width: 2.5px;
+  vector-effect: non-scaling-stroke;
+}
+.teia-ponto.is-apagado { opacity: 0.25; }
+.teia-alvo { fill: transparent; }
+.teia-ponto text {
+  fill: var(--on-surface);
+  text-anchor: middle;
+  font-family: var(--font-body);
+  /* Contorno da cor do fundo: o rótulo se lê mesmo passando por cima de
+     uma linha. */
+  paint-order: stroke;
+  stroke: var(--surface);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+.teia-vazia { text-align: center; margin-top: 12px; }
+/* O ponto tocado: um cartão no pé da teia, com o botão que abre. */
+.teia-cartao {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 12px 12px 16px;
+  border-radius: var(--shape-md);
+  background: var(--surface-container);
+  box-shadow: 0 2px 8px var(--shadow);
+}
+.teia-cartao-texto { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.teia-cartao-texto strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Chip de filtro escolhido leva o check na frente, como no MD3. */
+.teia-filtros .pill-filtro { display: inline-flex; align-items: center; gap: 4px; }
+
+/* Arquivos do projeto: soltar do computador, botões de enviar e criar, e o
+   progresso de cada envio (indicador linear do MD3). */
+.projeto-arquivos.is-arrastando {
+  outline: 2px dashed var(--primary);
+  outline-offset: 6px;
+  border-radius: var(--shape-sm);
+  background: var(--primary-container);
+}
+.projeto-arquivos-dica { margin: 0; }
+.projeto-arquivos-acoes { display: flex; flex-wrap: wrap; gap: 6px; }
+.projeto-arquivos-acoes button { min-height: 36px; padding: 0 12px; font-size: var(--label-md); }
+.projeto-arquivos-acoes button.is-escolhido {
+  border-color: var(--primary);
+  background: var(--primary-container);
+  color: var(--on-primary-container);
+}
+.projeto-arquivos-rodape { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.projeto-envio {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--shape-sm);
+}
+.projeto-envio-barra {
+  display: block;
+  height: 4px;
+  border-radius: var(--shape-full);
+  background: var(--primary-container);
+  overflow: hidden;
+}
+.projeto-envio-barra span {
+  display: block;
+  height: 100%;
+  background: var(--primary);
+  border-radius: inherit;
+  transition: width 0.2s ease;
+}
+
+/* O <a> com cara de botão-texto ("Abrir a pasta no Drive") ao lado dos
+   botões-texto: sem isto ele vinha sublinhado e em outro tamanho. */
+a.link-btn { display: inline-flex; align-items: center; min-height: 36px; font-size: var(--body-md); text-decoration: none; }
+.projeto-arquivo-criar { display: flex; flex-direction: column; gap: 8px; }
+.projeto-arquivo-tipos { display: flex; flex-wrap: wrap; gap: 6px; }
+.projeto-arquivos-rodape { align-items: center; }
+.projeto-arquivos-rodape > * { min-height: 36px; }

@@ -49,6 +49,8 @@ export function normalizarProjeto(p, agora = new Date()) {
     createdAt: typeof p.createdAt === 'string' ? p.createdAt : iso,
     updatedAt: typeof p.updatedAt === 'string' ? p.updatedAt : iso,
     arquivos: normalizarArquivos(p.arquivos),
+    // A pasta do projeto no Drive, criada no primeiro arquivo enviado.
+    ...(normalizarPasta(p.pasta) ? { pasta: normalizarPasta(p.pasta) } : {}),
     // Projeto com dados sensíveis (um caso atendido) pode recusar a IA de vez.
     ...(p.semIA === true ? { semIA: true } : {}),
     // Opcional como semIA: ficha sem marcos continua com o formato de antes.
@@ -103,12 +105,14 @@ export function proximoMarco(marcos, hojeIso) {
   return { ...m, atrasado: Boolean(m.data && hojeIso && m.data < hojeIso) }
 }
 
-// ---------- arquivos vinculados ----------
+// ---------- arquivos do projeto ----------
 //
-// O arquivo não sobe para o app: fica onde já está (Drive, site, sistema) e o
-// projeto guarda o link. Enviar arquivo para o Drive visível pediria uma
-// permissão nova do Google e um login de novo; o link resolve o que importa
-// — ter à mão, dentro do caso, tudo o que é dele.
+// Dois jeitos de um arquivo entrar no projeto: enviado do computador (ou
+// criado ali mesmo, como Documento, Planilha ou Apresentação), indo para a
+// pasta do projeto no Drive; ou vinculado por link, para o que já mora em
+// outro lugar (um site, um sistema, um arquivo antigo do Drive). Nos dois
+// casos o projeto guarda o link — e, no primeiro, também o id do Drive e o
+// tipo do arquivo.
 
 const TIPOS_DE_ARQUIVO = [
   { tipo: 'doc', rotulo: 'Documento', re: /docs\.google\.com\/document\//i },
@@ -123,6 +127,51 @@ const TIPOS_DE_ARQUIVO = [
 export function tipoDeArquivo(url) {
   const achado = TIPOS_DE_ARQUIVO.find((t) => t.re.test(url || ''))
   return achado ? { tipo: achado.tipo, rotulo: achado.rotulo } : { tipo: 'link', rotulo: 'Link' }
+}
+
+// O tipo pelo formato (mimeType) que o Drive informa, que diz mais que o link:
+// o link de um PDF enviado é um "drive.google.com/file/..." igual ao de uma
+// foto. Sem formato conhecido, vale o link.
+const TIPOS_PELO_FORMATO = [
+  { re: /^application\/vnd\.google-apps\.document$/, tipo: 'doc', rotulo: 'Documento' },
+  { re: /^application\/vnd\.google-apps\.spreadsheet$/, tipo: 'planilha', rotulo: 'Planilha' },
+  { re: /^application\/vnd\.google-apps\.presentation$/, tipo: 'apresentacao', rotulo: 'Apresentação' },
+  { re: /^application\/vnd\.google-apps\.form$/, tipo: 'formulario', rotulo: 'Formulário' },
+  { re: /^application\/vnd\.google-apps\.folder$/, tipo: 'pasta', rotulo: 'Pasta do Drive' },
+  { re: /^application\/pdf$/, tipo: 'pdf', rotulo: 'PDF' },
+  { re: /wordprocessingml|msword|opendocument\.text/, tipo: 'doc', rotulo: 'Documento do Word' },
+  { re: /spreadsheetml|ms-excel|opendocument\.spreadsheet|^text\/csv$/, tipo: 'planilha', rotulo: 'Planilha do Excel' },
+  { re: /presentationml|ms-powerpoint|opendocument\.presentation/, tipo: 'apresentacao', rotulo: 'Apresentação do PowerPoint' },
+  { re: /^image\//, tipo: 'imagem', rotulo: 'Imagem' },
+  { re: /^audio\//, tipo: 'audio', rotulo: 'Áudio' },
+  { re: /^video\//, tipo: 'video', rotulo: 'Vídeo' },
+  { re: /^text\//, tipo: 'doc', rotulo: 'Texto' },
+]
+
+export function tipoDoArquivo(arquivo) {
+  const achado = arquivo?.mime && TIPOS_PELO_FORMATO.find((t) => t.re.test(arquivo.mime))
+  if (achado) return { tipo: achado.tipo, rotulo: achado.rotulo }
+  return tipoDeArquivo(arquivo?.url)
+}
+
+// Os arquivos que dá para criar direto no projeto, já na pasta dele.
+export const NOVOS_ARQUIVOS = [
+  { tipo: 'doc', rotulo: 'Documento', mime: 'application/vnd.google-apps.document' },
+  { tipo: 'planilha', rotulo: 'Planilha', mime: 'application/vnd.google-apps.spreadsheet' },
+  { tipo: 'apresentacao', rotulo: 'Apresentação', mime: 'application/vnd.google-apps.presentation' },
+]
+
+// "2,4 MB", para a lista dizer o tamanho do que foi enviado.
+export function tamanhoLegivel(bytes) {
+  if (!Number.isFinite(bytes) || bytes < 0) return ''
+  const unidades = ['B', 'KB', 'MB', 'GB']
+  let valor = bytes
+  let i = 0
+  while (valor >= 1024 && i < unidades.length - 1) {
+    valor /= 1024
+    i++
+  }
+  return `${i === 0 ? valor : valor.toLocaleString('pt-BR', { maximumFractionDigits: valor < 10 ? 1 : 0 })} ${unidades[i]}`
 }
 
 // Link sem protocolo ("drive.google.com/...") é o que se cola do celular
@@ -166,7 +215,43 @@ function normalizarArquivo(a) {
     url,
     nome: typeof a.nome === 'string' && a.nome.trim() ? a.nome.trim() : nomeSugerido(url),
     adicionadoEm: typeof a.adicionadoEm === 'string' ? a.adicionadoEm : null,
+    // Só os que estão no Drive do projeto (enviados ou criados ali).
+    ...(typeof a.driveId === 'string' && a.driveId ? { driveId: a.driveId } : {}),
+    ...(typeof a.mime === 'string' && a.mime ? { mime: a.mime } : {}),
+    ...(Number.isFinite(a.tamanho) && a.tamanho >= 0 ? { tamanho: a.tamanho } : {}),
   }
+}
+
+// O registro do projeto para um arquivo que o Drive acabou de devolver
+// (enviado ou criado). O link é o de abrir no Drive/Docs.
+export function arquivoDoDrive(f, agora = new Date()) {
+  const url = f?.webViewLink || (f?.id ? `https://drive.google.com/file/d/${f.id}/view` : null)
+  return normalizarArquivo({
+    id: `arq-${agora.getTime().toString(36)}-${(f?.id || '').slice(-6)}`,
+    url,
+    nome: f?.name,
+    adicionadoEm: agora.toISOString(),
+    driveId: f?.id,
+    mime: f?.mimeType,
+    tamanho: f?.size !== undefined ? Number(f.size) : undefined,
+  })
+}
+
+// Soma arquivos à lista sem repetir o mesmo arquivo do Drive (ou o mesmo link).
+export function juntarArquivos(atuais, novos) {
+  const lista = normalizarArquivos(atuais)
+  for (const novo of (novos || []).filter(Boolean)) {
+    const repetido = lista.some((a) => (novo.driveId && a.driveId === novo.driveId) || a.url === novo.url)
+    if (!repetido) lista.push(novo)
+  }
+  return lista
+}
+
+// A pasta do projeto no Drive: o id para enviar arquivos e o link para abrir.
+export function normalizarPasta(p) {
+  if (!p || typeof p !== 'object' || typeof p.id !== 'string' || !p.id) return null
+  const url = normalizarLink(p.url) || `https://drive.google.com/drive/folders/${p.id}`
+  return { id: p.id, url }
 }
 
 export function normalizarArquivos(lista) {

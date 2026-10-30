@@ -17,6 +17,17 @@ import { tituloDaNota } from './notasLista.js'
 
 const LINK = /\[\[([^[\]\n]+?)\]\]/g
 
+// O texto como se lê, sem a marcação: [[Nota]] vira "Nota" e [[Nota|o
+// caso]] vira "o caso" — é o que o Obsidian mostra fora do modo de edição.
+// Para as prévias da tela; o Claude continua recebendo os [[links]], que é
+// por onde ele navega.
+export function textoSemMarcacao(texto) {
+  return (texto || '').replace(LINK, (_, bruto) => {
+    const [alvo, apelido] = bruto.split('|')
+    return (apelido ?? alvo.split('#')[0]).trim()
+  })
+}
+
 export function chaveDeTitulo(titulo) {
   return semAcento(titulo || '').replace(/\s+/g, ' ').trim()
 }
