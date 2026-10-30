@@ -5,6 +5,7 @@ import Banner from './Banner.jsx'
 import SuggestionCard from './SuggestionCard.jsx'
 import TeiaDasNotas from './TeiaDasNotas.jsx'
 import { CorpoFormatado, BarraDeFormatacao, ResumoDaChecklist } from './NotaFormatada.jsx'
+import Anexos from './Anexos.jsx'
 import { AI_MIN_LENGTH, descreverSincronizacao } from '../lib/useNotes.js'
 import { IA_DESLIGADA } from '../lib/aiCooldown.js'
 import { organizarNotas, tituloDaNota, previaDaNota, dataCurta, dataPorExtenso, notaVazia } from '../lib/notasLista.js'
@@ -70,7 +71,7 @@ const ESTILOS_DO_TECLADO = { l: 'tarefa', t: 'titulo', h: 'subtitulo', j: 'cabec
 // sempre: gravar a cada tecla gastaria uma chamada ao Drive por letra. A IA
 // tem seu próprio timer, bem mais longo (ver AI_IDLE_MS): a ideia é analisar
 // quando a anotação estiver "pronta", não a cada pausa curta de digitação.
-function NoteEditor({ note, projetos = [], onProjetoChange, onChange, onAnalyze, analyzing, syncStatus, calendars, taskLists, onCreateEvent, onCreateTask, onSelectRelated, onVoltar, onAlternarFixada, onExcluir, todas = [], onAbrirNota, onCriarNota, onRenomear, onVerNaTeia }) {
+function NoteEditor({ note, projetos = [], onProjetoChange, onAnexosChange, garantirPasta, onChange, onAnalyze, analyzing, syncStatus, calendars, taskLists, onCreateEvent, onCreateTask, onSelectRelated, onVoltar, onAlternarFixada, onExcluir, todas = [], onAbrirNota, onCriarNota, onRenomear, onVerNaTeia }) {
   const [title, setTitle] = useState(note.title)
   const [body, setBody] = useState(note.body)
   const firstRender = useRef(true)
@@ -557,6 +558,22 @@ function NoteEditor({ note, projetos = [], onProjetoChange, onChange, onAnalyze,
         {analyzing && <span>· revisando com a IA...</span>}
       </div>
 
+      {/* Arquivos da anotação: vão para a pasta do projeto dela no Drive (ou
+          para "Anotações", sem projeto). Recolhido quando não há nenhum:
+          a maioria das notas é só texto. */}
+      {garantirPasta && (
+        <details className="nota-anexos" open={(note.anexos || []).length > 0 || undefined}>
+          <summary>Arquivos{note.anexos?.length ? ` · ${note.anexos.length}` : ''}</summary>
+          <Anexos
+            arquivos={note.anexos || []}
+            onMudar={onAnexosChange}
+            garantirPasta={() => garantirPasta(note.projeto || null)}
+            nomeDoNovoPadrao={tituloDaNota({ title, body })}
+            dica="Arraste, cole ou anexe arquivos a esta anotação. Vão para a pasta do projeto dela no Drive."
+          />
+        </details>
+      )}
+
       <LigacoesDaNota
         fontes={note.fontes || []}
         ligaA={ligacoes.ligaA}
@@ -805,7 +822,7 @@ function lerModo() {
   }
 }
 
-export default function Notes({ notesState, projetos = [], calendars = [], taskLists = [], onCreateEvent, onCreateTask, onAbrirProjeto }) {
+export default function Notes({ notesState, projetos = [], calendars = [], taskLists = [], onCreateEvent, onCreateTask, onAbrirProjeto, garantirPasta }) {
   const {
     notes,
     selectedId,
@@ -879,6 +896,9 @@ export default function Notes({ notesState, projetos = [], calendars = [], taskL
             // `undefined` apaga o campo: sanitizeNote não grava projeto vazio.
             onProjetoChange={(projeto) => updateNote(selected.id, { projeto: projeto || undefined })}
             onChange={(patch) => updateNote(selected.id, patch)}
+            // A lista vazia apaga o campo: sanitizeNote não grava anexos vazios.
+            onAnexosChange={(anexos) => updateNote(selected.id, { anexos: anexos.length ? anexos : undefined })}
+            garantirPasta={garantirPasta}
             onAnalyze={analyzeNote}
             analyzing={analyzingIds.has(selected.id)}
             syncStatus={syncStatus}

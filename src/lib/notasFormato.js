@@ -3,7 +3,7 @@
 // grava notas no mesmo arquivo — e uma nota que o app não reconhecesse seria
 // descartada na primeira leitura dele.
 
-import { normalizarLink } from './projetos.js'
+import { normalizarLink, normalizarArquivos } from './projetos.js'
 
 const DATA_ISO = /^\d{4}-\d{2}-\d{2}$/
 export const MAX_FONTES = 20
@@ -79,6 +79,12 @@ export function sanitizeNote(note) {
   if (typeof note.projeto === 'string' && note.projeto) limpa.projeto = note.projeto
   // Fixada no topo da lista, como no Notas do iPhone. Só existe quando é true.
   if (note.fixada === true) limpa.fixada = true
+  // Arquivos anexados (na pasta do projeto da nota, ou em "Anotações" no
+  // Drive). Só existe quando há algum.
+  if (Array.isArray(note.anexos)) {
+    const anexos = normalizarArquivos(note.anexos)
+    if (anexos.length) limpa.anexos = anexos
+  }
   if (Array.isArray(note.fontes)) {
     const fontes = juntarFontes(note.fontes)
     if (fontes.length) limpa.fontes = fontes

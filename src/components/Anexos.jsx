@@ -45,6 +45,11 @@ export function IconeDoArquivo({ arquivo, tamanho = 18 }) {
   )
 }
 
+// Quem responde ao colar. Com o editor de uma tarefa aberto por cima da aba
+// Arquivos do projeto, os dois estão na tela; o arquivo colado vai só para o
+// de cima, que é o último montado.
+const pilhaDoColar = []
+
 // Falta a permissão nova (drive.file), ou o Google disse que ela não veio.
 const SEM_PERMISSAO = 'sem-permissao'
 function semPermissao(err) {
@@ -291,7 +296,10 @@ export default function Anexos({
   const enviarRef = useRef(enviar)
   enviarRef.current = enviar
   useEffect(() => {
+    const eu = Symbol('anexos')
+    pilhaDoColar.push(eu)
     function aoColar(e) {
+      if (pilhaDoColar[pilhaDoColar.length - 1] !== eu) return
       const itens = [...(e.clipboardData?.files || [])]
       if (!itens.length) return
       e.preventDefault()
@@ -303,7 +311,10 @@ export default function Anexos({
       enviarRef.current(comNome)
     }
     window.addEventListener('paste', aoColar)
-    return () => window.removeEventListener('paste', aoColar)
+    return () => {
+      window.removeEventListener('paste', aoColar)
+      pilhaDoColar.splice(pilhaDoColar.indexOf(eu), 1)
+    }
   }, [])
 
   async function criar(e) {

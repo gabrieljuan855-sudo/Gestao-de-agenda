@@ -3576,3 +3576,14 @@ button.projeto-arquivo {
 .arquivo-acao.is-principal { background: var(--solid); border-color: var(--solid); color: var(--on-solid); }
 .arquivo-acao.is-perigo { color: var(--urgent); border-color: var(--urgent); }
 .arquivo-aberto-previa.is-sem-previa { flex: none; min-height: 160px; }
+
+/* Arquivos da anotação, recolhidos quando não há nenhum. */
+.nota-anexos { margin-top: 14px; }
+.nota-anexos > summary {
+  cursor: pointer;
+  padding: 6px 0;
+  font-size: var(--label-md);
+  font-weight: 600;
+  color: var(--on-surface-variant);
+}
+.nota-anexos[open] > summary { margin-bottom: 6px; }

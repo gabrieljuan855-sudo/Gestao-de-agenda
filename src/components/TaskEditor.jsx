@@ -3,6 +3,8 @@ import Modal from './Modal.jsx'
 import ConfirmDialog from './ConfirmDialog.jsx'
 import { toDateInput, fromInputs, dateOnlyFromISO } from '../lib/dates.js'
 import { PRIORITIES, DEFAULT_PRIORITY } from '../lib/priority.js'
+import { separarAnexos, juntarAnexos } from '../lib/anexosNoTexto.js'
+import Anexos from './Anexos.jsx'
 
 export default function TaskEditor({
   task,
@@ -13,6 +15,8 @@ export default function TaskEditor({
   onClose,
   contextos = [],
   projetos = [],
+  onSalvarAnexos,
+  garantirPasta,
 }) {
   const [title, setTitle] = useState(task.title || '')
   // dateOnlyFromISO, não `new Date(task.due)`: o prazo vem do Google como
@@ -25,7 +29,12 @@ export default function TaskEditor({
   const [contexto, setContexto] = useState(task.contexto || '')
   const [projeto, setProjeto] = useState(task.projeto || '')
   const [duracao, setDuracao] = useState(task.duracao ? String(task.duracao) : '')
-  const [notes, setNotes] = useState(task.notesClean || '')
+  // Os anexos vêm do próprio texto da tarefa (ver anexosNoTexto.js): o campo
+  // mostra só o texto, e os arquivos aparecem como lista embaixo.
+  const [separado] = useState(() => separarAnexos(task.notesClean || ''))
+  const [notes, setNotes] = useState(separado.texto)
+  const [anexos, setAnexos] = useState(separado.anexos)
+  const [erroDosAnexos, setErroDosAnexos] = useState(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
@@ -51,7 +60,7 @@ export default function TaskEditor({
         title: title.trim(),
         due: due ? fromInputs(due) : null,
         priority,
-        notes,
+        notes: juntarAnexos(notes, anexos),
         // `null`, e não string vazia: é assim que se apaga uma etiqueta que
         // não faz mais sentido (ver o merge por `!== undefined` em updateTask).
         contexto: contexto.trim() || null,
@@ -59,6 +68,20 @@ export default function TaskEditor({
         duracao: duracao ? Number(duracao) : null,
       })
     )
+  }
+
+  // Anexo grava na hora, sem esperar o "Salvar": o arquivo já está no Drive,
+  // e fechar o editor sem salvar o deixaria lá sem ligação com a tarefa. Vai
+  // com o texto como estava salvo — o que está sendo digitado continua
+  // esperando o "Salvar".
+  async function mudarAnexos(lista) {
+    setAnexos(lista)
+    setErroDosAnexos(null)
+    try {
+      await onSalvarAnexos(juntarAnexos(separado.texto, lista))
+    } catch {
+      setErroDosAnexos('O arquivo foi para o Drive, mas não deu para ligá-lo à tarefa. Clique em Salvar para tentar de novo.')
+    }
   }
 
   function handleDelete() {
@@ -155,6 +178,20 @@ export default function TaskEditor({
           <span>Anotações</span>
           <textarea rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} />
         </label>
+
+        {onSalvarAnexos && garantirPasta && (
+          <div className="field">
+            <span>Arquivos{anexos.length ? ` · ${anexos.length}` : ''}</span>
+            <Anexos
+              arquivos={anexos}
+              onMudar={mudarAnexos}
+              garantirPasta={() => garantirPasta(projeto.trim() || null)}
+              permitirCriar={false}
+              dica="Arraste, cole ou anexe: vão para a pasta do projeto da tarefa no Drive."
+            />
+            {erroDosAnexos && <div className="form-error">{erroDosAnexos}</div>}
+          </div>
+        )}
 
         {task.tasklistTitle && (
           <div className="muted" style={{ fontSize: 'var(--label-sm)' }}>Lista: {task.tasklistTitle}</div>
