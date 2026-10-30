@@ -10,7 +10,7 @@ import { parseQuickAdd, descreverQuando } from '../lib/nlp.js'
 import { construirRecorrencia } from '../lib/recorrencia.js'
 import { pastaDoProjeto, criarArquivoGoogle, enviarArquivoAoDrive } from '../lib/googleApi.js'
 import { permissaoDosArquivos, pedirAcessoAosArquivos } from '../lib/googleAuth.js'
-import { textoSemMarcacao } from '../lib/notasLinks.js'
+import { textoSemFormato } from '../lib/notasFormatacao.js'
 import {
   SITUACOES,
   TIPOS,
@@ -917,7 +917,7 @@ function PaginaDoProjeto({
               <div className="projeto-notas">
                 {anotacoes.map((n) => {
                   const titulo = n.title?.trim() || n.body?.trim().split('\n')[0] || '(sem título)'
-                  const trecho = trechoDaAnotacao(textoSemMarcacao(n.title?.trim() ? n.body : n.body?.trim().split('\n').slice(1).join(' ')))
+                  const trecho = trechoDaAnotacao(textoSemFormato(n.title?.trim() ? n.body : n.body?.trim().split('\n').slice(1).join('\n')))
                   return (
                     <button key={n.id} type="button" className="projeto-nota" onClick={() => onAbrirNota(n.id)}>
                       <span className="projeto-nota-topo">
