@@ -103,13 +103,10 @@ async function conectar(env, { comCookieNaVolta = true, semVolta = false } = {})
   const pagina = await chamar(env, `/authorize?${params}`)
   expect(pagina.status).toBe(200)
   const html = await pagina.text()
-  const handle = html.match(/name="handle" value="([^"]+)"/)[1]
-  const permitir = await chamar(env, '/authorize', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: cookiesDe(pagina) },
-    body: new URLSearchParams({ handle, decisao: 'permitir' }),
-  })
-  expect(permitir.status).toBe(302)
+  // Permitir é um link (não um formulário), amarrado ao cookie da tela.
+  const link = html.match(/href="([^"]*decisao=permitir[^"]*)"/)[1].replace(/&#38;/g, '&')
+  const permitir = await chamar(env, link, { headers: { Cookie: cookiesDe(pagina) } })
+  expect(permitir.status).toBe(303)
   const google = new URL(permitir.headers.get('Location'))
   if (semVolta) return { html, google, client_id, verifier }
   const volta = await chamar(env, `/conector/callback?code=codigo-do-google&state=${encodeURIComponent(google.searchParams.get('state'))}`, {
@@ -155,7 +152,7 @@ describe('login do conector', () => {
   it('com a conta certa, conclui, troca o código e o Claude usa as ferramentas pelo /mcp', async () => {
     const env = ambiente()
     const { volta, client_id, verifier } = await conectar(env)
-    expect(volta.status).toBe(302)
+    expect(volta.status).toBe(303)
     const deVolta = new URL(volta.headers.get('Location'))
     expect(deVolta.origin + deVolta.pathname).toBe(CALLBACK_DO_CLAUDE)
     expect(deVolta.searchParams.get('state')).toBe('estado-do-claude')
@@ -205,7 +202,7 @@ describe('login do conector', () => {
 
   it('a volta do Google funciona mesmo sem cookie (o navegador embutido do app do Claude no iPhone não o devolve)', async () => {
     const { volta } = await conectar(ambiente(), { comCookieNaVolta: false })
-    expect(volta.status).toBe(302)
+    expect(volta.status).toBe(303)
     expect(new URL(volta.headers.get('Location')).searchParams.get('code')).toBeTruthy()
   })
 
@@ -214,7 +211,7 @@ describe('login do conector', () => {
     const { google, volta } = await conectar(env)
     const caminho = `/conector/callback?code=codigo-do-google&state=${encodeURIComponent(google.searchParams.get('state'))}`
     const repetida = await chamar(env, caminho)
-    expect(repetida.status).toBe(302)
+    expect(repetida.status).toBe(303)
     expect(repetida.headers.get('Location')).toBe(volta.headers.get('Location'))
     expect(pedidosAoGoogle.filter((p) => p.grant_type === 'authorization_code')).toHaveLength(1)
   })
@@ -224,7 +221,7 @@ describe('login do conector', () => {
     const { google } = await conectar(env, { semVolta: true })
     const caminho = `/conector/callback?code=codigo-do-google&state=${encodeURIComponent(google.searchParams.get('state'))}`
     const [a, b] = await Promise.all([chamar(env, caminho), chamar(env, caminho)])
-    expect([a.status, b.status]).toEqual([302, 302])
+    expect([a.status, b.status]).toEqual([303, 303])
     expect(new URL(a.headers.get('Location')).searchParams.get('code')).toBeTruthy()
     expect(b.headers.get('Location')).toBe(a.headers.get('Location'))
   })
@@ -237,6 +234,27 @@ describe('login do conector', () => {
     const repetida = await chamar(env, `/conector/callback?code=codigo-do-google&state=${encodeURIComponent(google.searchParams.get('state'))}`)
     expect(repetida.status).toBe(403)
     expect(await repetida.text()).toContain('outra@exemplo.com')
+  })
+
+  it('o envio de formulário que o navegador do iPhone repete não faz estrago', async () => {
+    const env = ambiente()
+    const { html } = await conectar(env, { semVolta: true })
+    expect(html).not.toContain('<form')
+    // POST no /authorize volta para a mesma página, que começa limpa.
+    const repetido = await chamar(env, '/authorize?client_id=x&state=y', { method: 'POST', body: 'handle=velho&decisao=permitir' })
+    expect(repetido.status).toBe(303)
+    expect(repetido.headers.get('Location')).toBe(`${ORIGEM}/authorize?client_id=x&state=y`)
+  })
+
+  it('a volta que chega como POST manda o navegador ao Claude com GET (303)', async () => {
+    const env = ambiente()
+    const { google } = await conectar(env, { semVolta: true })
+    const volta = await chamar(env, `/conector/callback?code=codigo-do-google&state=${encodeURIComponent(google.searchParams.get('state'))}`, {
+      method: 'POST',
+      body: 'handle=velho',
+    })
+    expect(volta.status).toBe(303)
+    expect(volta.headers.get('Location')).toContain(CALLBACK_DO_CLAUDE)
   })
 
   it('um state inventado ou vencido não conclui nada', async () => {
