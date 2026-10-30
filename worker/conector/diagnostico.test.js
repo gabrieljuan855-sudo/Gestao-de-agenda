@@ -31,6 +31,18 @@ describe('diagnóstico do conector', () => {
     expect(JSON.stringify(falha)).not.toContain('Bearer')
   })
 
+  it('separa navegação de pedido em segundo plano e guarda o detalhe do erro', async () => {
+    const request = new Request(`${ORIGEM}/authorize`, {
+      method: 'POST',
+      headers: { 'Sec-Fetch-Mode': 'cors', 'Sec-Fetch-Dest': 'empty', Cookie: '__Host-oauth-consent-ab=x', Referer: `${ORIGEM}/authorize?state=SEGREDO` },
+    })
+    const html = '<h1>Não deu para conectar</h1><p>Esta tentativa expirou. (Detalhe: This authorization was not started in this browser)</p>'
+    const resumo = await resumoDaResposta({ request, response: new Response(html, { status: 400 }) })
+    expect(resumo).toMatchObject({ modo: 'cors', alvo: 'empty', cookieDaTela: true, vindoDe: `${ORIGEM}/authorize` })
+    expect(resumo.resposta).toContain('not started in this browser')
+    expect(JSON.stringify(resumo)).not.toContain('SEGREDO')
+  })
+
   it('o Worker registra as respostas do conector, e a leitura exige a chave', async () => {
     const env = { OAUTH_KV: kvEmMemoria(), ASSETS: { fetch: async () => new Response('site') } }
     const pendentes = []
