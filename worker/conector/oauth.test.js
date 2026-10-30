@@ -72,7 +72,7 @@ afterEach(() => vi.unstubAllGlobals())
 
 // O caminho que o Claude percorre: registrar-se, mandar a pessoa ao
 // /authorize, ela permite, vai ao Google e volta.
-async function conectar(env) {
+async function conectar(env, { comCookieNaVolta = true } = {}) {
   const reg = await chamar(env, '/register', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -102,7 +102,7 @@ async function conectar(env) {
   expect(permitir.status).toBe(302)
   const google = new URL(permitir.headers.get('Location'))
   const volta = await chamar(env, `/conector/callback?code=codigo-do-google&state=${encodeURIComponent(google.searchParams.get('state'))}`, {
-    headers: { Cookie: cookiesDe(permitir) },
+    headers: comCookieNaVolta ? { Cookie: cookiesDe(permitir) } : {},
   })
   return { html, google, volta, client_id, verifier }
 }
@@ -185,6 +185,22 @@ describe('login do conector', () => {
     const captura = await mcp('tools/call', { name: 'capturar', arguments: { texto: 'pagar o IPTU' } })
     expect(captura.result.content[0].text).toMatch(/Guardado na Entrada/)
     expect(g.estado.tarefas[0].title).toBe('pagar o IPTU')
+  })
+
+  it('a volta do Google funciona mesmo sem cookie (o navegador embutido do app do Claude no iPhone não o devolve)', async () => {
+    const { volta } = await conectar(ambiente(), { comCookieNaVolta: false })
+    expect(volta.status).toBe(302)
+    expect(new URL(volta.headers.get('Location')).searchParams.get('code')).toBeTruthy()
+  })
+
+  it('a mesma volta do Google não vale duas vezes', async () => {
+    const env = ambiente()
+    const { google } = await conectar(env)
+    const repetida = await chamar(env, `/conector/callback?code=codigo-do-google&state=${encodeURIComponent(google.searchParams.get('state'))}`)
+    expect(repetida.status).toBe(400)
+    expect(await repetida.text()).toContain('expirou ou já foi usada')
+    const inventada = await chamar(env, '/conector/callback?code=x&state=inventado')
+    expect(inventada.status).toBe(400)
   })
 
   it('o /mcp sem token devolve o desafio OAuth que aponta para a descoberta', async () => {
