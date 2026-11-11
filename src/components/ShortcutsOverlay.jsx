@@ -11,7 +11,12 @@ export default function ShortcutsOverlay({ onClose }) {
         {ATALHOS.map((a) => (
           <li key={a.acao} className="atalhos-item">
             <span className="atalhos-teclas">
-              <kbd>{a.tecla}</kbd>
+              {a.alt && (
+                <>
+                  <kbd>Alt</kbd>+
+                </>
+              )}
+              <kbd>{a.tecla.toUpperCase()}</kbd>
               {a.alias && (
                 <>
                   {' ou '}
@@ -29,7 +34,8 @@ export default function ShortcutsOverlay({ onClose }) {
       </ul>
 
       <p className="muted" style={{ fontSize: 'var(--label-sm)', marginTop: 12 }}>
-        Os atalhos ficam quietos enquanto você digita num campo.
+        Para capturar algo, é só começar a digitar em qualquer lugar fora de um campo. No Mac, Alt é a tecla Option. Os atalhos
+        ficam quietos enquanto você digita num campo.
       </p>
 
       <div className="modal-actions">

@@ -62,7 +62,7 @@ export default function Rail({ tools, openId, onOpenChange }) {
             onClick={() => handleClick(tool.id)}
             aria-expanded={openId === tool.id}
             aria-label={tool.label}
-            title={tool.tecla ? `${tool.label} (${tool.tecla.toUpperCase()})` : tool.label}
+            title={tool.tecla ? `${tool.label} (Alt+${tool.tecla.toUpperCase()})` : tool.label}
           >
             <span className="rail-btn-icon">{tool.icon}</span>
             <span className="rail-btn-label">{tool.label}</span>
