@@ -431,6 +431,10 @@ export default function App() {
   // Qual painel do trilho está aberto. Mora aqui, e não dentro do Rail, porque
   // os atalhos de teclado também precisam abrir e fechar esses painéis.
   const [railAberto, setRailAberto] = useState(null)
+  // O que se digita fora de qualquer campo, para a captura começar com isso.
+  // `vez` muda a cada tecla: duas letras iguais seguidas precisam chegar as
+  // duas.
+  const [digitadoParaCapturar, setDigitadoParaCapturar] = useState(null)
   const [mostrandoAtalhos, setMostrandoAtalhos] = useState(false)
   // Qual face do trabalho está aberta no painel lateral. Começa em Próximas
   // porque é a pergunta do dia a dia ("o que eu faço agora"); a Entrada se
@@ -440,6 +444,12 @@ export default function App() {
 
   useEffect(() => {
     if (railAberto !== 'projetos') setProjetoParaAbrir(null)
+  }, [railAberto])
+
+  // Fechada a captura, a letra que a abriu não volta quando ela reabrir pelo
+  // botão.
+  useEffect(() => {
+    if (railAberto !== 'add') setDigitadoParaCapturar(null)
   }, [railAberto])
 
   function abrirOuFechar(id) {
@@ -465,6 +475,12 @@ export default function App() {
 
   useAtalhos({
     criar: () => abrirOuFechar('add'),
+    // Começar a digitar em qualquer lugar abre a captura já com a letra
+    // digitada, sem precisar achar o botão.
+    digitar: (texto) => {
+      setRailAberto('add')
+      setDigitadoParaCapturar((atual) => ({ texto, vez: (atual?.vez || 0) + 1 }))
+    },
     // Entrada, Próximas, Aguardando e Revisão deixaram de ser painéis que
     // abrem e fecham: são abas do painel que já está aberto, então a tecla
     // seleciona em vez de alternar.
@@ -1014,6 +1030,7 @@ export default function App() {
           onCreateTask={handleCreateTask}
           onDesfazerEvento={handleDesfazerEventoRapido}
           onDesfazerTarefa={handleDesfazerTarefaRapida}
+          digitado={digitadoParaCapturar}
         />
       ),
     },

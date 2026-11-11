@@ -49,6 +49,7 @@ export default function QuickAdd({
   onCreateTask,
   onDesfazerEvento,
   onDesfazerTarefa,
+  digitado = null,
 }) {
   const [text, setText] = useState('')
   const [preview, setPreview] = useState(null)
@@ -64,6 +65,23 @@ export default function QuickAdd({
   // a agenda citada no texto ("Imersão AEPETI") ou, sem nenhuma, a padrão.
   const [agendaEscolhida, setAgendaEscolhida] = useState(null)
   const inputRef = useRef(null)
+
+  // A letra digitada fora de qualquer campo, que abriu esta captura (ver
+  // useAtalhos): entra no fim do texto, com o cursor depois dela, e o resto
+  // da digitação já cai direto no campo.
+  const ultimaVezRef = useRef(null)
+  useEffect(() => {
+    if (!digitado || digitado.vez === ultimaVezRef.current) return
+    ultimaVezRef.current = digitado.vez
+    const el = inputRef.current
+    const novo = `${el?.value ?? text}${digitado.texto}`
+    handleChange(novo)
+    if (el) {
+      el.focus()
+      requestAnimationFrame(() => el.setSelectionRange(novo.length, novo.length))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [digitado])
 
   // A altura acompanha o texto: zera e mede o conteúdo a cada mudança.
   useLayoutEffect(() => {

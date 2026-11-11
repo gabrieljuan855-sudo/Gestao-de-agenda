@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { atalhoDoEvento } from './atalhos.js'
+import { atalhoDoEvento, textoParaCapturar } from './atalhos.js'
 
 // Um listener só, na janela, despachando pelo que atalhoDoEvento decidir.
 //
@@ -14,7 +14,16 @@ export default function useAtalhos(acoes) {
   useEffect(() => {
     function onKeyDown(event) {
       const nome = atalhoDoEvento(event)
-      if (!nome) return
+      if (!nome) {
+        // Um diálogo aberto por cima é quem recebe o que se digita, não a
+        // captura que abriria por trás dele.
+        const texto = textoParaCapturar(event)
+        if (texto && acoesRef.current.digitar && !document.querySelector('.modal-backdrop')) {
+          event.preventDefault()
+          acoesRef.current.digitar(texto)
+        }
+        return
+      }
       const fn = acoesRef.current[nome]
       if (!fn) return
       // Só depois de saber que a tecla é nossa E que há o que fazer: assim
