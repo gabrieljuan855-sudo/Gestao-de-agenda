@@ -209,14 +209,14 @@ export default function Backlog({
         </div>
       )}
 
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, marginBottom: 10 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, marginBottom: 10 }}>
         {vaoAgora && (
-          <label className="muted" style={{ fontSize: 'var(--label-md)', display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
+          <label className="muted" style={{ fontSize: 'var(--label-md)', display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
             <input type="checkbox" checked={usarTempoLivre} onChange={(e) => setUsarTempoLivre(e.target.checked)} />
             Só o que cabe nesse tempo
           </label>
         )}
-        <label className="muted" style={{ fontSize: 'var(--label-md)', display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
+        <label className="muted" style={{ fontSize: 'var(--label-md)', display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
           <input
             type="checkbox"
             checked={showCompleted}
