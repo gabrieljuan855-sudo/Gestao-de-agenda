@@ -91,6 +91,9 @@
      Astryx, inclusive deixando os botões em pílula por padrão). */
   --shape-xs: 6px;
   --shape-sm: 10px;
+  /* Onde começa o texto dentro de um cartão/aviso da agenda do dia. Cada peça
+     desconta a própria borda, para o texto cair na mesma coluna. */
+  --recuo-linha: 13px;
   --shape-md: 12px;
   --shape-lg: 16px;
   --shape-xl: 24px;
@@ -283,6 +286,16 @@ button.primary {
 }
 
 input[type="text"],
+/* Caixa de marcar: um tamanho só (18px, o mesmo do rádio) em todo o app. Havia
+   16 e 18 espalhados e, sem margem zerada, o navegador empurrava 3px em volta. */
+input[type="checkbox"] {
+  accent-color: var(--primary);
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  flex-shrink: 0;
+}
+
 input[type="number"] {
   border: 1px solid var(--outline);
   border-radius: var(--shape-md);
@@ -405,7 +418,7 @@ textarea:focus-visible,
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 8px 10px;
+  padding: 8px 11px;
   border-radius: var(--shape-sm);
   background: var(--low-container);
   color: var(--low);
@@ -648,10 +661,15 @@ button.danger:hover { background: var(--urgent-bg); }
   align-items: flex-start;
   gap: 10px;
   border-radius: var(--shape-md);
-  padding: 10px 12px;
+  padding: 10px var(--recuo-linha);
   margin-top: 12px;
   font-size: var(--body-sm);
 }
+/* O espaço de cima serve para separar de quem vem antes; sem ninguém antes ele
+   só afastava o aviso do topo do cartão (29px de respiro contra 17 dos lados). */
+.banner:first-child { margin-top: 0; }
+/* Dois avisos empilhados (choque de horário e "Próximo") ficavam colados. */
+.banner + .now-banner, .banner + .banner { margin-top: 10px; }
 .banner-icon { line-height: 1.3; flex-shrink: 0; }
 .banner-text { flex: 1; }
 .banner button {
@@ -1582,8 +1600,8 @@ textarea.nota-corpo:focus-visible { outline: none; }
    coluna da grade — é a barra fixa na borda esquerda (ver .rail). */
 .workspace {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) clamp(320px, 30vw, 420px);
-  gap: 20px;
+  grid-template-columns: minmax(0, 1fr) clamp(324px, 30vw, 424px);
+  gap: 24px;
   align-items: start;
 }
 
@@ -2131,7 +2149,7 @@ textarea.nota-corpo:focus-visible { outline: none; }
   background: var(--accent-bg);
   border: 1px solid var(--accent);
   border-radius: var(--shape-md);
-  padding: 8px 12px;
+  padding: 8px calc(var(--recuo-linha) - 1px);
   font-size: var(--body-sm);
   margin-bottom: 10px;
 }
@@ -2141,7 +2159,8 @@ textarea.nota-corpo:focus-visible { outline: none; }
    choque (âmbar) que costuma vir logo acima. */
 .now-banner--proximo { background: var(--surface-2); border-color: var(--border); }
 
-.day-event { padding: 6px 10px; border-radius: var(--shape-xs); }
+/* A barra de cor (3px, inline) entra na conta: o texto cai na coluna do recuo. */
+.day-event { padding: 6px calc(var(--recuo-linha) - 3px); border-radius: var(--shape-xs); }
 
 /* Cartão clicável para o mouse (o cartão inteiro abre), com a camada de estado
    do MD3 — hover e pressionado — que os botões já recebem de `button::after`.
@@ -2196,7 +2215,7 @@ textarea.nota-corpo:focus-visible { outline: none; }
 .day-allday-lista { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
 .day-allday {
   min-height: 28px;
-  padding: 4px 10px;
+  padding: 4px calc(var(--recuo-linha) - 3px);
   border: none;
   border-left: 3px solid var(--border-strong);
   border-radius: var(--shape-xs);
@@ -2237,12 +2256,12 @@ textarea.nota-corpo:focus-visible { outline: none; }
   padding-bottom: 8px;
 }
 
-.calendar-toggle { display: flex; align-items: center; gap: 4px; font-size: var(--label-md); cursor: pointer; }
+.calendar-toggle { display: flex; align-items: center; gap: 8px; font-size: var(--label-md); cursor: pointer; }
 
 .free-slot {
   border: 1px dashed var(--border);
   border-radius: var(--shape-xs);
-  padding: 3px 10px;
+  padding: 3px calc(var(--recuo-linha) - 1px);
   font-size: var(--label-sm);
   /* Sem `opacity` aqui: ela se somava à cor já apagada e levava o texto a
      2,6:1 no escuro e 1,5:1 no claro. O tracejado sem preenchimento já diz
@@ -2552,7 +2571,9 @@ textarea.nota-corpo:focus-visible { outline: none; }
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 10px 12px;
+  /* 14 à esquerda: a barra de cor é sombra interna e não ocupa lugar, então o
+     texto precisa descontar o respiro dela para cair na coluna da ficha abaixo. */
+  padding: 10px 12px 10px 14px;
   border-radius: var(--shape-sm);
   /* Mesma razão da linha selecionada: o painel já é --primary-container, então
      o destaque é o fundo claro com a barra de cor, não a cor do painel. */
@@ -2647,7 +2668,9 @@ textarea.nota-corpo:focus-visible { outline: none; }
   /* Barra superior: saudação, período e configurações numa linha só. */
   .app-topo { flex-wrap: nowrap; gap: 24px; margin-bottom: 16px; }
   .app-topo .period-bar { flex: 1; flex-basis: auto; min-width: 0; }
-  .app-topo-acoes { display: flex; gap: 4px; flex-shrink: 0; }
+  /* A margem negativa tira o respiro do botão fantasma: o ícone, não o botão,
+     é que deve alinhar com a borda direita do conteúdo. */
+  .app-topo-acoes { display: flex; gap: 4px; flex-shrink: 0; margin-right: -12px; }
   .app-topo-acoes button {
     border: none;
     background: transparent;
@@ -3154,7 +3177,6 @@ textarea.nota-corpo:focus-visible { outline: none; }
 .revisao-projeto { align-items: flex-start; }
 .revisao-projeto.is-revisado { opacity: 0.6; }
 .revisao-projeto-check { padding-top: 2px; }
-.revisao-projeto-check input { width: 18px; height: 18px; }
 .revisao-projeto-acao { overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .revisao-projeto-botoes { display: flex; gap: 6px; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; }
 .revisao-projeto-botoes button { padding: 6px 12px; }
@@ -3183,7 +3205,7 @@ textarea.nota-corpo:focus-visible { outline: none; }
   background: var(--surface-raised);
   cursor: pointer;
 }
-.assistente-acao input { margin-top: 3px; width: 16px; height: 16px; flex-shrink: 0; }
+.assistente-acao input { margin-top: 1px; }
 .assistente-acao.is-desmarcada { opacity: 0.5; }
 .assistente-acao-texto { display: flex; flex-direction: column; gap: 3px; min-width: 0; overflow-wrap: anywhere; }
 .assistente-acoes-finais { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -3231,7 +3253,6 @@ textarea.nota-corpo:focus-visible { outline: none; }
   background: var(--surface-raised);
 }
 .projeto-marco-check { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; cursor: pointer; }
-.projeto-marco-check input { width: 16px; height: 16px; flex-shrink: 0; }
 .projeto-marco-titulo { overflow-wrap: anywhere; }
 .projeto-marco.is-feito .projeto-marco-titulo { text-decoration: line-through; color: var(--on-surface-muted); }
 .projeto-marco.is-atrasado { border-color: var(--urgent); }
