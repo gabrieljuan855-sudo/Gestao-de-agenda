@@ -285,7 +285,6 @@ button.primary {
   border-color: var(--solid);
 }
 
-input[type="text"],
 /* Caixa de marcar: um tamanho só (18px, o mesmo do rádio) em todo o app. Havia
    16 e 18 espalhados e, sem margem zerada, o navegador empurrava 3px em volta. */
 input[type="checkbox"] {
@@ -296,6 +295,7 @@ input[type="checkbox"] {
   flex-shrink: 0;
 }
 
+input[type="text"],
 input[type="number"] {
   border: 1px solid var(--outline);
   border-radius: var(--shape-md);
