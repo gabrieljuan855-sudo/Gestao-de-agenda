@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { startOfWeek } from './dates.js'
 import { workBlocksFor } from './schedule.js'
-import { eventsOfDay, findFreeGaps, findConflicts, tasksDueOn, eventStart, eventEnd, erroDoPeriodo } from './events.js'
+import { eventsOfDay, findFreeGaps, findConflicts, conflitosEmAberto, restoDoVao, tasksDueOn, eventStart, eventEnd, erroDoPeriodo } from './events.js'
 
 // Segunda-feira de verdade (via startOfWeek), para não depender de saber de
 // cabeça em que dia da semana cai uma data qualquer.
@@ -148,5 +148,41 @@ describe('erroDoPeriodo', () => {
     const inicio = new Date(2026, 9, 30, 14)
     expect(erroDoPeriodo(inicio, new Date(2026, 9, 30, 14), false)).toMatch(/fim precisa/)
     expect(erroDoPeriodo(inicio, new Date(2026, 9, 30, 15), false)).toBeNull()
+  })
+})
+
+describe('conflitosEmAberto', () => {
+  const pares = findConflicts([timed('a', 15, 0, 17, 0), timed('b', 15, 0, 16, 0)], () => true)
+
+  it('o choque vale enquanto o cruzamento não terminou, antes e durante', () => {
+    expect(conflitosEmAberto(pares, at(monday, 8, 19))).toHaveLength(1)
+    expect(conflitosEmAberto(pares, at(monday, 15, 30))).toHaveLength(1)
+  })
+
+  it('termina quando o primeiro dos dois compromissos termina, mesmo com o outro ainda rolando', () => {
+    // b acabou às 16:00; a segue até 17:00, mas já não há cruzamento.
+    expect(conflitosEmAberto(pares, at(monday, 16, 0))).toHaveLength(0)
+    expect(conflitosEmAberto(pares, at(monday, 16, 30))).toHaveLength(0)
+  })
+})
+
+describe('restoDoVao', () => {
+  const vao = { start: at(monday, 8, 0), end: at(monday, 12, 0) }
+
+  it('vão que ainda não começou ou que já passou mostra o intervalo inteiro', () => {
+    expect(restoDoVao(vao, at(monday, 7, 0))).toEqual({ emCurso: false, minutos: 240 })
+    expect(restoDoVao(vao, at(monday, 12, 0))).toEqual({ emCurso: false, minutos: 240 })
+    expect(restoDoVao(vao, at(monday, 13, 0))).toEqual({ emCurso: false, minutos: 240 })
+  })
+
+  it('em outro dia que não hoje (sem "agora"), é sempre o intervalo inteiro', () => {
+    expect(restoDoVao(vao)).toEqual({ emCurso: false, minutos: 240 })
+    expect(restoDoVao(vao, null)).toEqual({ emCurso: false, minutos: 240 })
+  })
+
+  it('com o agora dentro dele, só conta o que resta', () => {
+    expect(restoDoVao(vao, at(monday, 8, 19))).toEqual({ emCurso: true, minutos: 221 })
+    expect(restoDoVao(vao, at(monday, 8, 0))).toEqual({ emCurso: true, minutos: 240 })
+    expect(restoDoVao(vao, at(monday, 11, 59))).toEqual({ emCurso: true, minutos: 1 })
   })
 })

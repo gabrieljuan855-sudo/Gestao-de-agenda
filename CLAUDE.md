@@ -126,6 +126,18 @@ caro, porque ele comunica a coisa errada mesmo bem pintado:
   ou diálogo de tela cheia), não o painel estreito de uma ferramenta rápida.
 - **Estados** → hover, foco e pressionado existem no MD3 e não são enfeite; é
   por eles que se sabe que algo é clicável.
+- **Contraste** → texto passa de 4,5:1 sobre a superfície em que está, nos dois
+  temas, e se **mede** (amostrar a captura ou o estilo calculado), não se
+  estima de olho: o texto apagado do escuro estava em 3,2:1 e o do claro em
+  1,7:1 sem que ninguém notasse. Não empilhar `opacity` sobre texto de cor já
+  apagada — a soma foi o que derrubou os vãos livres a 2,6:1.
+- **Cartão clicável** → o título é o `<button>` de verdade (`.titulo-botao`) e
+  o cartão leva `.clicavel` para o hover e o pressionado. Nunca `role="button"`
+  em contêiner que guarda outros botões: filhos de um botão não são expostos
+  aos leitores de tela.
+- **Alerta × informação** → o âmbar é de quem pede atenção (choque de horário,
+  "Agora"). "Próximo" e o resto são neutros; duas barras âmbar empilhadas
+  viram uma só aos olhos.
 
 Os papéis de cor e as formas já estão em `src/index.css` como tokens. Usar os
 tokens, nunca valores soltos.

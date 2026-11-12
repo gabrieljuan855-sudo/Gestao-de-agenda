@@ -326,9 +326,23 @@ function LinhaDeTarefa({ task, origem, onEditar, onConcluir }) {
   const atrasada = isOverdueTask(task)
   const concluida = task.status === 'completed'
   return (
-    <div className={`aguardando-item projeto-tarefa${atrasada ? ' is-atrasada' : ''}`} onClick={() => onEditar(task)}>
+    <div
+      className={`aguardando-item projeto-tarefa clicavel${atrasada ? ' is-atrasada' : ''}`}
+      onClick={() => onEditar(task)}
+    >
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div className={`projeto-tarefa-titulo${concluida ? ' is-concluida' : ''}`}>{task.title}</div>
+        <div className={`projeto-tarefa-titulo${concluida ? ' is-concluida' : ''}`}>
+          <button
+            type="button"
+            className="titulo-botao"
+            onClick={(e) => {
+              e.stopPropagation()
+              onEditar(task)
+            }}
+          >
+            {task.title}
+          </button>
+        </div>
         <div className="muted t-label-sm">
           {!concluida && <span className={`pill ${task.priority}`}>{PRIORITY_LABEL[task.priority]}</span>}
           {origem && <span style={{ marginLeft: 8 }}>{origem}</span>}
