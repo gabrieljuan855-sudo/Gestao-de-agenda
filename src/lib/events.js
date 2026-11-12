@@ -93,6 +93,22 @@ export function findConflicts(events, occupies = () => true) {
   return pairs
 }
 
+// Dos pares de findConflicts, os que ainda valem num dado instante. O
+// cruzamento termina quando o primeiro dos dois compromissos termina, e um
+// choque que já acabou não se resolve mais: avisar dele o dia todo era ruído.
+export function conflitosEmAberto(pares, agora) {
+  return pares.filter(([a, b]) => Math.min(eventEnd(a), eventEnd(b)) > agora)
+}
+
+// O vão livre visto de um instante. Se o "agora" cai dentro dele, só o que
+// resta conta — é o que o painel de próximas ações já diz ("Livre agora até
+// 12:00 · 3h41"), e a linha do tempo não pode contradizê-lo. Sem `agora`
+// (outro dia que não hoje), é sempre o intervalo inteiro.
+export function restoDoVao(vao, agora = null) {
+  const emCurso = Boolean(agora) && vao.start <= agora && vao.end > agora
+  return { emCurso, minutos: Math.round((vao.end - (emCurso ? agora : vao.start)) / 60000) }
+}
+
 // `occupies` permite excluir do cálculo os eventos que não consomem o seu
 // tempo: agenda informativa, ou compromisso de presença não confirmada.
 export function busyMinutesOn(events, day, occupies = () => true) {

@@ -110,20 +110,26 @@ export default function Backlog({
       <div
         key={task.id}
         onClick={() => !done && onEdit(task)}
-        style={{
-          border: isActive ? '2px solid var(--on-surface)' : atrasada ? '1px solid var(--urgent)' : '1px solid var(--border)',
-          borderRadius: 10,
-          padding: '8px 12px',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          cursor: done ? 'default' : 'pointer',
-          opacity: done ? 0.6 : 1,
-        }}
+        className={`tarefa-cartao${done ? ' is-feita' : ' clicavel'}${atrasada ? ' is-atrasada' : ''}${isActive ? ' is-ativa' : ''}`}
       >
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontWeight: 500, fontSize: 'var(--body-md)', textDecoration: done ? 'line-through' : 'none' }}>
-            {task.title}
+            {/* Ver o título-botão em DayView: o cartão guarda outros botões,
+                então o botão de verdade é o título. */}
+            {done ? (
+              task.title
+            ) : (
+              <button
+                type="button"
+                className="titulo-botao"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onEdit(task)
+                }}
+              >
+                {task.title}
+              </button>
+            )}
           </div>
           {/* Cada informação é um bloco que não se parte: a linha quebra entre
               elas, nunca no meio ("09 de / out.", "Próximas / ações"). */}
@@ -151,11 +157,11 @@ export default function Backlog({
             {!done && age !== null && age >= 3 && <span>parado há {age} dias</span>}
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 4, flexShrink: 0, marginLeft: 8 }}>
+        <div className="tarefa-acoes">
           {!done && onFocus && (
             <IconButton
               label={emFoco ? 'Ver foco' : 'Focar'}
-              className={emFoco ? 'icon-btn--live' : ''}
+              className={emFoco ? 'icon-btn--live' : 'icon-btn--quieto'}
               onClick={(e) => { e.stopPropagation(); onFocus(task) }}
             >
               <FocusIcon />
@@ -164,6 +170,7 @@ export default function Backlog({
           {!done && vaoAgora && onAgendar && (
             <IconButton
               label="Agendar neste vão livre"
+              className="icon-btn--quieto"
               onClick={(e) => { e.stopPropagation(); onAgendar(task, { start: new Date(), end: vaoAgora.end }) }}
             >
               <AgendarIcon />

@@ -35,24 +35,34 @@
   --surface-container: #ede4d4;
   --surface-variant: #f6f0e6;
   --on-surface: #4a3520;
-  --on-surface-variant: #b88859;
+  /* Texto secundário. Era #b88859, o caramelo da marca: 3,1:1 sobre a página e
+     2,5:1 sobre o cartão — pálido demais para texto de 11 a 13px. Este é o
+     mesmo caramelo (mesmo matiz e saturação), só mais escuro, o mais claro que
+     ainda passa de 4,5:1 sobre as três superfícies. O caramelo original segue
+     nas bordas (--outline), onde contraste de texto não se aplica. */
+  --on-surface-variant: #845e39;
   /* Item que sobe de dentro de um cartão (a linha de um projeto, a próxima
      ação em destaque). No claro coincide com a página; no escuro precisa ser
      mais claro que o cartão — usar a cor da página ali fazia o destaque virar
      um buraco preto. */
   --surface-raised: #fffcf7;
-  --on-surface-muted: #c4ac95;
+  /* No claro não sobra um degrau abaixo do secundário: o secundário já é o
+     tom mais claro que ainda se lê. A hierarquia fica por tamanho e peso (e,
+     no escuro, onde há espaço, pelo degrau de cor). Era #c4ac95, 1,7:1. */
+  --on-surface-muted: #845e39;
 
   --outline: #b88859;
   --outline-variant: #c4ac95;
 
   /* Prioridades e erro, também em pares — derivados das cores categóricas
      do Chocolate (vermelho/laranja/verde) tingindo a própria superfície. */
-  --urgent: #cc0000;
+  /* Cada cor foi escurecida só o bastante (mesmo matiz) para o texto dela
+     passar de 4,5:1 sobre o próprio container: estavam em 4,1, 3,9 e 3,9. */
+  --urgent: #bd0000;
   --urgent-container: #ffcac6;
-  --important: #a06018;
+  --important: #925816;
   --important-container: #f3e1cc;
-  --low: #5a7a00;
+  --low: #537000;
   --low-container: #e2e8c6;
 
   /* A tela cheia do foco é escura nos dois temas de propósito: ela existe
@@ -172,7 +182,11 @@
     --surface-raised: #2f2a27;
     --on-surface: #ece6e1;
     --on-surface-variant: #b9aea6;
-    --on-surface-muted: #7d736c;
+    /* Texto terciário (vãos livres, rótulo de período, "parado há N dias").
+       Era #7d736c: 3,7:1 sobre o cartão e 3,2:1 sobre o item, abaixo dos 4,5:1
+       que texto de 11px pede. Este chega a 5,6:1 e 5,0:1 e continua um degrau
+       abaixo do secundário (7,8:1). */
+    --on-surface-muted: #9d938b;
 
     --outline: #675d56;
     --outline-variant: #3a3431;
@@ -608,6 +622,14 @@ button.danger:hover { background: var(--urgent-bg); }
   border-color: var(--accent);
   color: var(--accent);
 }
+
+/* Ação secundária de uma linha de lista: sem o anel até receber o mouse ou o
+   foco. Com os três botões em anel, cada cartão tinha três círculos iguais e
+   a ação que se usa o tempo todo (concluir) não se destacava das outras duas;
+   assim só ela fica com o anel. O alvo de toque continua de 40px. */
+.icon-btn--quieto { border-color: transparent; }
+.icon-btn--quieto:hover,
+.icon-btn--quieto:focus-visible { border-color: var(--outline-variant); }
 
 .form-error {
   background: var(--urgent-bg);
@@ -2115,8 +2137,74 @@ textarea.nota-corpo:focus-visible { outline: none; }
 }
 
 .now-banner.muted { background: var(--surface-2); border-color: var(--border); }
+/* "Próximo" é informação, não alerta: neutro, para não competir com o aviso de
+   choque (âmbar) que costuma vir logo acima. */
+.now-banner--proximo { background: var(--surface-2); border-color: var(--border); }
 
 .day-event { padding: 6px 10px; border-radius: var(--shape-xs); }
+
+/* Cartão clicável para o mouse (o cartão inteiro abre), com a camada de estado
+   do MD3 — hover e pressionado — que os botões já recebem de `button::after`.
+   Sem ela só o cursor dizia que dava para abrir. O foco do teclado vai no
+   título (.titulo-botao), que é o botão de verdade. */
+.clicavel { position: relative; cursor: pointer; }
+.clicavel::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: currentColor;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-short) var(--ease-standard);
+}
+.clicavel:hover::after { opacity: calc(var(--state-hover) / 100%); }
+.clicavel:active::after { opacity: calc(var(--state-press) / 100%); }
+
+/* O título de um cartão clicável: <button> com cara de texto. É por ele que o
+   teclado e o leitor de tela entram; o cartão não pode ser role="button"
+   porque guarda outros botões (concluir, "Vou / Não vou"), e filhos de um
+   botão não são expostos aos leitores de tela. A camada de estado é a do
+   cartão, então a do próprio botão fica desligada (senão somavam 16%). */
+.titulo-botao {
+  display: block;
+  width: 100%;
+  min-height: 0;
+  padding: 0;
+  border: none;
+  border-radius: var(--shape-xs);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  text-decoration: inherit;
+}
+.titulo-botao::after { display: none; }
+
+/* Em qual compromisso este cartão bate: âmbar, o mesmo do aviso do topo. */
+.day-event-conflito {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-top: 3px;
+  font-size: var(--label-sm);
+  color: var(--important);
+}
+
+/* Compromissos de dia inteiro: barra com a cor da agenda à esquerda, como os
+   cartões da linha do tempo (a cor vem inline, de corDaAgenda). */
+.day-allday-lista { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.day-allday {
+  min-height: 28px;
+  padding: 4px 10px;
+  border: none;
+  border-left: 3px solid var(--border-strong);
+  border-radius: var(--shape-xs);
+  background: var(--surface-2);
+  color: var(--on-surface);
+  font-size: var(--label-md);
+  text-align: left;
+}
 
 /* Informativo ou presença recusada: continua visível, mas em segundo plano. */
 .day-event--aside { opacity: 0.55; }
@@ -2156,11 +2244,15 @@ textarea.nota-corpo:focus-visible { outline: none; }
   border-radius: var(--shape-xs);
   padding: 3px 10px;
   font-size: var(--label-sm);
+  /* Sem `opacity` aqui: ela se somava à cor já apagada e levava o texto a
+     2,6:1 no escuro e 1,5:1 no claro. O tracejado sem preenchimento já diz
+     que é um espaço, não um compromisso. */
   color: var(--text-muted);
-  opacity: 0.75;
 }
 
-.free-slot--passou { opacity: 0.4; }
+/* Vão que já passou: mais quieto, no mesmo grau dos compromissos passados
+   (.day-event--aside, 0.55), e não ilegível como era com 0.4. */
+.free-slot--passou { opacity: 0.55; }
 
 .day-period-header {
   font-size: var(--label-sm);
@@ -2475,7 +2567,11 @@ textarea.nota-corpo:focus-visible { outline: none; }
 .projeto-secao-cabeca { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 
 .projeto-tarefa { cursor: pointer; }
-.projeto-tarefa.is-atrasada { border-color: var(--urgent); }
+.projeto-tarefa.is-atrasada {
+  /* Barra à esquerda, não anel inteiro: ver .tarefa-cartao.is-atrasada. */
+  border-left: 3px solid var(--urgent);
+  padding-left: 8px;
+}
 .projeto-tarefa-titulo { font-weight: 500; font-size: var(--body-md); overflow-wrap: anywhere; }
 .projeto-tarefa-titulo.is-concluida { text-decoration: line-through; color: var(--on-surface-variant); }
 
@@ -3231,6 +3327,25 @@ textarea.quickadd-campo {
   color: var(--on-surface);
   line-height: 1.4;
 }
+
+/* O cartão de tarefa das Próximas ações. */
+.tarefa-cartao {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--shape-sm);
+}
+.tarefa-cartao.is-feita { opacity: 0.6; }
+/* Atrasada: uma barra à esquerda (a mesma linguagem da barra de cor dos
+   compromissos) e a data em vermelho. O anel vermelho inteiro, repetido em
+   três ou quatro cartões seguidos, gritava tanto que o vermelho deixava de
+   dizer qual era a mais urgente. */
+.tarefa-cartao.is-atrasada { border-left: 3px solid var(--urgent); padding-left: 10px; }
+/* A tarefa em foco agora: o anel forte vence a barra. */
+.tarefa-cartao.is-ativa { border: 2px solid var(--on-surface); }
+.tarefa-acoes { display: flex; gap: 4px; flex-shrink: 0; margin-left: 8px; }
 
 /* Linha de informações da tarefa: cada pedaço inteiro, quebrando entre eles. */
 .tarefa-meta {

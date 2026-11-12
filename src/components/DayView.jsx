@@ -9,6 +9,8 @@ import {
   nextEvent,
   currentEvent,
   findConflicts,
+  conflitosEmAberto,
+  restoDoVao,
   tasksDueOn,
 } from '../lib/events.js'
 import { workBlocksFor, isWorkday } from '../lib/schedule.js'
@@ -80,8 +82,12 @@ function NextUp({ events }) {
   }
   if (next) {
     const faltam = Math.round((eventStart(next) - now) / 60000)
+    // Neutro, e não no âmbar do "Agora": o aviso de choque logo acima também
+    // é âmbar, e duas barras iguais empilhadas faziam o problema parecer só
+    // mais um aviso. O destaque fica para o que está acontecendo e para o
+    // que precisa de atenção.
     return (
-      <div className="now-banner">
+      <div className="now-banner now-banner--proximo">
         <strong>Próximo:</strong> {next.summary} · em {formatDuration(faltam)}
       </div>
     )
@@ -117,7 +123,17 @@ export default function DayView({
   const timed = dayEvents.filter((e) => !isAllDay(e))
   const gaps = findFreeGaps(events, date, workBlocksFor(date, schedule), { occupies })
   const folga = !isWorkday(date, schedule)
-  const conflicts = findConflicts(dayEvents, occupies)
+  // Hoje só vale o choque que ainda não terminou; em outros dias vale tudo,
+  // para quem está planejando ou revendo.
+  const todosOsChoques = findConflicts(dayEvents, occupies)
+  const conflicts = showNow ? conflitosEmAberto(todosOsChoques, now) : todosOsChoques
+  // O aviso do topo diz que há choque; achar QUAL cartão choca, num dia cheio,
+  // ficava por conta de quem olha. Cada cartão sabe com quem se cruza.
+  const chocaCom = new Map()
+  for (const [a, b] of conflicts) {
+    chocaCom.set(a, [...(chocaCom.get(a) || []), b])
+    chocaCom.set(b, [...(chocaCom.get(b) || []), a])
+  }
   // Tarefas com prazo neste dia: antes o único lugar onde uma tarefa a fazer
   // "hoje" aparecia era numa lista à parte (o Backlog) — a tela onde a pessoa
   // de fato executa o dia inteiro ignorava tarefa por completo.
@@ -178,23 +194,25 @@ export default function DayView({
           anunciado aqui como se fosse compromisso seu. */}
       {showNow && <NextUp events={timed.filter((e) => !declined(e) && !isInfo(e))} />}
 
+      {/* Compromisso de dia inteiro é compromisso, não filtro: leva a mesma
+          barra de cor da agenda dos cartões da linha do tempo. Era um chip com
+          anel inteiro na cor da agenda, e o de cor viva parecia um filtro
+          selecionado ao lado dos cinzas. */}
       {allDay.length > 0 && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
-          {allDay.map((event) => (
-            <span
-              key={event.id}
-              className="pill"
-              onClick={() => onSelectEvent && onSelectEvent(event)}
-              style={{
-                background: 'var(--surface-2)',
-                border: `1px solid ${corDaAgenda(event.calendarColor, 'var(--border-strong)')}`,
-                color: 'var(--text-secondary)',
-                cursor: onSelectEvent ? 'pointer' : 'default',
-              }}
-            >
-              {event.summary}
-            </span>
-          ))}
+        <div className="day-allday-lista">
+          {allDay.map((event) => {
+            const Marca = onSelectEvent ? 'button' : 'div'
+            return (
+              <Marca
+                key={event.id}
+                {...(onSelectEvent ? { type: 'button', onClick: () => onSelectEvent(event) } : {})}
+                className="day-allday"
+                style={{ borderLeftColor: corDaAgenda(event.calendarColor, 'var(--border-strong)') }}
+              >
+                {event.summary}
+              </Marca>
+            )
+          })}
         </div>
       )}
 
@@ -250,10 +268,16 @@ export default function DayView({
           const passou = showNow && item.end <= now
 
           if (item.kind === 'gap') {
-            const minutes = (item.gap.end - item.gap.start) / 60000
+            // O vão em que o "agora" cai já começou: dizer "livre 08:00–12:00
+            // · 4h" logo abaixo de "agora · 08:19" fazia parecer que as 4h
+            // ainda estavam inteiras, e contradizia o painel ao lado
+            // ("Livre agora até 12:00 · 3h41"). Aqui vale o que resta.
+            const { emCurso, minutos: minutes } = restoDoVao(item.gap, showNow ? now : null)
             return (
               <div key={`gap-${item.gap.start.getTime()}`} className={passou ? 'free-slot free-slot--passou' : 'free-slot'}>
-                livre {formatTime(item.gap.start)}–{formatTime(item.gap.end)} · {formatDuration(minutes)}
+                {emCurso
+                  ? `livre agora até ${formatTime(item.gap.end)} · ${formatDuration(minutes)}`
+                  : `livre ${formatTime(item.gap.start)}–${formatTime(item.gap.end)} · ${formatDuration(minutes)}`}
               </div>
             )
           }
@@ -291,16 +315,16 @@ export default function DayView({
           const pedePresenca = asksPresence(event)
           const presenca = presenceOf(event)
           const mostrarAgenda = event.calendarSummary && !event.calendarIsPrimary
+          const choques = chocaCom.get(event) || []
 
           return (
             <div
               key={event.id}
               onClick={() => onSelectEvent && onSelectEvent(event)}
-              className={info || recusado ? 'day-event day-event--aside' : 'day-event'}
+              className={`day-event${info || recusado ? ' day-event--aside' : ''}${onSelectEvent ? ' clicavel' : ''}`}
               style={{
                 borderLeft: `3px solid ${borderColor}`,
                 background: isFocus ? 'var(--accent-bg)' : 'var(--surface-2)',
-                cursor: onSelectEvent ? 'pointer' : 'default',
                 opacity: passou && !info && !recusado ? 0.55 : undefined,
               }}
             >
@@ -315,8 +339,36 @@ export default function DayView({
                 fontWeight: isFocus ? 500 : 400,
                 textDecoration: recusado ? 'line-through' : 'none',
               }}>
-                {event.summary}
+                {/* O título é o botão de verdade (teclado e leitor de tela
+                    entram por ele); o cartão todo continua clicável para o
+                    mouse. O cartão não vira role="button" porque guarda
+                    outros botões ("Vou / Não vou"), e filhos de um botão não
+                    são expostos aos leitores de tela. */}
+                {onSelectEvent ? (
+                  <button
+                    type="button"
+                    className="titulo-botao"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onSelectEvent(event)
+                    }}
+                  >
+                    {event.summary}
+                  </button>
+                ) : (
+                  event.summary
+                )}
               </div>
+
+              {choques.length > 0 && (
+                <div className="day-event-conflito">
+                  <span aria-hidden="true">⚠</span>
+                  <span>
+                    Choca com “{choques[0].summary || '(sem título)'}” ({formatTime(eventStart(choques[0]))}–{formatTime(eventEnd(choques[0]))})
+                    {choques.length > 1 && ` e mais ${choques.length - 1}`}
+                  </span>
+                </div>
+              )}
 
               {pedePresenca && !passou && (
                 <div className="presence-row" onClick={(e) => e.stopPropagation()}>
