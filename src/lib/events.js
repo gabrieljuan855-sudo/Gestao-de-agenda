@@ -1,4 +1,6 @@
 import { startOfDay, endOfDay, addDays, dateOnlyFromISO } from './dates.js'
+import { TASK_DONE_PROP } from './taskDoneEvent.js'
+import { FOCUS_TASK_PROP } from './focusStats.js'
 
 export function isAllDay(event) {
   return Boolean(event.start?.date && !event.start?.dateTime)
@@ -60,19 +62,31 @@ export function currentEvent(events, now = new Date()) {
   return events.find((e) => !isAllDay(e) && eventStart(e) <= now && eventEnd(e) > now) || null
 }
 
-// Pares de compromissos de agendas diferentes que se cruzam no tempo — o
-// tipo de erro que passa batido quando as agendas vêm de lugares diferentes
-// (a sua e a da gestão, por exemplo) e ninguém está olhando as duas juntas
-// na hora de marcar. Só compara o que de fato ocupa o seu tempo: um
-// informativo ou uma presença ainda não confirmada não é conflito de verdade.
+// Pares de compromissos que se cruzam no tempo. Valia só para agendas
+// diferentes, e o choque mais comum ficava de fora: dois atendimentos
+// marcados na mesma agenda, um por cima do outro. Agora conta qualquer par,
+// menos o que não é choque de verdade: o mesmo compromisso aparecendo em
+// duas agendas (convite que está na sua e na compartilhada), os registros
+// que o próprio app grava (bloco de foco, conclusão de tarefa) e o que não
+// ocupa o seu tempo (informativo, presença não confirmada — `occupies`).
+function ehRegistroDoApp(e) {
+  const props = e.extendedProperties?.private || {}
+  return Boolean(props[FOCUS_TASK_PROP] || props[TASK_DONE_PROP])
+}
+
+function mesmoCompromisso(a, b) {
+  if (a.id && a.id === b.id) return true
+  return Boolean(a.iCalUID && a.iCalUID === b.iCalUID && eventStart(a).getTime() === eventStart(b).getTime())
+}
+
 export function findConflicts(events, occupies = () => true) {
-  const timed = events.filter((e) => !isAllDay(e) && occupies(e))
+  const timed = events.filter((e) => !isAllDay(e) && occupies(e) && !ehRegistroDoApp(e))
   const pairs = []
   for (let i = 0; i < timed.length; i += 1) {
     for (let j = i + 1; j < timed.length; j += 1) {
       const a = timed[i]
       const b = timed[j]
-      if ((a.calendarId || 'primary') === (b.calendarId || 'primary')) continue
+      if (mesmoCompromisso(a, b)) continue
       if (eventStart(a) < eventEnd(b) && eventStart(b) < eventEnd(a)) pairs.push([a, b])
     }
   }
