@@ -2011,25 +2011,99 @@ textarea.nota-corpo:focus-visible { outline: none; }
   color: var(--text-secondary);
 }
 
-/* Cinco colunas, não sete: sábado e domingo saem da grade (ver WeekView.jsx). */
+/* Cinco colunas, não sete: sábado e domingo saem da grade (ver WeekView.jsx).
+   Com a tela larga, as colunas ganham respiro e o texto, tamanho de leitura:
+   o 11px de antes era de uma grade espremida e deixava a página quase vazia. */
+.week-resumo {
+  margin-bottom: 14px;
+  font-size: var(--body-md);
+  color: var(--on-surface-variant);
+}
+
 .week-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 6px;
+  gap: 12px;
 }
 
 .week-day {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
   border: 1px solid var(--border);
-  border-radius: var(--shape-sm);
-  padding: 8px 6px;
+  border-radius: var(--shape-md);
+  padding: 12px;
   cursor: pointer;
   background: var(--surface-1);
-  min-height: 92px;
+  min-height: 160px;
 }
+.week-day--hoje { border-color: var(--primary); }
 
 .week-day:hover { background: var(--surface-2); }
 
-.week-event { display: flex; align-items: center; gap: 4px; min-width: 0; }
+/* Cabeçalho do dia: a sigla pequena em cima e o número grande, como no Google
+   Agenda; hoje leva o número num círculo cheio. */
+.week-dia-topo { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.week-dia-data { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 32px; }
+.week-dia-nome { font-size: var(--label-md); color: var(--on-surface-variant); text-transform: uppercase; letter-spacing: 0.04em; }
+.week-dia-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  height: 32px;
+  padding: 0 4px;
+  border-radius: var(--shape-full);
+  font-family: var(--font-heading);
+  font-size: var(--title-lg);
+  line-height: 1;
+}
+.week-dia-num.is-hoje { background: var(--primary); color: var(--on-primary); }
+.week-dia-sinais { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; }
+.week-pill { font-size: var(--label-sm); padding: 2px 8px; }
+
+.week-lista { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.week-vazio { font-size: var(--body-sm); }
+.week-mais { font-size: var(--label-md); padding-left: 2px; }
+
+/* Cada compromisso é um cartão como os do Dia: barra com a cor da agenda, hora
+   em cima, título embaixo. O texto cai na mesma coluna dos outros cartões
+   (--recuo-linha menos a barra de 3px). */
+.week-event {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 6px 10px;
+  border-left: 3px solid var(--border-strong);
+  border-radius: var(--shape-xs);
+  background: var(--surface-2);
+}
+.week-event--prazo { border-left-color: var(--primary); }
+.week-event-hora { font-size: var(--label-md); color: var(--on-surface-variant); }
+.week-event-text {
+  min-width: 0;
+  font-size: var(--body-sm);
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.week-event .titulo-botao,
+.week-allday .week-event-text {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Dia inteiro: tira fina no topo, para não disputar com os horários. */
+.week-allday {
+  padding: 4px 10px;
+  border-left: 3px solid var(--border-strong);
+  border-radius: var(--shape-xs);
+  background: var(--surface-2);
+  cursor: pointer;
+}
+.week-allday .week-event-text { font-size: var(--label-md); }
 
 /* Mesmo tratamento da visão de dia: evento informativo ou recusado continua
    visível, só que apagado, pra não parecer compromisso de verdade. */
@@ -2040,13 +2114,6 @@ textarea.nota-corpo:focus-visible { outline: none; }
   height: 5px;
   border-radius: 50%;
   flex-shrink: 0;
-}
-
-.week-event-text {
-  font-size: var(--label-sm);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 /* A linha de aviso do fim de semana: nada marcado ali quase sempre, então
@@ -2500,7 +2567,6 @@ textarea.nota-corpo:focus-visible { outline: none; }
      semana vira uma lista de dias. */
   .week-grid { grid-template-columns: 1fr; }
   .week-day { min-height: 0; }
-  .week-event-text { font-size: var(--label-md); white-space: normal; }
 
   /* Alvos de toque confortáveis. */
   button { min-height: 40px; }
@@ -2727,18 +2793,6 @@ textarea.nota-corpo:focus-visible { outline: none; }
   .workspace--month .month-grid { flex: 1; min-height: 0; }
   .week-day { overflow: hidden; }
   .month-day { overflow: hidden; }
-
-  /* Com a coluna alta, o título do compromisso pode ocupar duas linhas em vez
-     de ser cortado no meio — é o detalhe que se quer ler na Semana. */
-  .week-event { align-items: flex-start; }
-  .week-event .week-dot { margin-top: 5px; }
-  .week-event-text {
-    white-space: normal;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    line-height: 1.35;
-  }
 
   /* ---------- barra de navegação (navigation rail do MD3) ---------- */
   .rail-wrap { display: contents; }

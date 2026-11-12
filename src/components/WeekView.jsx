@@ -9,6 +9,8 @@ import { quantosCabem } from '../lib/capacidade.js'
 // Com sábado e domingo fora, sobra espaço pra mostrar mais coisa por dia sem
 // a coluna virar uma lista cortada.
 const MAX_EVENTS = 6
+// Hora (1 linha) + título (até 2) + respiro do cartão + o espaço entre cartões.
+const ALTURA_DO_CARTAO = 66
 
 // A carga é relativa ao expediente daquele dia: 2h numa sexta (6h de
 // expediente) pesam mais do que 2h numa segunda (8h30).
@@ -69,7 +71,7 @@ export default function WeekView({
 
   return (
     <div className="card">
-      <div className="muted" style={{ marginBottom: 10 }}>
+      <div className="week-resumo">
         Semana · {formatDuration(weekMinutes)} de {formatDuration(weekCapacity)} de expediente
         {weekTasks > 0 && ` · ${weekTasks} ${weekTasks === 1 ? 'tarefa vence' : 'tarefas vencem'}`}
       </div>
@@ -77,79 +79,106 @@ export default function WeekView({
       <div className="week-grid" ref={gradeRef}>
         {days.map((day) => {
           const dayEvents = eventsOfDay(events, day)
+          // Dia inteiro vira uma tira no topo (como no Dia): não tem horário
+          // para encabeçar um cartão e, empilhado com os outros, empurrava a
+          // hora de quem vem depois.
+          const diaInteiro = dayEvents.filter((e) => isAllDay(e))
+          const comHora = dayEvents.filter((e) => !isAllDay(e))
           const level = loadLevel(busyMinutesOn(events, day, occupies), day, schedule)
           const dueToday = tasksDueOn(tasks, day)
-          // O que sobra da coluna depois do cabeçalho do dia, das tarefas que
-          // vencem nele e da linha do "+N" é para compromissos.
+          // O que sobra da coluna depois do cabeçalho do dia, da tira de dia
+          // inteiro, das tarefas que vencem nele e da linha do "+N" é para
+          // compromissos. Cada cartão tem hora + até duas linhas de título.
           const limite = quantosCabem(alturaDaGrade, {
-            alturaItem: 22,
-            reservado: 44 + dueToday.length * 22,
+            alturaItem: ALTURA_DO_CARTAO,
+            reservado: 76 + diaInteiro.length * 32 + dueToday.length * ALTURA_DO_CARTAO,
             minimo: MAX_EVENTS,
           })
-          const shown = dayEvents.slice(0, limite)
+          const shown = comHora.slice(0, limite)
           const hasConflict = findConflicts(dayEvents, occupies).length > 0
+          const hoje = isToday(day)
 
           return (
             <div
               key={day.toDateString()}
-              className="week-day"
+              className={`week-day${hoje ? ' week-day--hoje' : ''}`}
               onClick={() => onSelectDay && onSelectDay(day)}
-              style={{ borderColor: isToday(day) ? 'var(--border-strong)' : 'var(--border)' }}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 4 }}>
-                <span style={{ fontSize: 'var(--label-md)', fontWeight: isToday(day) ? 600 : 500 }}>
-                  {day.toLocaleDateString('pt-BR', { weekday: 'short' })} {day.getDate()}
+              <div className="week-dia-topo">
+                <span className="week-dia-data">
+                  <span className="week-dia-nome">{day.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '')}</span>
+                  <span className={`week-dia-num${hoje ? ' is-hoje' : ''}`}>{day.getDate()}</span>
                 </span>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                <span className="week-dia-sinais">
                   {/* Só um sinal discreto aqui — o aviso de verdade, com os
                       nomes dos compromissos, é o Banner do Dia. */}
                   {hasConflict && (
-                    <span className="pill alta" style={{ fontSize: 'var(--label-xs)', padding: '1px 6px' }} title="Compromissos que se cruzam neste dia">
+                    <span className="pill alta week-pill" title="Compromissos que se cruzam neste dia">
                       conflito
                     </span>
                   )}
-                  <span className={`pill ${level.className}`} style={{ fontSize: 'var(--label-xs)', padding: '1px 6px' }}>
-                    {level.label}
-                  </span>
+                  <span className={`pill ${level.className} week-pill`}>{level.label}</span>
                 </span>
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginTop: 6 }}>
+              <div className="week-lista">
                 {dayEvents.length === 0 && dueToday.length === 0 && (
-                  <span className="muted" style={{ fontSize: 'var(--label-sm)' }}>—</span>
+                  <span className="muted week-vazio">Nada marcado</span>
                 )}
+                {diaInteiro.map((event) => {
+                  const aside = declined(event) || isInfo(event)
+                  return (
+                    <div
+                      key={event.id}
+                      className={`week-allday${aside ? ' week-event--aside' : ''}${declined(event) ? ' is-declined' : ''}`}
+                      style={{ borderLeftColor: corDaAgenda(event.calendarColor, 'var(--border-strong)') }}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onSelectEvent && onSelectEvent(event)
+                      }}
+                    >
+                      <span className="week-event-text">{event.summary}</span>
+                    </div>
+                  )
+                })}
                 {shown.map((event) => {
                   const aside = declined(event) || isInfo(event)
                   return (
                     <div
                       key={event.id}
-                      className={`week-event${aside ? ' week-event--aside' : ''}${declined(event) ? ' is-declined' : ''}`}
+                      className={`week-event clicavel${aside ? ' week-event--aside' : ''}${declined(event) ? ' is-declined' : ''}`}
+                      style={{ borderLeftColor: corDaAgenda(event.calendarColor, 'var(--border-strong)') }}
                       onClick={(e) => {
                         // Sem isso o clique subiria para o dia e trocaria de visão.
                         e.stopPropagation()
                         onSelectEvent && onSelectEvent(event)
                       }}
                     >
-                      <span
-                        className="week-dot"
-                        style={{ background: corDaAgenda(event.calendarColor) }}
-                      />
+                      <span className="week-event-hora">
+                        {formatTime(eventStart(event))}–{formatTime(eventEnd(event))}
+                      </span>
                       <span className="week-event-text">
-                        {!isAllDay(event) &&
-                          `${formatTime(eventStart(event))}–${formatTime(eventEnd(event))} `}
-                        {event.summary}
+                        <button
+                          type="button"
+                          className="titulo-botao"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            onSelectEvent && onSelectEvent(event)
+                          }}
+                        >
+                          {event.summary}
+                        </button>
                       </span>
                     </div>
                   )
                 })}
-                {dayEvents.length > limite && (
-                  <span className="muted" style={{ fontSize: 'var(--label-xs)' }}>+{dayEvents.length - limite} mais</span>
+                {comHora.length > limite && (
+                  <span className="muted week-mais">+{comHora.length - limite} mais</span>
                 )}
                 {dueToday.map((task) => (
                   <div
                     key={task.id}
-                    className="week-event"
-                    style={{ opacity: 0.85, cursor: onSelectTask ? 'pointer' : 'default' }}
+                    className={`week-event week-event--prazo${onSelectTask ? ' clicavel' : ''}`}
                     onClick={(e) => {
                       // Mesma razão do stopPropagation no evento acima: sem
                       // isso o clique subiria e trocaria de visão.
@@ -157,8 +186,19 @@ export default function WeekView({
                       onSelectTask && onSelectTask(task)
                     }}
                   >
-                    <span className="week-dot" style={{ background: 'var(--important)' }} />
-                    <span className="week-event-text">prazo: {task.title}</span>
+                    <span className="week-event-hora">prazo</span>
+                    <span className="week-event-text">
+                        <button
+                          type="button"
+                          className="titulo-botao"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            onSelectTask && onSelectTask(task)
+                          }}
+                        >
+                          {task.title}
+                        </button>
+                      </span>
                   </div>
                 ))}
               </div>
