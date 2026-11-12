@@ -73,9 +73,22 @@ describe('findConflicts', () => {
     expect(conflicts[0].map((e) => e.id).sort()).toEqual(['a', 'b'])
   })
 
-  it('não conta como conflito compromissos da mesma agenda', () => {
-    const events = [timed('a', 9, 0, 10, 0, 'pessoal'), timed('b', 9, 30, 10, 30, 'pessoal')]
-    expect(findConflicts(events, () => true)).toHaveLength(0)
+  it('acha também o choque dentro da mesma agenda (dois atendimentos no mesmo horário)', () => {
+    const events = [timed('a', 15, 0, 17, 0, 'creas'), timed('b', 15, 0, 16, 0, 'creas')]
+    expect(findConflicts(events, () => true)).toHaveLength(1)
+  })
+
+  it('o mesmo compromisso em duas agendas não é choque', () => {
+    const a = { ...timed('a', 9, 0, 10, 0, 'pessoal'), iCalUID: 'x@google.com' }
+    const b = { ...timed('b', 9, 0, 10, 0, 'gestao'), iCalUID: 'x@google.com' }
+    expect(findConflicts([a, b], () => true)).toHaveLength(0)
+  })
+
+  it('registro do próprio app (foco, conclusão) não é choque', () => {
+    const reuniao = timed('a', 9, 0, 10, 0)
+    const foco = { ...timed('f', 9, 0, 9, 25), extendedProperties: { private: { gestaoAgendaTarefaId: 't1' } } }
+    const feito = { ...timed('d', 9, 10, 9, 11), extendedProperties: { private: { agendaTarefaConcluida: 't2' } } }
+    expect(findConflicts([reuniao, foco, feito], () => true)).toHaveLength(0)
   })
 
   it('não conta compromissos que não se tocam no tempo', () => {
