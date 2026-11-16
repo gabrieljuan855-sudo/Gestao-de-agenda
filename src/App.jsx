@@ -51,6 +51,10 @@ import Aguardando from './components/Aguardando.jsx'
 import ProjetosPainel from './components/ProjetosPainel.jsx'
 import useProjetos from './lib/useProjetos.js'
 import useNovaVersao from './lib/useNovaVersao.js'
+import useGuardaRoupa from './lib/useGuardaRoupa.js'
+import { lookDoDia, dataLocalDe } from './lib/guardaRoupa.js'
+import GuardaRoupa from './components/GuardaRoupa.jsx'
+import LookDoDia from './components/LookDoDia.jsx'
 import { listarProjetos, projetosForaDaCobranca } from './lib/projetos.js'
 import Trabalho from './components/Trabalho.jsx'
 import HorarioTrabalho from './components/HorarioTrabalho.jsx'
@@ -428,6 +432,7 @@ export default function App() {
   })
   const notesState = useNotes({ signedIn })
   const projetosState = useProjetos({ signedIn })
+  const guardaRoupa = useGuardaRoupa({ signedIn })
   const novaVersao = useNovaVersao()
   // Qual painel do trilho está aberto. Mora aqui, e não dentro do Rail, porque
   // os atalhos de teclado também precisam abrir e fechar esses painéis.
@@ -1158,6 +1163,19 @@ export default function App() {
         />
       ),
     },
+    {
+      id: 'guarda-roupa',
+      label: 'Guarda-roupa',
+      // Uma grade de fotos pede a tela, como as Anotações e os Projetos.
+      wide: true,
+      icon: (
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 8a2 2 0 1 0-2-2" />
+          <path d="M12 8v2l8.5 6a1.5 1.5 0 0 1-.9 2.7H4.4a1.5 1.5 0 0 1-.9-2.7L12 10" />
+        </svg>
+      ),
+      render: () => <GuardaRoupa guardaRoupa={guardaRoupa} />,
+    },
   ]
 
   // A Entrada é a mesma na aba do painel e na primeira etapa da revisão.
@@ -1318,6 +1336,18 @@ export default function App() {
                 </button>
               )}
             </div>
+          )}
+
+          {/* O look é o de hoje: só faz sentido na tela inicial (o Dia de
+              hoje), não ao folhear outros dias. */}
+          {view === 'day' && isSameDay(reference, new Date()) && (
+            <LookDoDia
+              look={lookDoDia(guardaRoupa.looks, dataLocalDe(new Date()))}
+              pecas={guardaRoupa.pecas}
+              temPecas={guardaRoupa.pecas.length > 0}
+              onResponder={guardaRoupa.responderLook}
+              onAbrirGuardaRoupa={() => setRailAberto('guarda-roupa')}
+            />
           )}
 
           <ErrorBoundary key={view}>

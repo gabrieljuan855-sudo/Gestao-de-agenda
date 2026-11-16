@@ -381,7 +381,7 @@ export const {
 
 // ---------- arquivos dos projetos no Drive ----------
 
-export const { pastaDoProjeto, criarArquivoGoogle, renomearArquivo, mandarParaLixeira } = criarDriveDosProjetos(request)
+export const { pastaDoProjeto, pastaDoGuardaRoupa, criarArquivoGoogle, renomearArquivo, mandarParaLixeira } = criarDriveDosProjetos(request)
 
 // O conteúdo de um arquivo do Drive, para pré-visualizar ou baixar dentro
 // do app. Pelo token, e não pelo link do Drive: o app instalado no iPhone não

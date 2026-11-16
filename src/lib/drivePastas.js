@@ -13,6 +13,7 @@
 const API = 'https://www.googleapis.com/drive/v3/files'
 const PASTA = 'application/vnd.google-apps.folder'
 export const NOME_DA_PASTA_RAIZ = 'Segundo Cérebro'
+export const NOME_DA_PASTA_DO_GUARDA_ROUPA = 'Guarda-roupa'
 // O que o projeto precisa saber de cada arquivo (ver arquivoDoDrive).
 export const CAMPOS_DO_ARQUIVO = 'id,name,mimeType,webViewLink,size'
 
@@ -48,6 +49,15 @@ export function criarDriveDosProjetos(request) {
     const raiz = await acharOuCriarPasta(NOME_DA_PASTA_RAIZ, 'root')
     const pasta = await acharOuCriarPasta(projeto.nome || projeto.id, raiz.id)
     return { pasta: { id: pasta.id, url: pasta.webViewLink }, nova: true }
+  }
+
+  // A pasta das fotos das peças: "Segundo Cérebro/Guarda-roupa". Procurada
+  // pelo nome a cada vez, como a raiz — é uma só, e não há ficha onde guardar
+  // o id dela.
+  async function pastaDoGuardaRoupa() {
+    const raiz = await acharOuCriarPasta(NOME_DA_PASTA_RAIZ, 'root')
+    const pasta = await acharOuCriarPasta(NOME_DA_PASTA_DO_GUARDA_ROUPA, raiz.id)
+    return { id: pasta.id, url: pasta.webViewLink }
   }
 
   // Documento, Planilha ou Apresentação do Google, já dentro da pasta.
@@ -102,5 +112,5 @@ export function criarDriveDosProjetos(request) {
     })
   }
 
-  return { pastaDoProjeto, criarArquivoGoogle, renomearArquivo, mandarParaLixeira, criarDocumentoComTexto }
+  return { pastaDoProjeto, pastaDoGuardaRoupa, criarArquivoGoogle, renomearArquivo, mandarParaLixeira, criarDocumentoComTexto }
 }

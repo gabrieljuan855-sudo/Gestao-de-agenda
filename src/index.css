@@ -3794,3 +3794,137 @@ button.projeto-arquivo {
 .projetos-criar .projetos-novo { margin-bottom: 0; }
 .projetos-modelos { display: flex; flex-wrap: wrap; gap: 6px; }
 .projetos-modelo-dica { margin: 0; }
+
+/* ---------- guarda-roupa ---------- */
+
+.guarda-roupa { display: flex; flex-direction: column; gap: 16px; }
+.gr-topo { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; }
+.gr-adicionar { display: flex; flex-wrap: wrap; gap: 8px; }
+.gr-adicionar button { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; }
+.gr-resumo { margin: 0; }
+
+.gr-filtros { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 16px; }
+.gr-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+/* Chip de filtro do MD3: 32dp nos dois tamanhos de tela. */
+.gr-chips .pill-filtro { min-height: 32px; padding: 4px 12px; font-size: var(--label-md); }
+.gr-ordem { min-width: 220px; }
+
+/* A grade: colunas que se ajustam à largura, de duas no celular a seis ou
+   mais na tela larga, sem ponto de quebra escrito à mão. */
+.gr-grade {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+}
+.gr-peca {
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--shape-md);
+  background: var(--surface-raised);
+  overflow: hidden;
+  box-shadow: var(--elevation-1);
+}
+/* Desativada: a foto perde a cor, o texto não — texto apagado por opacidade
+   cai abaixo do contraste mínimo. */
+.gr-peca.is-inativa .gr-foto { filter: grayscale(1); opacity: 0.6; }
+.gr-foto {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+  background: var(--surface-variant);
+}
+.gr-foto.is-vazia { display: flex; align-items: center; justify-content: center; color: var(--outline); }
+.gr-peca-texto { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px 10px; min-width: 0; }
+.gr-peca-nome {
+  font-size: var(--body-md);
+  font-weight: 600;
+  color: var(--on-surface);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gr-peca-meta { font-size: var(--label-md); color: var(--on-surface-variant); }
+.gr-peca-marcas { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.gr-marca { background: var(--primary-container); color: var(--on-primary-container); }
+.gr-peca.is-enviando progress { width: 100%; accent-color: var(--primary); }
+
+.gr-vazio { padding: 48px 16px; text-align: center; max-width: 460px; margin: 0 auto; }
+.gr-vazio p { margin: 0 0 8px; }
+.gr-sem-resultado { text-align: center; margin: 0; }
+
+/* O editor: foto de um lado e campos do outro onde há largura; empilhados
+   no celular, onde o diálogo é de tela cheia. */
+/* Com `.modal-card > form` na frente: a regra geral dos formulários de
+   diálogo (coluna única) tem mais especificidade que a classe sozinha. */
+.modal-card > form.gr-editor { display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr); align-items: start; gap: 20px; overflow-y: auto; }
+.gr-editor-foto { display: flex; flex-direction: column; gap: 8px; }
+.gr-editor-foto .gr-foto { border-radius: var(--shape-md); }
+.gr-editor-foto p { margin: 0; }
+.gr-editor-campos { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.gr-editor-dica { margin: 0; }
+/* O painel largo estica todo textarea para a altura da tela (é feito para a
+   anotação); as observações de uma peça são um campo curto. */
+.rail-panel.is-wide textarea.gr-observacoes { min-height: 0; }
+.gr-ativa { display: flex; align-items: flex-start; gap: 8px; cursor: pointer; font-size: var(--body-md); }
+.gr-ativa input { margin-top: 2px; }
+.gr-ativa > span { display: flex; flex-direction: column; gap: 2px; }
+.gr-ativa small { font-size: var(--label-md); color: var(--on-surface-variant); }
+@media (max-width: 700px) {
+  .modal-card > form.gr-editor { grid-template-columns: minmax(0, 1fr); }
+  .gr-editor-foto .gr-foto { max-height: 40vh; object-fit: contain; }
+  .gr-ordem { min-width: 0; flex: 1; }
+  .gr-grade { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
+}
+
+/* ---------- look do dia (tela inicial) ---------- */
+
+.look-do-dia { display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; }
+.look-cabeca { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 12px; }
+.look-rotulo { margin: 0; font-size: var(--title-md); font-weight: 600; color: var(--on-surface); }
+.look-clima { font-size: var(--body-sm); color: var(--on-surface-variant); }
+.look-pecas {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.look-pecas li { flex: 0 0 104px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.look-pecas .gr-foto { border-radius: var(--shape-sm); }
+.look-pecas span {
+  font-size: var(--label-md);
+  color: var(--on-surface-variant);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.look-texto { margin: 0; font-size: var(--body-md); white-space: pre-wrap; }
+.look-aviso { margin: 0; }
+.look-acoes { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
+.look-acoes button { min-height: 40px; }
+.look-resposta { flex: 1; min-width: 0; font-size: var(--body-sm); color: var(--on-surface-variant); }
+.look-motivo { display: flex; flex-direction: column; gap: 10px; }
+/* Botão de texto do MD3: a saída secundária, sem contorno. */
+.look-link {
+  border: none;
+  background: transparent;
+  color: var(--primary);
+  padding: 6px 12px;
+  font-size: var(--body-sm);
+}
+/* Sem look: uma linha discreta, sem cartão, para não disputar com a agenda. */
+.look-do-dia.is-vazio {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  margin-bottom: 12px;
+  padding: 0 4px;
+}
+.look-do-dia.is-vazio .look-rotulo { font-size: var(--body-sm); }

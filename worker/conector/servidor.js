@@ -14,10 +14,11 @@ import { criarArmazemNoDrive } from '../../src/lib/driveArquivos.js'
 import { criarDriveDosProjetos } from '../../src/lib/drivePastas.js'
 import { MODELOS } from '../../src/lib/modelosDeProjeto.js'
 import { PRIORITIES } from '../../src/lib/priority.js'
-import { criarRequest, traduzirErro } from './google.js'
+import { criarRequest, criarFotos, traduzirErro } from './google.js'
 import * as f from './ferramentas.js'
+import * as gr from './guardaRoupa.js'
 
-export const INSTRUCOES = `Segundo Cérebro é o sistema pessoal de tarefas e agenda desta pessoa, organizado pelo método GTD (David Allen), sobre o Google Tasks, o Google Calendar e anotações no Google Drive. Tudo o que você grava aparece no app dela.
+export const INSTRUCOES = `Segundo Cérebro é o sistema pessoal de tarefas e agenda desta pessoa, organizado pelo método GTD (David Allen), sobre o Google Tasks, o Google Calendar e anotações no Google Drive, e também o guarda-roupa dela. Tudo o que você grava aparece no app dela.
 
 Como o método se organiza:
 - Entrada: o que foi capturado e ainda não foi decidido. Capturar não exige decidir nada.
@@ -45,6 +46,12 @@ Projetos e arquivos:
 - Toda etiqueta de projeto usada numa tarefa ganha ficha automaticamente. Se listar_projetos apontar projeto "concluído" com pendências, pergunte à pessoa se é para reabrir ou concluir as tarefas; não decida sozinho.
 - listar_arquivos_projeto mostra os arquivos do projeto e os anexados às notas e tarefas dele. anexar_arquivo vincula um link ou cria um Documento do Google com um texto seu (uma ata, um rascunho de ofício). Arquivos enviados no chat (PDF, foto) não chegam ao conector: peça para a pessoa arrastar no app, na aba Arquivos do projeto.
 
+Guarda-roupa e look do dia:
+- A pessoa cadastra as peças de roupa no app, com foto. A peça nova entra como "pendente": falta alguém olhar a foto e dizer o que ela é. Esse alguém é você.
+- Classificar: listar_guarda_roupa com status "pendente", ver_peca em cada uma (a foto vem como imagem) e atualizar_peca com o que você enxerga — nome curto e reconhecível ("Camisa de linho azul-clara"), categoria, cor, ocasiões e temperaturas em que serve. Descreva só o que a foto mostra; na dúvida sobre o uso, registre em observações.
+- Look do dia (a rotina da manhã): 1) classifique as pendentes; 2) veja o clima do dia na cidade da pessoa (com a sua ferramenta de busca — o conector não tem previsão do tempo) e os compromissos com agenda; 3) leia historico_looks para não repetir o que ela usou nos últimos dias e para respeitar o que ela marcou "não gostei" e por quê; 4) escolha peças ativas e classificadas que combinem entre si, com o clima e com a ocasião do dia (em geral uma parte de cima, uma de baixo e um calçado, mais agasalho ou acessório se fizer sentido), dando vez às paradas há mais tempo; 5) grave com salvar_look_do_dia, com um texto curto dizendo por que esse look e o resumo do clima. O look aparece no cartão "Look do dia" da tela inicial do app.
+- A pessoa responde no app com "Usei este" ou "Não gostei". Se ela disser isso na conversa, use registrar_feedback_look. Nunca marque "usei" por conta própria.
+
 - Use os ids que as ferramentas devolvem; não invente ids, nomes de projeto ou datas. Datas sempre em AAAA-MM-DD, horários em HH:MM, fuso de Brasília.
 - Não há ferramenta de excluir: para descartar, sugira que ela faça no app.`
 
@@ -64,6 +71,9 @@ const FONTE = z.object({
   autor: z.string().trim().max(200).optional(),
   data: DATA.optional().describe('Data do material, se souber.'),
 })
+
+const CATEGORIA_DA_PECA = z.enum(gr.VALORES.categorias)
+const FEEDBACK_DO_LOOK = z.enum(['usei', 'nao_gostei'])
 
 const SO_LEITURA = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }
 const ESCRITA = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }
@@ -195,6 +205,38 @@ export const ESQUEMAS = {
     tipo: z.enum(['projeto', 'rotina']).optional(),
     prazo: DATA.nullable().optional(),
     situacao: z.enum(['ativo', 'pausado', 'concluido']).optional(),
+  }),
+  listar_guarda_roupa: z.object({
+    status: z.enum(['pendente', 'classificada', 'todas']).default('todas').describe('"pendente" traz só as que ainda precisam ser classificadas.'),
+    categoria: CATEGORIA_DA_PECA.optional().describe('Só desta categoria.'),
+    incluir_desativadas: z.boolean().default(false).describe('Incluir peças desativadas (que a pessoa tirou de circulação). Elas não entram em look.'),
+    limite: z.number().int().min(1).max(300).default(100),
+  }),
+  ver_peca: z.object({ id: ID.describe('Id da peça (de listar_guarda_roupa).') }),
+  atualizar_peca: z.object({
+    id: ID.describe('Id da peça (de listar_guarda_roupa).'),
+    nome: TEXTO_CURTO(120).optional().describe('Nome curto e reconhecível (ex.: "Calça jeans escura reta").'),
+    categoria: CATEGORIA_DA_PECA.optional(),
+    cor: z.string().trim().max(60).optional().describe('Cor principal, em palavras (ex.: "azul-marinho", "bege com listras brancas").'),
+    ocasioes: z.array(z.enum(gr.VALORES.ocasioes)).max(4).optional().describe('Em que ocasiões serve; pode ser mais de uma. Substitui as atuais.'),
+    temperaturas: z.array(z.enum(gr.VALORES.temperaturas)).max(3).optional().describe('Em que temperaturas serve; pode ser mais de uma. Substitui as atuais.'),
+    observacoes: z.string().trim().max(1000).optional().describe('O que mais importa saber (tecido, caimento, com o que combina, cuidado). Substitui as atuais.'),
+    ativa: z.boolean().optional().describe('false tira a peça dos looks. Só mude se a pessoa pedir.'),
+  }),
+  salvar_look_do_dia: z.object({
+    data: DATA.optional().describe('Dia do look (padrão: hoje).'),
+    pecas: z.array(ID).min(1).max(8).describe('Ids das peças do look (de listar_guarda_roupa).'),
+    texto: z.string().trim().min(1).max(2000).describe('Explicação curta para a pessoa: por que este look hoje (clima, compromissos, combinação).'),
+    clima: z.string().trim().max(300).optional().describe('Resumo do clima do dia (ex.: "18–27 °C, sol pela manhã, chuva à tarde").'),
+  }),
+  look_do_dia: z.object({ data: DATA.optional().describe('Dia do look (padrão: hoje).') }),
+  registrar_feedback_look: z.object({
+    data: DATA.optional().describe('Dia do look (padrão: hoje).'),
+    feedback: FEEDBACK_DO_LOOK.describe('"usei" ou "nao_gostei".'),
+    motivo: z.string().trim().max(500).optional().describe('O que a pessoa disse sobre o look (principalmente por que não gostou).'),
+  }),
+  historico_looks: z.object({
+    dias: z.number().int().min(1).max(90).default(14).describe('Quantos dias para trás, contando hoje.'),
   }),
 }
 
@@ -373,6 +415,62 @@ const FERRAMENTAS = [
     leitura: false,
     executar: f.criarProjetoDeModelo,
   },
+  {
+    nome: 'listar_guarda_roupa',
+    titulo: 'Listar guarda-roupa',
+    descricao:
+      'As peças de roupa da pessoa, sem as fotos: id, nome, categoria, cor, ocasiões, temperaturas, quantas vezes foi usada, a data do último uso e há quantos dias está parada (da parada há mais tempo para a mais recente). Filtra por status (pendente = ainda sem classificação) e categoria. Use antes de montar um look, para escolher entre as peças, e com status "pendente" para achar o que falta classificar. Para enxergar uma peça, use ver_peca.',
+    leitura: true,
+    executar: gr.listarGuardaRoupa,
+  },
+  {
+    nome: 'ver_peca',
+    titulo: 'Ver peça',
+    descricao:
+      'Os dados de uma peça e a FOTO dela como imagem, para você enxergar a roupa. Use em cada peça pendente antes de classificá-la com atualizar_peca, e quando precisar conferir se duas peças combinam. Traz uma peça por chamada.',
+    leitura: true,
+    executar: gr.verPeca,
+  },
+  {
+    nome: 'atualizar_peca',
+    titulo: 'Classificar peça',
+    descricao:
+      'Preenche ou corrige a classificação de uma peça (nome, categoria, cor, ocasiões, temperaturas, observações) e muda o status dela para "classificada". Só os campos enviados mudam. Use depois de ver_peca, descrevendo o que a foto mostra, e quando a pessoa pedir para corrigir uma peça.',
+    leitura: false,
+    executar: gr.atualizarPeca,
+  },
+  {
+    nome: 'salvar_look_do_dia',
+    titulo: 'Salvar look do dia',
+    descricao:
+      'Grava o look de uma data (padrão: hoje): as peças escolhidas, o texto que explica a escolha e o resumo do clima. É o que o app mostra no cartão "Look do dia". Se já houver look na data, substitui (e o feedback anterior é descartado). Antes, chame listar_guarda_roupa e historico_looks; só entram peças ativas.',
+    leitura: false,
+    executar: gr.salvarLookDoDia,
+  },
+  {
+    nome: 'look_do_dia',
+    titulo: 'Look do dia',
+    descricao:
+      'O look salvo para uma data (padrão: hoje): os nomes das peças, o texto, o clima e o feedback da pessoa. Use para saber se o look de hoje já foi montado, ou quando ela perguntar "o que eu visto hoje?".',
+    leitura: true,
+    executar: gr.verLookDoDia,
+  },
+  {
+    nome: 'registrar_feedback_look',
+    titulo: 'Registrar feedback do look',
+    descricao:
+      'Grava a resposta da pessoa a um look (padrão: o de hoje): "usei" ou "nao_gostei", com o motivo se ela disser. "usei" faz o mesmo que o botão "Usei este" do app: cada peça do look ganha um uso e a data do último uso (sem contar duas vezes). Use só quando a pessoa disser na conversa que usou ou que não gostou.',
+    leitura: false,
+    executar: gr.registrarFeedbackLook,
+  },
+  {
+    nome: 'historico_looks',
+    titulo: 'Histórico de looks',
+    descricao:
+      'Os looks dos últimos N dias (padrão: 14), do mais recente para o mais antigo, com as peças e o feedback de cada um. Chame antes de montar um look novo: para não repetir a combinação dos últimos dias e para aprender com o que foi marcado "não gostei" e por quê.',
+    leitura: true,
+    executar: gr.historicoLooks,
+  },
 ]
 
 export const NOMES_DAS_FERRAMENTAS = FERRAMENTAS.map((x) => x.nome)
@@ -385,6 +483,7 @@ export function montarApi(env, props) {
     agenda: criarApiDaAgenda(request),
     drive: criarArmazemNoDrive(request),
     pastas: criarDriveDosProjetos(request),
+    fotos: criarFotos(env, props),
   }
 }
 
@@ -394,8 +493,10 @@ export function montarApi(env, props) {
 export async function executarFerramenta(nome, args, { api, agora = new Date() }) {
   const ferramenta = FERRAMENTAS.find((x) => x.nome === nome)
   try {
-    const texto = await ferramenta.executar(api, agora, args, { traduzirErro })
-    return { content: [{ type: 'text', text: texto }] }
+    const saida = await ferramenta.executar(api, agora, args, { traduzirErro })
+    // Quase tudo devolve só texto. ver_peca devolve o conteúdo já montado,
+    // porque leva a foto da peça como imagem.
+    return typeof saida === 'string' ? { content: [{ type: 'text', text: saida }] } : saida
   } catch (err) {
     const texto = err instanceof f.ErroDeUso ? err.message : traduzirErro(err)
     if (!(err instanceof f.ErroDeUso)) console.warn('conector', nome, err?.status || '', err?.message)
