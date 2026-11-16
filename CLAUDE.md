@@ -101,6 +101,16 @@ uma pilha de branches que só atrapalha.
   (`anexosNoTexto.js`), porque o Google Tasks não tem campo de anexo e o id
   da tarefa pode mudar ao mover. Anexo de nota é o campo `anexos`. O
   conector não recebe binário: anexa link ou cria um Doc com texto.
+- Guarda-roupa: peças e looks moram em `guarda-roupa.json` (appDataFolder) e
+  as fotos, na pasta visível `Segundo Cérebro/Guarda-roupa` (`drive.file`),
+  reduzidas no navegador para 1024px (`imagemReduzida.js`). O app só
+  fotografa, mostra e recebe o "Usei este"/"Não gostei"; quem classifica as
+  peças e monta o look do dia é o Claude, pelo conector, numa tarefa agendada
+  de fora — **nenhuma chamada de IA sai do app para isso**. `ver_peca` é a
+  única ferramenta que devolve imagem (conteúdo MCP `image`). A regra de uso
+  (somar o uso, gravar a data, não contar duas vezes, desfazer) é uma só
+  para o botão e para a ferramenta: `registrarFeedback` em `guardaRoupa.js`.
+  As ferramentas ficam em `worker/conector/guardaRoupa.js`.
 - O app e o conector gravam nos mesmos arquivos do Drive: toda gravação é
   ler → mesclar → gravar (`mesclarParaGravar` em `notesMerge.js`), nunca a
   lista local por cima.

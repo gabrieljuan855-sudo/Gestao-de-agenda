@@ -70,6 +70,7 @@ export function criarArquivoNoDrive(nome, request) {
 export function criarArmazemNoDrive(request) {
   const arquivoDeAnotacoes = criarArquivoNoDrive('anotacoes.json', request)
   const arquivoDeProjetos = criarArquivoNoDrive('projetos.json', request)
+  const arquivoDoGuardaRoupa = criarArquivoNoDrive('guarda-roupa.json', request)
 
   // Devolve `null` quando não há estado utilizável no Drive — o arquivo ainda
   // não existe (ninguém gravou nada ainda) ou veio ilegível. Isso é diferente
@@ -103,5 +104,23 @@ export function criarArmazemNoDrive(request) {
     await arquivoDeProjetos.gravar(JSON.stringify({ projetos }))
   }
 
-  return { loadNotes, saveNotes, loadProjetos, saveProjetos }
+  // O guarda-roupa (peças, looks e o rastro das peças excluídas — ver
+  // guardaRoupa.js). `null` quando o arquivo ainda não existe, pela mesma
+  // razão das anotações: "nunca gravou" não pode passar por "está vazio".
+  // As fotos não moram aqui: ficam na pasta "Guarda-roupa" do Drive visível.
+  async function loadGuardaRoupa() {
+    const data = await arquivoDoGuardaRoupa.ler()
+    if (!Array.isArray(data?.pecas)) return null
+    return {
+      pecas: data.pecas,
+      looks: Array.isArray(data.looks) ? data.looks : [],
+      deleted: Array.isArray(data.deleted) ? data.deleted : [],
+    }
+  }
+
+  async function saveGuardaRoupa({ pecas, looks, deleted = [] }) {
+    await arquivoDoGuardaRoupa.gravar(JSON.stringify({ pecas, looks, deleted }))
+  }
+
+  return { loadNotes, saveNotes, loadProjetos, saveProjetos, loadGuardaRoupa, saveGuardaRoupa }
 }

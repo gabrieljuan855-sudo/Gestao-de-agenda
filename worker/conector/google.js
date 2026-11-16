@@ -82,6 +82,32 @@ export function criarRequest(env, props) {
   }
 }
 
+// O conteúdo de um arquivo do Drive em bytes — a foto de uma peça do
+// guarda-roupa, que o conector devolve ao Claude como imagem. Separado do
+// `request` porque aquele só sabe ler JSON; a renovação do token e o formato
+// do erro são os mesmos.
+export function criarFotos(env, props) {
+  async function baixar(driveId, { tentarDeNovo = true } = {}) {
+    const token = await tokenDeAcesso(env, props)
+    const res = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(driveId)}?alt=media`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    if (res.status === 401 && tentarDeNovo) {
+      await tokenDeAcesso(env, props, { renovar: true })
+      return baixar(driveId, { tentarDeNovo: false })
+    }
+    if (!res.ok) {
+      const body = await res.text()
+      const err = new Error(`Erro na API do Google (${res.status}): ${body.slice(0, 300)}`)
+      err.status = res.status
+      err.body = body
+      throw err
+    }
+    return { bytes: new Uint8Array(await res.arrayBuffer()), mimeType: (res.headers.get('Content-Type') || '').split(';')[0] }
+  }
+  return { baixar }
+}
+
 // O que o Claude lê quando algo falha. A detecção de "falta permissão" e de
 // "API desligada" é a mesma que o app usa (driveErros.js); muda só o caminho
 // de saída, que aqui é reconectar o conector, e não sair e entrar no app.

@@ -16,4 +16,4 @@ export { faltaPermissaoDoDrive, driveApiDesativada, motivoDoGoogle } from './dri
 
 // O formato dos arquivos mora em driveArquivos.js (o conector do Claude usa o
 // mesmo); aqui ele só ganha o `request` do navegador.
-export const { loadNotes, saveNotes, loadProjetos, saveProjetos } = criarArmazemNoDrive(request)
+export const { loadNotes, saveNotes, loadProjetos, saveProjetos, loadGuardaRoupa, saveGuardaRoupa } = criarArmazemNoDrive(request)

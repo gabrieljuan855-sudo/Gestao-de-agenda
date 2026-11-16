@@ -187,6 +187,26 @@ export function googleFalso({ agora = () => new Date() } = {}) {
       }
       a.conteudo = JSON.stringify(dados)
     },
+    // Uma foto na pasta visível do Drive, como o app envia. Devolve o id.
+    gravarFoto(bytes, mimeType = 'image/jpeg') {
+      const a = { id: novoId('foto'), name: 'peca.jpg', mimeType, bytes: new Uint8Array(bytes) }
+      a.webViewLink = `https://drive.google.com/file/d/${a.id}`
+      estado.arquivos.push(a)
+      return a.id
+    },
+    // O que criarFotos (google.js) faz no conector, direto da memória.
+    fotos: {
+      async baixar(id) {
+        const a = estado.arquivos.find((x) => x.id === id && x.bytes && !x.trashed)
+        if (!a) {
+          const err = new Error('Erro na API do Google (404)')
+          err.status = 404
+          err.body = ''
+          throw err
+        }
+        return { bytes: a.bytes, mimeType: a.mimeType }
+      },
+    },
     lerArquivo(nome) {
       const a = estado.arquivos.find((x) => x.name === nome)
       return a ? JSON.parse(a.conteudo) : null
