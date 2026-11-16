@@ -37,6 +37,7 @@ import { parseQuickAdd, decidirDestino } from './lib/nlp.js'
 import { construirRecorrencia } from './lib/recorrencia.js'
 import { rangeForView, shiftReference, isSameDay, toDateInput, fromInputs } from './lib/dates.js'
 import { findDefaultCalendar, acharAgendaNoTexto } from './lib/defaults.js'
+import { tarefaDoEvento, eventoDaTarefa } from './lib/conversao.js'
 import QuickAdd from './components/QuickAdd.jsx'
 import Logo from './components/Logo.jsx'
 import Rail from './components/Rail.jsx'
@@ -784,6 +785,50 @@ export default function App() {
     await reload()
   }
 
+  // Compromisso → tarefa, e tarefa → compromisso. Nos dois sentidos o novo é
+  // criado antes de o antigo sair: se o Google falhar no meio, sobra um a
+  // mais, nunca um a menos. Se só a segunda parte falhar, a primeira já está
+  // feita — o aviso vai para o topo da página e o editor fecha, para ninguém
+  // tentar de novo e criar o mesmo item duas vezes.
+  async function handleEventoParaTarefa(evento, { titulo, due, tirarDaAgenda }) {
+    const base = tarefaDoEvento(evento)
+    await createTask({
+      ...base,
+      title: titulo || base.title,
+      due,
+      tasklistId: idDaLista(LISTA_PROXIMAS) || '@default',
+    })
+    if (tirarDaAgenda) {
+      try {
+        // Uma ocorrência de série sai sozinha; a série continua.
+        await excluirEvento(evento, 'este')
+        setAgendaError(null)
+      } catch (err) {
+        console.error('Não deu para tirar o compromisso da agenda:', err)
+        setAgendaError(`A tarefa "${titulo || base.title}" foi criada, mas não deu para tirar o compromisso da agenda: ${err.message}`)
+      }
+    }
+    await reload()
+  }
+
+  async function handleTarefaParaEvento(task, { titulo, start, end, calendarId, tirarDaLista }) {
+    await createEvent(eventoDaTarefa(task, { titulo, start, end, calendarId }))
+    if (tirarDaLista) {
+      try {
+        if (activeTask?.id === task.id) {
+          if (focus.phase !== 'idle') focus.stop()
+          setActiveTask(null)
+        }
+        await deleteTask(task)
+        setAgendaError(null)
+      } catch (err) {
+        console.error('Não deu para tirar a tarefa da lista:', err)
+        setAgendaError(`O compromisso "${titulo || task.title}" foi agendado, mas não deu para tirar a tarefa da lista: ${err.message}`)
+      }
+    }
+    await reload()
+  }
+
   // Atualizar uma tarefa qualquer (não a do editor aberto) — o assistente do
   // projeto reescreve a próxima ação por aqui.
   async function atualizarTarefa(task, patch) {
@@ -1466,6 +1511,7 @@ export default function App() {
           carregarSerie={carregarSerie}
           onSave={handleSaveEvent}
           onDelete={handleDeleteEvent}
+          onVirarTarefa={(dados) => handleEventoParaTarefa(editingEvent, dados)}
           onClose={() => setEditingEvent(null)}
         />
       )}
@@ -1485,6 +1531,8 @@ export default function App() {
             reload()
           }}
           garantirPasta={(projetoId) => garantirPastaPara(projetoId)}
+          calendars={calendars}
+          onAgendar={(dados) => handleTarefaParaEvento(editingTask, dados)}
         />
       )}
 

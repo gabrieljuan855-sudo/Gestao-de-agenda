@@ -98,6 +98,19 @@ export function googleFalso({ agora = () => new Date() } = {}) {
       }
     }
 
+    if ((m = p.match(/^\/calendar\/v3\/calendars\/([^/]+)\/events\/([^/]+)$/))) {
+      const e = estado.eventos.find((x) => x.calendarId === m[1] && x.id === m[2])
+      if (!e) return { status: 404 }
+      if (metodo === 'GET') {
+        const { calendarId, ...semAgenda } = e
+        return semAgenda
+      }
+      if (metodo === 'DELETE') {
+        estado.eventos = estado.eventos.filter((x) => x !== e)
+        return null
+      }
+    }
+
     // ---- Drive: a appDataFolder e as pastas visíveis dos projetos ----
     if (p === '/drive/v3/files' && metodo === 'GET') {
       const q = u.searchParams.get('q') || ''
