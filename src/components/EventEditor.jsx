@@ -12,6 +12,7 @@ import {
 } from '../lib/recorrencia.js'
 import Repeticao from './Repeticao.jsx'
 import EscopoDaSerie from './EscopoDaSerie.jsx'
+import { outrosConvidados } from '../lib/conversao.js'
 
 // O link de vídeo pode estar em dois lugares do evento, dependendo de como
 // ele nasceu: hangoutLink é o atalho que o próprio Google mantém por
@@ -22,7 +23,7 @@ function linkDaVideochamada(event) {
   return event.hangoutLink || event.conferenceData?.entryPoints?.find((e) => e.entryPointType === 'video')?.uri || null
 }
 
-export default function EventEditor({ event, calendars = [], projetos = [], carregarSerie, onSave, onDelete, onClose }) {
+export default function EventEditor({ event, calendars = [], projetos = [], carregarSerie, onSave, onDelete, onVirarTarefa, onClose }) {
   const allDay = isAllDay(event)
   const start = eventStart(event)
   const end = eventEnd(event)
@@ -69,6 +70,33 @@ export default function EventEditor({ event, calendars = [], projetos = [], carr
   const [perguntaSerie, setPerguntaSerie] = useState(null)
 
   const linkVideo = linkDaVideochamada(event)
+
+  // "Transformar em tarefa" troca o conteúdo desta mesma janela, em vez de
+  // abrir outra por cima: dois diálogos empilhados fechavam juntos no Esc.
+  const [virando, setVirando] = useState(false)
+  // Tirar da agenda só vem marcado quando é seguro: a agenda aceita gravação
+  // (senão o Google recusa) e não há outras pessoas convidadas (excluir
+  // mexeria na agenda delas).
+  const convidados = outrosConvidados(event)
+  const agendaGravavel = calendars.some((cal) => cal.id === (event.calendarId || 'primary'))
+  const [tirarDaAgenda, setTirarDaAgenda] = useState(agendaGravavel && convidados.length === 0)
+  const [prazoDaTarefa, setPrazoDaTarefa] = useState(toDateInput(start))
+
+  async function virarTarefa() {
+    setError(null)
+    setSaving(true)
+    try {
+      await onVirarTarefa({
+        titulo: title.trim(),
+        due: prazoDaTarefa ? fromInputs(prazoDaTarefa) : null,
+        tirarDaAgenda: agendaGravavel && tirarDaAgenda,
+      })
+      onClose()
+    } catch (err) {
+      setError(`Não deu para criar a tarefa: ${err.message}`)
+      setSaving(false)
+    }
+  }
 
   // A regra que vale com as datas do formulário: a escolhida, se a pessoa
   // mexeu; senão a que já existia, acompanhando a data se ela mudou.
@@ -146,6 +174,62 @@ export default function EventEditor({ event, calendars = [], projetos = [], carr
       setError(`Não deu para excluir: ${err.message}`)
       setSaving(false)
     }
+  }
+
+  if (virando) {
+    return (
+      <Modal title="Transformar em tarefa" onClose={onClose}>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault()
+            virarTarefa()
+          }}
+        >
+          <label className="field">
+            <span>Título da tarefa</span>
+            <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} />
+          </label>
+          <label className="field">
+            <span>Prazo</span>
+            <input type="date" value={prazoDaTarefa} onChange={(e) => setPrazoDaTarefa(e.target.value)} />
+          </label>
+          <p className="conversao-dica">
+            Vai para Próximas ações. A descrição, o local e o link da chamada vão junto, no texto da tarefa.
+          </p>
+          <label className={`conversao-marcar${agendaGravavel ? '' : ' is-desligado'}`}>
+            <input
+              type="checkbox"
+              checked={agendaGravavel && tirarDaAgenda}
+              disabled={!agendaGravavel}
+              onChange={(e) => setTirarDaAgenda(e.target.checked)}
+            />
+            <span>
+              Tirar o compromisso da agenda{recorrente ? ' (só esta ocorrência)' : ''}
+              {!agendaGravavel && <small>Esta agenda é só de leitura: o compromisso fica onde está.</small>}
+              {agendaGravavel && convidados.length > 0 && (
+                <small>
+                  {convidados.length === 1 ? 'Há outra pessoa convidada' : `Há ${convidados.length} pessoas convidadas`}: tirar da sua agenda
+                  pode cancelar ou recusar o compromisso para {convidados.length === 1 ? 'ela' : 'elas'}.
+                </small>
+              )}
+              {agendaGravavel && convidados.length === 0 && !tirarDaAgenda && (
+                <small>O compromisso continua na agenda e a tarefa aparece nas listas.</small>
+              )}
+            </span>
+          </label>
+
+          {error && <div className="form-error">{error}</div>}
+
+          <div className="modal-actions">
+            <button type="button" onClick={() => { setError(null); setVirando(false) }} disabled={saving}>Voltar</button>
+            <div style={{ flex: 1 }} />
+            <button type="submit" className="primary" disabled={saving || !title.trim()}>
+              {saving ? 'Criando...' : 'Criar tarefa'}
+            </button>
+          </div>
+        </form>
+      </Modal>
+    )
   }
 
   return (
@@ -266,6 +350,12 @@ export default function EventEditor({ event, calendars = [], projetos = [], carr
               ))}
             </select>
           </label>
+        )}
+
+        {onVirarTarefa && (
+          <button type="button" className="conversao-botao" onClick={() => { setError(null); setVirando(true) }} disabled={saving}>
+            <span aria-hidden="true">⇄</span> Transformar em tarefa
+          </button>
         )}
 
         {error && <div className="form-error">{error}</div>}

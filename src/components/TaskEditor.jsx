@@ -5,6 +5,9 @@ import { toDateInput, fromInputs, dateOnlyFromISO } from '../lib/dates.js'
 import { PRIORITIES, DEFAULT_PRIORITY } from '../lib/priority.js'
 import { separarAnexos, juntarAnexos } from '../lib/anexosNoTexto.js'
 import Anexos from './Anexos.jsx'
+import { horarioSugerido } from '../lib/conversao.js'
+import { erroDoPeriodo } from '../lib/events.js'
+import { findDefaultCalendar } from '../lib/defaults.js'
 
 export default function TaskEditor({
   task,
@@ -17,6 +20,8 @@ export default function TaskEditor({
   projetos = [],
   onSalvarAnexos,
   garantirPasta,
+  calendars = [],
+  onAgendar,
 }) {
   const [title, setTitle] = useState(task.title || '')
   // dateOnlyFromISO, não `new Date(task.due)`: o prazo vem do Google como
@@ -40,6 +45,30 @@ export default function TaskEditor({
   const [confirmingDelete, setConfirmingDelete] = useState(false)
 
   const done = task.status === 'completed'
+
+  // "Agendar" troca o conteúdo desta mesma janela (ver o "Transformar em
+  // tarefa" do EventEditor): um diálogo por cima do outro fechava junto no Esc.
+  const [agendando, setAgendando] = useState(false)
+  const [sugerido] = useState(() => horarioSugerido(task))
+  const [diaDoEvento, setDiaDoEvento] = useState(sugerido.data)
+  const [inicio, setInicio] = useState(sugerido.inicio)
+  const [fim, setFim] = useState(sugerido.fim)
+  const [agendaId, setAgendaId] = useState(() => (findDefaultCalendar(calendars) || calendars[0])?.id || 'primary')
+  // Vem marcado: quem transforma a tarefa em compromisso quer que ela passe a
+  // morar na agenda. Desmarcado, o compromisso vira só o horário reservado
+  // para fazer a tarefa, e ela continua na lista.
+  const [tirarDaLista, setTirarDaLista] = useState(true)
+
+  function agendar() {
+    const start = fromInputs(diaDoEvento, inicio)
+    const end = fromInputs(diaDoEvento, fim)
+    const erro = erroDoPeriodo(start, end, false)
+    if (erro) {
+      setError(erro)
+      return
+    }
+    run(() => onAgendar({ titulo: title.trim(), start, end, calendarId: agendaId, tirarDaLista }))
+  }
 
   async function run(action, after) {
     setSaving(true)
@@ -86,6 +115,69 @@ export default function TaskEditor({
 
   function handleDelete() {
     run(onDelete)
+  }
+
+  if (agendando) {
+    return (
+      <Modal title="Agendar tarefa" onClose={onClose}>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault()
+            agendar()
+          }}
+        >
+          <label className="field">
+            <span>Título do compromisso</span>
+            <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} />
+          </label>
+          <label className="field">
+            <span>Data</span>
+            <input type="date" value={diaDoEvento} onChange={(e) => setDiaDoEvento(e.target.value)} />
+          </label>
+          <div className="field-row">
+            <label className="field">
+              <span>Início</span>
+              <input type="time" value={inicio} onChange={(e) => setInicio(e.target.value)} />
+            </label>
+            <label className="field">
+              <span>Fim</span>
+              <input type="time" value={fim} onChange={(e) => setFim(e.target.value)} />
+            </label>
+          </div>
+          {calendars.length > 0 && (
+            <label className="field">
+              <span>Agenda</span>
+              <select value={agendaId} onChange={(e) => setAgendaId(e.target.value)}>
+                {calendars.map((cal) => (
+                  <option key={cal.id} value={cal.id}>{cal.summaryOverride || cal.summary}</option>
+                ))}
+              </select>
+            </label>
+          )}
+          <label className="conversao-marcar">
+            <input type="checkbox" checked={tirarDaLista} onChange={(e) => setTirarDaLista(e.target.checked)} />
+            <span>
+              Tirar a tarefa da lista
+              <small>
+                {tirarDaLista
+                  ? 'O texto e os anexos da tarefa vão para a descrição do compromisso.'
+                  : 'A tarefa continua na lista; o compromisso é o horário reservado para fazê-la.'}
+              </small>
+            </span>
+          </label>
+
+          {error && <div className="form-error">{error}</div>}
+
+          <div className="modal-actions">
+            <button type="button" onClick={() => { setError(null); setAgendando(false) }} disabled={saving}>Voltar</button>
+            <div style={{ flex: 1 }} />
+            <button type="submit" className="primary" disabled={saving || !title.trim()}>
+              {saving ? 'Agendando...' : 'Agendar'}
+            </button>
+          </div>
+        </form>
+      </Modal>
+    )
   }
 
   return (
@@ -195,6 +287,12 @@ export default function TaskEditor({
 
         {task.tasklistTitle && (
           <div className="muted" style={{ fontSize: 'var(--label-sm)' }}>Lista: {task.tasklistTitle}</div>
+        )}
+
+        {onAgendar && !done && (
+          <button type="button" className="conversao-botao" onClick={() => { setError(null); setAgendando(true) }} disabled={saving}>
+            <span aria-hidden="true">⇄</span> Agendar na agenda
+          </button>
         )}
 
         {error && <div className="form-error">{error}</div>}

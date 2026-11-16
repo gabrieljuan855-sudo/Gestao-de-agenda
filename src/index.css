@@ -394,6 +394,17 @@ textarea:focus-visible,
 .modal-card > form { display: flex; flex-direction: column; gap: 14px; }
 
 .field { display: flex; flex-direction: column; gap: 4px; }
+
+/* Compromisso ↔ tarefa: ação secundária do editor, contornada (MD3 outlined)
+   e de largura cheia, como o "Adicionar Google Meet" logo acima. */
+.conversao-botao { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; }
+.conversao-dica { margin: 0; font-size: var(--body-sm); color: var(--on-surface-variant); }
+.conversao-marcar { display: flex; align-items: flex-start; gap: 8px; cursor: pointer; font-size: var(--body-md); }
+/* 2px: o centro da caixa de 18px fica na altura da primeira linha (body-md). */
+.conversao-marcar input { margin-top: 2px; }
+.conversao-marcar > span { display: flex; flex-direction: column; gap: 2px; }
+.conversao-marcar small { font-size: var(--label-md); color: var(--on-surface-variant); }
+.conversao-marcar.is-desligado { cursor: default; }
 .field > span { font-size: var(--label-md); color: var(--text-secondary); }
 .field-row { display: flex; gap: 10px; }
 /* `min-width: 0` é o que falta para um item flex poder encolher além da
