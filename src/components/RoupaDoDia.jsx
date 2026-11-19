@@ -2,11 +2,24 @@ import { useState } from 'react'
 import FotoDaPeca from './FotoDaPeca.jsx'
 import { USEI, NAO_GOSTEI } from '../lib/guardaRoupa.js'
 
-// O cartão da tela inicial: o look que o Claude montou para hoje (peças,
-// por que essas e o clima), com a resposta de quem vai vestir. "Usei este"
-// conta o uso de cada peça; "Não gostei" guarda o motivo, que o Claude lê
-// antes de montar o próximo.
-export default function LookDoDia({ look, pecas, temPecas, onResponder, onAbrirGuardaRoupa }) {
+// O cartão "Roupa do dia" da tela inicial: a combinação que o Claude montou
+// para hoje (peças, por que essas e o clima), com a resposta de quem vai
+// vestir. "Usei esta" conta o uso de cada peça; "Não gostei" guarda o
+// motivo, que o Claude lê antes de montar a próxima. Quando aparece (só de
+// manhã cedo) e o "tirar da tela" ficam em roupaDoDiaNaTela.js.
+//
+// No código e no conector o registro continua se chamando "look"; o nome
+// mudou só na tela, para não quebrar as ferramentas nem a tarefa agendada.
+
+function BotaoFechar({ onFechar }) {
+  return (
+    <button type="button" className="look-fechar" onClick={onFechar} aria-label="Tirar a roupa do dia da tela" title="Tirar da tela até amanhã">
+      ×
+    </button>
+  )
+}
+
+export default function RoupaDoDia({ look, pecas, temPecas, onResponder, onAbrirGuardaRoupa, onFechar }) {
   const [explicando, setExplicando] = useState(false)
   const [motivo, setMotivo] = useState('')
 
@@ -14,11 +27,12 @@ export default function LookDoDia({ look, pecas, temPecas, onResponder, onAbrirG
   if (!look) {
     return (
       <div className="look-do-dia is-vazio">
-        <span className="look-rotulo">Look do dia</span>
+        <span className="look-rotulo">Roupa do dia</span>
         <span className="muted">
           {temPecas ? 'Ainda não há sugestão para hoje.' : 'Cadastre suas peças para receber uma sugestão toda manhã.'}
         </span>
         <button type="button" className="look-link" onClick={onAbrirGuardaRoupa}>Abrir guarda-roupa</button>
+        <BotaoFechar onFechar={onFechar} />
       </div>
     )
   }
@@ -34,10 +48,11 @@ export default function LookDoDia({ look, pecas, temPecas, onResponder, onAbrirG
   }
 
   return (
-    <section className="card look-do-dia" aria-label="Look do dia">
+    <section className="card look-do-dia" aria-label="Roupa do dia">
       <div className="look-cabeca">
-        <h3 className="look-rotulo">Look do dia</h3>
+        <h3 className="look-rotulo">Roupa do dia</h3>
         {look.clima && <span className="look-clima">{look.clima}</span>}
+        <BotaoFechar onFechar={onFechar} />
       </div>
 
       <ul className="look-pecas">
@@ -50,7 +65,7 @@ export default function LookDoDia({ look, pecas, temPecas, onResponder, onAbrirG
       </ul>
       {sumiram > 0 && (
         <p className="muted t-label look-aviso">
-          {sumiram === 1 ? 'Uma peça deste look foi excluída do guarda-roupa.' : `${sumiram} peças deste look foram excluídas do guarda-roupa.`}
+          {sumiram === 1 ? 'Uma peça desta sugestão foi excluída do guarda-roupa.' : `${sumiram} peças desta sugestão foram excluídas do guarda-roupa.`}
         </p>
       )}
 
@@ -70,18 +85,18 @@ export default function LookDoDia({ look, pecas, temPecas, onResponder, onAbrirG
       ) : look.feedback ? (
         <div className="look-acoes" role="status">
           <span className="look-resposta">
-            {look.feedback === USEI ? 'Você usou este look.' : `Você não gostou${look.motivo ? `: ${look.motivo}` : '.'}`}
+            {look.feedback === USEI ? 'Você usou esta combinação.' : `Você não gostou${look.motivo ? `: ${look.motivo}` : '.'}`}
           </span>
           {look.feedback === USEI ? (
             <button type="button" className="look-link" onClick={() => { setMotivo(''); setExplicando(true) }}>Não gostei</button>
           ) : (
-            <button type="button" className="look-link" onClick={() => onResponder(look.data, USEI)}>Usei este</button>
+            <button type="button" className="look-link" onClick={() => onResponder(look.data, USEI)}>Usei esta</button>
           )}
         </div>
       ) : (
         <div className="look-acoes">
           <button type="button" className="look-link" onClick={() => { setMotivo(''); setExplicando(true) }}>Não gostei</button>
-          <button type="button" className="primary" onClick={() => onResponder(look.data, USEI)}>Usei este</button>
+          <button type="button" className="primary" onClick={() => onResponder(look.data, USEI)}>Usei esta</button>
         </div>
       )}
     </section>

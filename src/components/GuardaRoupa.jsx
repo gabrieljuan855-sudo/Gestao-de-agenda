@@ -313,7 +313,7 @@ export default function GuardaRoupa({ guardaRoupa }) {
         <div className="gr-vazio">
           <p className="t-title">Seu guarda-roupa está vazio</p>
           <p className="muted">
-            Fotografe cada peça, uma por foto. Não precisa preencher nada: o Claude olha a foto, classifica e passa a sugerir o look do dia na tela inicial.
+            Fotografe cada peça, uma por foto. Não precisa preencher nada: o Claude olha a foto, classifica e passa a sugerir a roupa do dia na tela inicial, de manhã cedo.
           </p>
         </div>
       ) : (

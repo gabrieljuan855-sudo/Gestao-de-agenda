@@ -12,6 +12,7 @@ import {
   novaPeca,
   editarPeca,
   registrarFeedback,
+  carimboSobre,
   NOME_DO_ARQUIVO_DA_FOTO,
 } from './guardaRoupa.js'
 
@@ -164,11 +165,13 @@ export default function useGuardaRoupa({ signedIn }) {
     persist({
       ...agora,
       pecas: agora.pecas.filter((p) => p.id !== id),
-      deleted: [...agora.deleted.filter((d) => d.id !== id), { id, at: new Date().toISOString() }],
+      // O rastro precisa ser mais novo que a última edição da peça, senão a
+      // mesclagem a ressuscita (mesmo motivo de carimboSobre).
+      deleted: [...agora.deleted.filter((d) => d.id !== id), { id, at: carimboSobre(new Date(), peca.updatedAt) }],
     })
   }
 
-  // "Usei este" / "Não gostei" do cartão da tela inicial. A regra (somar o
+  // "Usei esta" / "Não gostei" do cartão da tela inicial. A regra (somar o
   // uso, gravar a data, não contar duas vezes) é a de guardaRoupa.js, a
   // mesma da ferramenta do conector.
   function responderLook(data, feedback, motivo = '') {

@@ -49,8 +49,8 @@ Projetos e arquivos:
 Guarda-roupa e look do dia:
 - A pessoa cadastra as peças de roupa no app, com foto. A peça nova entra como "pendente": falta alguém olhar a foto e dizer o que ela é. Esse alguém é você.
 - Classificar: listar_guarda_roupa com status "pendente", ver_peca em cada uma (a foto vem como imagem) e atualizar_peca com o que você enxerga — nome curto e reconhecível ("Camisa de linho azul-clara"), categoria, cor, ocasiões e temperaturas em que serve. Descreva só o que a foto mostra; na dúvida sobre o uso, registre em observações.
-- Look do dia (a rotina da manhã): 1) classifique as pendentes; 2) veja o clima do dia na cidade da pessoa (com a sua ferramenta de busca — o conector não tem previsão do tempo) e os compromissos com agenda; 3) leia historico_looks para não repetir o que ela usou nos últimos dias e para respeitar o que ela marcou "não gostei" e por quê; 4) escolha peças ativas e classificadas que combinem entre si, com o clima e com a ocasião do dia (em geral uma parte de cima, uma de baixo e um calçado, mais agasalho ou acessório se fizer sentido), dando vez às paradas há mais tempo; 5) grave com salvar_look_do_dia, com um texto curto dizendo por que esse look e o resumo do clima. O look aparece no cartão "Look do dia" da tela inicial do app.
-- A pessoa responde no app com "Usei este" ou "Não gostei". Se ela disser isso na conversa, use registrar_feedback_look. Nunca marque "usei" por conta própria.
+- Look do dia (a rotina da manhã): 1) classifique as pendentes; 2) veja o clima do dia na cidade da pessoa (com a sua ferramenta de busca — o conector não tem previsão do tempo) e os compromissos com agenda; 3) leia historico_looks para não repetir o que ela usou nos últimos dias e para respeitar o que ela marcou "não gostei" e por quê; 4) escolha peças ativas e classificadas que combinem entre si, com o clima e com a ocasião do dia (em geral uma parte de cima, uma de baixo e um calçado, mais agasalho ou acessório se fizer sentido), dando vez às paradas há mais tempo; 5) grave com salvar_look_do_dia, com um texto curto dizendo por que esse look e o resumo do clima. O look aparece no cartão "Roupa do dia" da tela inicial do app, só antes das 8h — por isso grave cedo, de preferência antes das 7h.
+- A pessoa responde no app com "Usei esta" ou "Não gostei" (no app a sugestão se chama "roupa do dia"; aqui, look). Se ela disser isso na conversa, use registrar_feedback_look. Nunca marque "usei" por conta própria.
 
 - Use os ids que as ferramentas devolvem; não invente ids, nomes de projeto ou datas. Datas sempre em AAAA-MM-DD, horários em HH:MM, fuso de Brasília.
 - Não há ferramenta de excluir: para descartar, sugira que ela faça no app.`
@@ -443,13 +443,13 @@ const FERRAMENTAS = [
     nome: 'salvar_look_do_dia',
     titulo: 'Salvar look do dia',
     descricao:
-      'Grava o look de uma data (padrão: hoje): as peças escolhidas, o texto que explica a escolha e o resumo do clima. É o que o app mostra no cartão "Look do dia". Se já houver look na data, substitui (e o feedback anterior é descartado). Antes, chame listar_guarda_roupa e historico_looks; só entram peças ativas.',
+      'Grava o look de uma data (padrão: hoje): as peças escolhidas, o texto que explica a escolha e o resumo do clima. É o que o app mostra no cartão "Roupa do dia", na tela inicial, só antes das 8h. Se já houver look na data, substitui (e o feedback anterior é descartado). Antes, chame listar_guarda_roupa e historico_looks; só entram peças ativas.',
     leitura: false,
     executar: gr.salvarLookDoDia,
   },
   {
     nome: 'look_do_dia',
-    titulo: 'Look do dia',
+    titulo: 'Roupa do dia',
     descricao:
       'O look salvo para uma data (padrão: hoje): os nomes das peças, o texto, o clima e o feedback da pessoa. Use para saber se o look de hoje já foi montado, ou quando ela perguntar "o que eu visto hoje?".',
     leitura: true,
@@ -459,7 +459,7 @@ const FERRAMENTAS = [
     nome: 'registrar_feedback_look',
     titulo: 'Registrar feedback do look',
     descricao:
-      'Grava a resposta da pessoa a um look (padrão: o de hoje): "usei" ou "nao_gostei", com o motivo se ela disser. "usei" faz o mesmo que o botão "Usei este" do app: cada peça do look ganha um uso e a data do último uso (sem contar duas vezes). Use só quando a pessoa disser na conversa que usou ou que não gostou.',
+      'Grava a resposta da pessoa a um look (padrão: o de hoje): "usei" ou "nao_gostei", com o motivo se ela disser. "usei" faz o mesmo que o botão "Usei esta" do app: cada peça do look ganha um uso e a data do último uso (sem contar duas vezes). Use só quando a pessoa disser na conversa que usou ou que não gostou.',
     leitura: false,
     executar: gr.registrarFeedbackLook,
   },

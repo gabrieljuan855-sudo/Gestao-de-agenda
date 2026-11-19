@@ -54,7 +54,8 @@ import useNovaVersao from './lib/useNovaVersao.js'
 import useGuardaRoupa from './lib/useGuardaRoupa.js'
 import { lookDoDia, dataLocalDe } from './lib/guardaRoupa.js'
 import GuardaRoupa from './components/GuardaRoupa.jsx'
-import LookDoDia from './components/LookDoDia.jsx'
+import RoupaDoDia from './components/RoupaDoDia.jsx'
+import { roupaDoDiaVisivel, msAteOLimite, lerDispensada, gravarDispensada } from './lib/roupaDoDiaNaTela.js'
 import { listarProjetos, projetosForaDaCobranca } from './lib/projetos.js'
 import Trabalho from './components/Trabalho.jsx'
 import HorarioTrabalho from './components/HorarioTrabalho.jsx'
@@ -433,6 +434,29 @@ export default function App() {
   const notesState = useNotes({ signedIn })
   const projetosState = useProjetos({ signedIn })
   const guardaRoupa = useGuardaRoupa({ signedIn })
+  // A roupa do dia só aparece antes das 8h (ver roupaDoDiaNaTela.js). O
+  // relógio é guardado em estado para o cartão sumir sozinho às 8h, com a
+  // tela aberta, e o dia "dispensado" para o × valer até amanhã.
+  const [agoraDaRoupa, setAgoraDaRoupa] = useState(() => new Date())
+  const [roupaDispensadaEm, setRoupaDispensadaEm] = useState(lerDispensada)
+  useEffect(() => {
+    const falta = msAteOLimite(agoraDaRoupa)
+    if (!falta) return undefined
+    const t = setTimeout(() => setAgoraDaRoupa(new Date()), falta + 1000)
+    return () => clearTimeout(t)
+  }, [agoraDaRoupa])
+  // Quem deixa o app aberto de um dia para o outro (ou volta ao celular de
+  // manhã) precisa de um relógio atualizado, senão o cartão nunca reaparece.
+  useEffect(() => {
+    const aoVoltar = () => document.visibilityState === 'visible' && setAgoraDaRoupa(new Date())
+    document.addEventListener('visibilitychange', aoVoltar)
+    return () => document.removeEventListener('visibilitychange', aoVoltar)
+  }, [])
+  const hojeDaRoupa = dataLocalDe(agoraDaRoupa)
+  function dispensarRoupaDoDia() {
+    gravarDispensada(hojeDaRoupa)
+    setRoupaDispensadaEm(hojeDaRoupa)
+  }
   const novaVersao = useNovaVersao()
   // Qual painel do trilho está aberto. Mora aqui, e não dentro do Rail, porque
   // os atalhos de teclado também precisam abrir e fechar esses painéis.
@@ -1338,11 +1362,12 @@ export default function App() {
             </div>
           )}
 
-          {/* O look é o de hoje: só faz sentido na tela inicial (o Dia de
-              hoje), não ao folhear outros dias. */}
-          {view === 'day' && isSameDay(reference, new Date()) && (
-            <LookDoDia
-              look={lookDoDia(guardaRoupa.looks, dataLocalDe(new Date()))}
+          {/* A roupa do dia é a de hoje: só na tela inicial (o Dia de hoje),
+              não ao folhear outros dias, e só de manhã cedo. */}
+          {view === 'day' && isSameDay(reference, new Date()) && roupaDoDiaVisivel(agoraDaRoupa, hojeDaRoupa, roupaDispensadaEm) && (
+            <RoupaDoDia
+              look={lookDoDia(guardaRoupa.looks, hojeDaRoupa)}
+              onFechar={dispensarRoupaDoDia}
               pecas={guardaRoupa.pecas}
               temPecas={guardaRoupa.pecas.length > 0}
               onResponder={guardaRoupa.responderLook}

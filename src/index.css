@@ -3883,7 +3883,26 @@ button.projeto-arquivo {
 /* ---------- look do dia (tela inicial) ---------- */
 
 .look-do-dia { display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; }
-.look-cabeca { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 12px; }
+.look-cabeca { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
+.look-cabeca .look-rotulo { flex: 1; }
+/* Botão de ícone do MD3 (40dp): tira o cartão da tela até amanhã. Fica
+   colado à direita do cabeçalho, que é onde se procura o "fechar". */
+.look-fechar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  min-height: 40px;
+  padding: 0;
+  margin: -8px -8px -8px 0;
+  border: none;
+  border-radius: var(--shape-full);
+  background: transparent;
+  color: var(--on-surface-variant);
+  font-size: var(--title-lg);
+  line-height: 1;
+}
 .look-rotulo { margin: 0; font-size: var(--title-md); font-weight: 600; color: var(--on-surface); }
 .look-clima { font-size: var(--body-sm); color: var(--on-surface-variant); }
 .look-pecas {
@@ -3928,3 +3947,4 @@ button.projeto-arquivo {
   padding: 0 4px;
 }
 .look-do-dia.is-vazio .look-rotulo { font-size: var(--body-sm); }
+.look-do-dia.is-vazio .look-fechar { margin: 0 0 0 auto; }

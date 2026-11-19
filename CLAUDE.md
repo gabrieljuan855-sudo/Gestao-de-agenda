@@ -110,7 +110,11 @@ uma pilha de branches que só atrapalha.
   única ferramenta que devolve imagem (conteúdo MCP `image`). A regra de uso
   (somar o uso, gravar a data, não contar duas vezes, desfazer) é uma só
   para o botão e para a ferramenta: `registrarFeedback` em `guardaRoupa.js`.
-  As ferramentas ficam em `worker/conector/guardaRoupa.js`.
+  As ferramentas ficam em `worker/conector/guardaRoupa.js`. Na tela a
+  sugestão se chama **"Roupa do dia"** (a pessoa pediu para não usar "look");
+  no código e nos nomes das ferramentas segue `look`, para não quebrar a
+  tarefa agendada. O cartão só aparece antes das 8h e o × tira da tela até
+  o dia seguinte, só naquele aparelho (`roupaDoDiaNaTela.js`).
 - O app e o conector gravam nos mesmos arquivos do Drive: toda gravação é
   ler → mesclar → gravar (`mesclarParaGravar` em `notesMerge.js`), nunca a
   lista local por cima.
