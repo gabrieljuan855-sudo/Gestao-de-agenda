@@ -161,7 +161,7 @@ export async function salvarLookDoDia(api, agora, { data, pecas: idsDasPecas, te
     const { pecas, looks, look } = salvarLook(estado, { data: dia, pecas: escolhidas.map((p) => p.id), texto, clima }, agora, carimbo)
     return {
       estado: { ...estado, pecas, looks },
-      resultado: `${havia ? 'Look substituído' : 'Look salvo'} — aparece no cartão "Look do dia" do app.\n${lookEmTexto(look, pecas)}`,
+      resultado: `${havia ? 'Look substituído' : 'Look salvo'} — aparece no cartão "Roupa do dia" do app, antes das 8h.\n${lookEmTexto(look, pecas)}`,
     }
   })
 }

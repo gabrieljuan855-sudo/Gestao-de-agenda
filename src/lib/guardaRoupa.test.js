@@ -123,6 +123,15 @@ describe('look do dia', () => {
     expect(estado.pecas.find((p) => p.id === 'a')).toMatchObject({ usos: 2, ultimoUso: '2026-11-14' })
   })
 
+  it('com o relógio do aparelho atrás de quem gravou, a resposta ainda sai mais nova', () => {
+    const doConector = salvarLook(base(), { data: '2026-11-16', pecas: ['a'], texto: 'x' }, new Date('2026-11-16T14:00:00Z'))
+    const atrasado = new Date('2026-11-16T09:00:00Z')
+    const r = registrarFeedback(doConector, { data: '2026-11-16', feedback: 'usei' }, atrasado)
+    const mesclado = mesclarGuardaRoupa(r, doConector, atrasado.getTime())
+    expect(mesclado.looks[0].feedback).toBe('usei')
+    expect(mesclado.pecas.find((p) => p.id === 'a').usos).toBe(1)
+  })
+
   it('feedback em data sem look não faz nada', () => {
     expect(registrarFeedback(base(), { data: '2026-11-16', feedback: 'usei' }, agora)).toBeNull()
   })

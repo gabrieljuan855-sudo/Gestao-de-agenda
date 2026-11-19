@@ -133,7 +133,7 @@ export function novaPeca({ foto, ...campos }, agora = new Date()) {
 // Edição feita no app: o status acompanha os campos, mas nunca volta para
 // "pendente" uma peça que já foi classificada (pelo Claude ou à mão).
 export function editarPeca(peca, campos, agora = new Date()) {
-  const nova = normalizarPeca({ ...peca, ...campos, id: peca.id, foto: peca.foto, updatedAt: agora.toISOString() }, agora)
+  const nova = normalizarPeca({ ...peca, ...campos, id: peca.id, foto: peca.foto, updatedAt: carimboSobre(agora, peca.updatedAt) }, agora)
   return { ...nova, status: peca.status === CLASSIFICADA ? CLASSIFICADA : statusPelosCampos(nova) }
 }
 
@@ -213,10 +213,17 @@ function reverterUso(pecas, look, looksSemEle, carimbo) {
   )
 }
 
-// `carimbo(registro)` devolve o updatedAt da edição: o app usa a hora de
-// agora; o conector, carimboDepois (ver ferramentas.js), para a edição
-// ganhar da versão que acabou de ler.
-const carimboDe = (agora) => () => agora.toISOString()
+// `carimbo(registro)` devolve o updatedAt de uma edição feita sobre
+// `registro`. A mesclagem fica com a versão mais nova, então a edição tem de
+// sair depois da que foi lida — mesmo com o relógio do celular atrás do
+// relógio do Worker, que gravou a sugestão. Sem isso, o "Usei esta" tocado
+// num aparelho atrasado perdia para a versão do Claude e sumia na gravação.
+// O conector usa a mesma ideia (carimboDepois, em ferramentas.js).
+export function carimboSobre(agora, anterior) {
+  const lido = Date.parse(anterior || '')
+  return new Date(Math.max(agora.getTime(), Number.isFinite(lido) ? lido + 1 : 0)).toISOString()
+}
+const carimboDe = (agora) => (registro) => carimboSobre(agora, registro?.updatedAt)
 
 // Grava o look de uma data, no lugar do que houver. Substituir um look que
 // já tinha sido marcado "usei" desfaz aquele uso: o look novo começa sem
@@ -232,7 +239,7 @@ export function salvarLook({ pecas, looks }, { data, pecas: idsDasPecas, texto: 
   }
 }
 
-// O "Usei este" / "Não gostei" — a regra única do botão do app e da
+// O "Usei esta" / "Não gostei" — a regra única do botão do app e da
 // ferramenta registrar_feedback_look. "Usei" grava em cada peça do look a
 // data dele como último uso e soma um uso; repetir o mesmo feedback não
 // conta de novo, e sair de "usei" devolve o que foi somado.
